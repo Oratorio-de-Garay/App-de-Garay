@@ -1,9 +1,11 @@
-// Backend API URL (configure via environment or this fallback)
-const API_URL = window.API_URL || "http://localhost:3000";
+// Backend API URL. Empty string = same origin as the page (default when the
+// backend serves this frontend). Override window.API_URL before this script
+// loads if the frontend is hosted separately from the backend.
+const API_URL = window.API_URL || "";
 
 let currentStudentId = null;
-let currentStudentName = "";
 let marcadoPresente = false;
+let lookups = { grados: [], edades: [] };
 
 function init() {
   const hoy = new Date();
@@ -19,6 +21,18 @@ function init() {
   document.getElementById("modal-overlay").addEventListener("click", cerrarModal);
   document.getElementById("btn-guardar-edit").addEventListener("click", guardarEdicion);
   document.getElementById("btn-cancelar-edit").addEventListener("click", cerrarModal);
+
+  cargarLookups();
+}
+
+async function cargarLookups() {
+  try {
+    const res = await fetch(`${API_URL}/api/lookups`);
+    if (!res.ok) throw new Error("Server error");
+    lookups = await res.json();
+  } catch (error) {
+    console.error("Error cargando grados/edades:", error);
+  }
 }
 
 function getTodayInputValue(date = new Date()) {
@@ -29,21 +43,21 @@ function getTodayInputValue(date = new Date()) {
 }
 
 async function buscar() {
-  const apellido = document.getElementById("input-apellido").value.trim();
-  if (!apellido) return;
+  const termino = document.getElementById("input-apellido").value.trim();
+  if (!termino) return;
 
   setBtnCargando(true);
   marcadoPresente = false;
   limpiarContenido();
 
   try {
-    const res = await fetch(`${API_URL}/api/students/search?q=${encodeURIComponent(apellido)}`);
+    const res = await fetch(`${API_URL}/api/students/search?q=${encodeURIComponent(termino)}`);
     if (!res.ok) throw new Error("Server error");
 
     const data = await res.json();
 
     if (data.length === 0) {
-      mostrarNuevoChico(apellido);
+      mostrarNuevoChico(termino);
     } else if (data.length === 1) {
       mostrarResultado(data[0]);
     } else {
@@ -59,15 +73,14 @@ async function buscar() {
 
 function mostrarResultado(chico) {
   currentStudentId = chico.id;
-  currentStudentName = chico.nombre;
 
-  const iniciales = chico.nombre
+  const iniciales = chico.nombreCompleto
     .split(" ")
     .slice(0, 2)
     .map((p) => p[0])
     .join("")
     .toUpperCase();
-  const tieneFicha = String(chico.ficha).toLowerCase() === "sí" || String(chico.ficha).toLowerCase() === "si";
+  const tieneFicha = chico.ficha === true;
   const obs = chico.obs ? `<div class="obs-box">💬 ${escapeHtml(chico.obs)}</div>` : "";
   const visitas = chico.visitas || 0;
 
@@ -76,7 +89,7 @@ function mostrarResultado(chico) {
       <div class="card-header">
         <div class="avatar">${iniciales}</div>
         <div>
-          <div class="card-name">${escapeHtml(chico.nombre)}</div>
+          <div class="card-name">${escapeHtml(chico.nombreCompleto)}</div>
           <div class="card-meta">${escapeHtml(chico.grado) || "Sin grado"} · ${escapeHtml(chico.edad) || ""}</div>
         </div>
       </div>
@@ -118,7 +131,7 @@ function mostrarResultado(chico) {
 function mostrarMultiples(chicos) {
   const items = chicos
     .map((c) => {
-      const iniciales = c.nombre
+      const iniciales = c.nombreCompleto
         .split(" ")
         .slice(0, 2)
         .map((p) => p[0])
@@ -129,7 +142,7 @@ function mostrarMultiples(chicos) {
           <div class="result-item-left">
             <div class="avatar avatar-sm">${iniciales}</div>
             <div>
-              <div class="result-item-name">${escapeHtml(c.nombre)}</div>
+              <div class="result-item-name">${escapeHtml(c.nombreCompleto)}</div>
               <div class="result-item-meta">${escapeHtml(c.grado) || "Sin grado"} · ${escapeHtml(c.edad) || ""}</div>
             </div>
           </div>
@@ -160,37 +173,58 @@ function seleccionarChico(chico) {
   mostrarResultado(chico);
 }
 
-function mostrarNuevoChico(apellido) {
+function opcionesGrados() {
+  if (lookups.grados.length === 0) {
+    return `<option value="">No hay grados cargados</option>`;
+  }
+  return lookups.grados
+    .map((g) => `<option value="${g.id}">${escapeHtml(g.label)}</option>`)
+    .join("");
+}
+
+function opcionesEdades() {
+  if (lookups.edades.length === 0) {
+    return `<option value="">No hay categorías cargadas</option>`;
+  }
+  return lookups.edades
+    .map((e) => `<option value="${e.id}">${escapeHtml(e.nombre)}</option>`)
+    .join("");
+}
+
+function mostrarNuevoChico(termino) {
   agregarHTML(`
     <div class="alert alert-warn">
       <span class="alert-icon">⚠️</span>
-      <span>No se encontró "<strong>${escapeHtml(apellido)}</strong>". Si es la primera vez que viene, completá los datos:</span>
+      <span>No se encontró "<strong>${escapeHtml(termino)}</strong>". Si es la primera vez que viene, completá los datos:</span>
     </div>
     <div class="form-card">
       <div class="form-title">Nuevo chico</div>
       <div class="form-group">
-        <label class="form-label">Nombre y apellido completo</label>
-        <input class="form-input" type="text" id="nuevo-nombre" value="${escapeHtml(apellido)}" autocapitalize="words">
+        <label class="form-label">Nombre</label>
+        <input class="form-input" type="text" id="nuevo-nombre" autocapitalize="words">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Apellido</label>
+        <input class="form-input" type="text" id="nuevo-apellido" value="${escapeHtml(termino)}" autocapitalize="words">
       </div>
       <div class="form-group">
         <label class="form-label">Grado</label>
-        <input class="form-input" type="text" id="nuevo-grado" placeholder="Ej: 1°, 4°, Sala 5" autocapitalize="words">
+        <select class="form-select" id="nuevo-grado">${opcionesGrados()}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Categoría</label>
+        <select class="form-select" id="nuevo-edad">${opcionesEdades()}</select>
       </div>
       <div class="form-group">
         <label class="form-label">¿Trajo la ficha?</label>
         <select class="form-select" id="nuevo-ficha">
-          <option value="Sí">✅ Sí, trajo la ficha</option>
-          <option value="No">❌ No trajo la ficha</option>
+          <option value="true">✅ Sí, trajo la ficha</option>
+          <option value="false">❌ No trajo la ficha</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Categoría</label>
-        <select class="form-select" id="nuevo-edad">
-          <option value="Chiquitos">Chiquitos</option>
-          <option value="Medianos">Medianos</option>
-          <option value="Grandes">Grandes</option>
-          <option value="Gigantes">Gigantes</option>
-        </select>
+        <label class="form-label">Teléfono de emergencia (opcional)</label>
+        <input class="form-input" type="tel" id="nuevo-telefono" placeholder="Ej: 1122334455">
       </div>
       <div class="form-group">
         <label class="form-label">Observaciones (opcional)</label>
@@ -246,13 +280,19 @@ async function marcarPresente() {
 
 async function agregarNuevo() {
   const nombre = document.getElementById("nuevo-nombre").value.trim();
-  const grado = document.getElementById("nuevo-grado").value.trim();
-  const tiene_ficha = document.getElementById("nuevo-ficha").value;
-  const edad = document.getElementById("nuevo-edad").value;
+  const apellido = document.getElementById("nuevo-apellido").value.trim();
+  const grado_id = document.getElementById("nuevo-grado").value;
+  const entrego_ficha = document.getElementById("nuevo-ficha").value === "true";
+  const edad_id = document.getElementById("nuevo-edad").value;
+  const telefono_emergencia = document.getElementById("nuevo-telefono").value.trim();
   const observaciones = document.getElementById("nuevo-obs").value.trim();
 
-  if (!nombre) {
-    mostrarMensaje("warn", "Ingresá el nombre completo.");
+  if (!nombre || !apellido) {
+    mostrarMensaje("warn", "Ingresá nombre y apellido.");
+    return;
+  }
+  if (!grado_id || !edad_id) {
+    mostrarMensaje("warn", "Seleccioná grado y categoría.");
     return;
   }
 
@@ -266,9 +306,11 @@ async function agregarNuevo() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         nombre,
-        grado,
-        tiene_ficha,
-        edad,
+        apellido,
+        grado_id,
+        edad_id,
+        entrego_ficha,
+        telefono_emergencia: telefono_emergencia || null,
         observaciones,
         fecha: getTodayInputValue(),
       }),
@@ -277,7 +319,7 @@ async function agregarNuevo() {
     if (!res.ok) throw new Error("Server error");
 
     limpiarContenido();
-    agregarHTML(`<div class="alert alert-ok"><span class="alert-icon">🎉</span><span><strong>${escapeHtml(nombre)}</strong> fue agregado y el presente quedó marcado para hoy.</span></div>`);
+    agregarHTML(`<div class="alert alert-ok"><span class="alert-icon">🎉</span><span><strong>${escapeHtml(nombre)} ${escapeHtml(apellido)}</strong> fue agregado y el presente quedó marcado para hoy.</span></div>`);
     document.getElementById("input-apellido").value = "";
   } catch (error) {
     console.error("Error:", error);
@@ -300,7 +342,7 @@ function cerrarModal(e) {
 }
 
 async function guardarEdicion() {
-  const tiene_ficha = document.getElementById("edit-ficha").value;
+  const entrego_ficha = document.getElementById("edit-ficha").value === "true";
   const observaciones = document.getElementById("edit-obs").value.trim();
   const btn = document.getElementById("btn-guardar-edit");
   btn.innerHTML = '<span class="spinner"></span>';
@@ -311,7 +353,7 @@ async function guardarEdicion() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        tiene_ficha,
+        entrego_ficha,
         observaciones,
       }),
     });

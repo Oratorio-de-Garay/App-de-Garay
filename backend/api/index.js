@@ -1,21 +1,65 @@
 import express from "express";
 import cors from "cors";
 import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Serve frontend static files
+// app.use(express.static(path.join(__dirname, "../frontend")));
+app.use(express.static(path.join(__dirname, "../../frontend")));
+
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_KEY,
+  { realtime: { transport: ws } }
 );
 
+// Escape ilike wildcards/operators so user input can't break the .or() filter syntax
+function sanitizeSearchTerm(term) {
+  return term.replace(/[%,()]/g, "").trim();
+}
+
+function gradoLabel(grado) {
+  if (!grado) return null;
+  return `${grado.nivel} ${grado.grado}°`;
+}
+
 // ─────────────────────────────────────────────────────────
-// Search students by name
+// Lookups (grados & edades) for populating the "new pibe" form
+// ─────────────────────────────────────────────────────────
+app.get("/api/lookups", async (req, res) => {
+  try {
+    const [{ data: edades, error: edadesError }, { data: grados, error: gradosError }] =
+      await Promise.all([
+        supabase.from("edades").select("id, nombre").order("nombre"),
+        supabase.from("grados_pibes").select("id, nivel, grado").order("nivel").order("grado"),
+      ]);
+
+    if (edadesError) throw edadesError;
+    if (gradosError) throw gradosError;
+
+    res.json({
+      edades,
+      grados: grados.map((g) => ({ id: g.id, label: gradoLabel(g) })),
+    });
+  } catch (error) {
+    console.error("Lookups error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────
+// Search pibes by nombre or apellido
 // ─────────────────────────────────────────────────────────
 app.get("/api/students/search", async (req, res) => {
   try {
@@ -24,37 +68,53 @@ app.get("/api/students/search", async (req, res) => {
       return res.json([]);
     }
 
-    const searchTerm = `%${q.toLowerCase()}%`;
+    const term = `%${sanitizeSearchTerm(q.toLowerCase())}%`;
 
     const { data, error } = await supabase
-      .from("students")
-      .select("*")
-      .ilike("nombre", searchTerm);
+      .from("pibes")
+      .select(
+        `
+        id,
+        nombre,
+        apellido,
+        entrego_ficha,
+        observaciones,
+        telefono_emergencia,
+        grados_pibes ( id, nivel, grado ),
+        edades ( id, nombre )
+      `
+      )
+      .or(`nombre.ilike.${term},apellido.ilike.${term}`);
 
     if (error) throw error;
 
-    const studentsWithVisits = await Promise.all(
-      data.map(async (student) => {
-        const { data: visits, error: visitError } = await supabase
-          .from("attendance")
-          .select("*")
-          .eq("student_id", student.id);
+    const pibesConVisitas = await Promise.all(
+      data.map(async (pibe) => {
+        const { count, error: visitError } = await supabase
+          .from("asistencias")
+          .select("*", { count: "exact", head: true })
+          .eq("pibe_id", pibe.id);
 
         if (visitError) throw visitError;
 
         return {
-          id: student.id,
-          nombre: student.nombre,
-          grado: student.grado,
-          ficha: student.tiene_ficha,
-          edad: student.edad,
-          obs: student.observaciones,
-          visitas: visits ? visits.length : 0,
+          id: pibe.id,
+          nombre: pibe.nombre,
+          apellido: pibe.apellido,
+          nombreCompleto: `${pibe.nombre} ${pibe.apellido}`,
+          grado_id: pibe.grados_pibes?.id ?? null,
+          grado: gradoLabel(pibe.grados_pibes),
+          edad_id: pibe.edades?.id ?? null,
+          edad: pibe.edades?.nombre ?? null,
+          ficha: pibe.entrego_ficha,
+          obs: pibe.observaciones,
+          telefono: pibe.telefono_emergencia,
+          visitas: count || 0,
         };
       })
     );
 
-    res.json(studentsWithVisits);
+    res.json(pibesConVisitas);
   } catch (error) {
     console.error("Search error:", error);
     res.status(500).json({ error: error.message });
@@ -62,7 +122,7 @@ app.get("/api/students/search", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────
-// Mark student as present
+// Mark pibe as present (creates a new asistencia row)
 // ─────────────────────────────────────────────────────────
 app.post("/api/attendance/mark", async (req, res) => {
   try {
@@ -72,10 +132,9 @@ app.post("/api/attendance/mark", async (req, res) => {
       return res.status(400).json({ error: "Missing student_id or fecha" });
     }
 
-    const { error } = await supabase.from("attendance").insert({
-      student_id,
+    const { error } = await supabase.from("asistencias").insert({
+      pibe_id: student_id,
       fecha,
-      marked: true,
     });
 
     if (error) throw error;
@@ -88,41 +147,42 @@ app.post("/api/attendance/mark", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────
-// Create new student
+// Create new pibe
 // ─────────────────────────────────────────────────────────
 app.post("/api/students", async (req, res) => {
   try {
-    const { nombre, grado, tiene_ficha, edad, observaciones } = req.body;
+    const { nombre, apellido, grado_id, entrego_ficha, edad_id, telefono_emergencia, observaciones, fecha } =
+      req.body;
 
-    if (!nombre) {
-      return res.status(400).json({ error: "Missing nombre" });
+    if (!nombre || !apellido || !grado_id || !edad_id) {
+      return res.status(400).json({ error: "Missing nombre, apellido, grado_id or edad_id" });
     }
 
     const { data, error } = await supabase
-      .from("students")
+      .from("pibes")
       .insert({
         nombre,
-        grado: grado || null,
-        tiene_ficha: tiene_ficha === "Sí" || tiene_ficha === "Si",
-        edad: edad || null,
+        apellido,
+        grado_id,
+        edad_id,
+        entrego_ficha: entrego_ficha === true || entrego_ficha === "Sí" || entrego_ficha === "Si",
+        telefono_emergencia: telefono_emergencia || null,
         observaciones: observaciones || null,
       })
       .select();
 
     if (error) throw error;
 
-    const student = data[0];
+    const pibe = data[0];
 
-    // Mark as present on creation
-    if (req.body.fecha) {
-      await supabase.from("attendance").insert({
-        student_id: student.id,
-        fecha: req.body.fecha,
-        marked: true,
+    if (fecha) {
+      await supabase.from("asistencias").insert({
+        pibe_id: pibe.id,
+        fecha,
       });
     }
 
-    res.json({ ok: true, id: student.id });
+    res.json({ ok: true, id: pibe.id });
   } catch (error) {
     console.error("Create student error:", error);
     res.status(500).json({ error: error.message });
@@ -130,23 +190,23 @@ app.post("/api/students", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────
-// Update student (edit ficha and observations)
+// Update pibe (edit ficha and observations)
 // ─────────────────────────────────────────────────────────
 app.patch("/api/students/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { tiene_ficha, observaciones } = req.body;
+    const { entrego_ficha, observaciones } = req.body;
 
     const updateData = {};
-    if (tiene_ficha !== undefined) {
-      updateData.tiene_ficha = tiene_ficha === "Sí" || tiene_ficha === "Si";
+    if (entrego_ficha !== undefined) {
+      updateData.entrego_ficha = entrego_ficha === true || entrego_ficha === "Sí" || entrego_ficha === "Si";
     }
     if (observaciones !== undefined) {
       updateData.observaciones = observaciones;
     }
 
     const { error } = await supabase
-      .from("students")
+      .from("pibes")
       .update(updateData)
       .eq("id", id);
 
@@ -164,6 +224,11 @@ app.patch("/api/students/:id", async (req, res) => {
 // ─────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`API server running on http://localhost:${PORT}`);
 });
 
 export default app;

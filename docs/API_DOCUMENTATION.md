@@ -7,225 +7,205 @@ Complete reference for the Oratorio App REST API endpoints.
 - **Development**: `http://localhost:3000`
 - **Production**: `https://your-backend.vercel.app`
 
+The frontend is served by the same backend (`express.static`), so in production the frontend calls the API on the same origin (`window.API_URL = ""`).
+
 ## Authentication
 
-Currently, the API has no authentication. For production use, implement JWT or Supabase Auth.
+Currently, the API has no authentication. Access is controlled entirely by Supabase Row Level Security policies (see [DATABASE_SETUP.md](DATABASE_SETUP.md)). For production use with sensitive data, implement Supabase Auth.
 
 ---
 
 ## Endpoints
 
-### 1. Search Students
+### 1. Get Lookups (grados & edades)
+
+**Endpoint**: `GET /api/lookups`
+
+Returns the available grade levels and age categories, used to populate the "new pibe" form's dropdowns.
+
+**Response** (200):
+```json
+{
+  "edades": [
+    { "id": 1, "nombre": "Chiquitos" },
+    { "id": 2, "nombre": "Medianos" }
+  ],
+  "grados": [
+    { "id": 1, "label": "Primario 1°" },
+    { "id": 2, "label": "Primario 2°" }
+  ]
+}
+```
+
+**Example Request**:
+```bash
+curl http://localhost:3000/api/lookups
+```
+
+---
+
+### 2. Search Pibes
 
 **Endpoint**: `GET /api/students/search`
 
-Search for students by name or surname.
+Search for pibes by nombre or apellido (matches either field).
 
 **Query Parameters**:
-- `q` (string, required): Search term (name or surname)
+- `q` (string, required): Search term
 
 **Response** (200):
 ```json
 [
   {
-    "id": 1,
-    "nombre": "Juan Pérez",
-    "grado": "3°",
-    "ficha": true,
+    "id": "a1b2c3d4-...",
+    "nombre": "Juan",
+    "apellido": "Pérez",
+    "nombreCompleto": "Juan Pérez",
+    "grado_id": 3,
+    "grado": "Primario 3°",
+    "edad_id": 2,
     "edad": "Medianos",
+    "ficha": true,
     "obs": "Energético",
+    "telefono": 1122334455,
     "visitas": 5
-  },
-  {
-    "id": 2,
-    "nombre": "María García",
-    "grado": "2°",
-    "ficha": false,
-    "edad": "Chiquitos",
-    "obs": null,
-    "visitas": 3
   }
 ]
 ```
 
 **Example Request**:
 ```bash
-curl "http://localhost:3000/api/students/search?q=Pérez"
+curl "http://localhost:3000/api/students/search?q=P%C3%A9rez"
 ```
 
 **Error Response** (500):
 ```json
-{
-  "error": "Database connection failed"
-}
+{ "error": "Database connection failed" }
 ```
 
 ---
 
-### 2. Mark Student Present
+### 3. Mark Present
 
 **Endpoint**: `POST /api/attendance/mark`
 
-Record a student's attendance for a specific date.
+Creates a new row in `asistencias` (one row per visit — there is no "unmark").
 
 **Request Body**:
 ```json
 {
-  "student_id": 1,
+  "student_id": "a1b2c3d4-...",
   "fecha": "2024-01-15"
 }
 ```
 
 **Parameters**:
-- `student_id` (integer, required): The student's ID
-- `fecha` (string, required): Date in format YYYY-MM-DD
+- `student_id` (uuid, required): The pibe's `id`
+- `fecha` (string, required): Date (YYYY-MM-DD), stored as timestamptz
 
 **Response** (200):
 ```json
-{
-  "ok": true
-}
+{ "ok": true }
 ```
 
 **Example Request**:
 ```bash
 curl -X POST http://localhost:3000/api/attendance/mark \
   -H "Content-Type: application/json" \
-  -d '{
-    "student_id": 1,
-    "fecha": "2024-01-15"
-  }'
+  -d '{"student_id":"a1b2c3d4-...","fecha":"2024-01-15"}'
 ```
 
 **Error Response** (400):
 ```json
-{
-  "error": "Missing student_id or fecha"
-}
+{ "error": "Missing student_id or fecha" }
 ```
 
 ---
 
-### 3. Create New Student
+### 4. Create New Pibe
 
 **Endpoint**: `POST /api/students`
 
-Add a new student to the system and optionally mark them present.
+Adds a new pibe and optionally marks them present in the same call.
 
 **Request Body**:
 ```json
 {
-  "nombre": "Carlos López",
-  "grado": "4°",
-  "tiene_ficha": "Sí",
-  "edad": "Grandes",
+  "nombre": "Carlos",
+  "apellido": "López",
+  "grado_id": 4,
+  "edad_id": 3,
+  "entrego_ficha": true,
+  "telefono_emergencia": 1122334455,
   "observaciones": "Entusiasta",
   "fecha": "2024-01-15"
 }
 ```
 
 **Parameters**:
-- `nombre` (string, required): Student's full name
-- `grado` (string, optional): Grade/level
-- `tiene_ficha` (string, optional): "Sí" or "No"
-- `edad` (string, optional): Age category
-- `observaciones` (string, optional): Notes
-- `fecha` (string, optional): Date to mark present (YYYY-MM-DD format)
+- `nombre` (string, required)
+- `apellido` (string, required)
+- `grado_id` (integer, required): id from `GET /api/lookups` → `grados`
+- `edad_id` (integer, required): id from `GET /api/lookups` → `edades`
+- `entrego_ficha` (boolean, optional, default false)
+- `telefono_emergencia` (integer, optional)
+- `observaciones` (string, optional)
+- `fecha` (string, optional): if present, also marks attendance for that date
 
 **Response** (200):
 ```json
-{
-  "ok": true,
-  "id": 42
-}
+{ "ok": true, "id": "a1b2c3d4-..." }
 ```
 
 **Example Request**:
 ```bash
 curl -X POST http://localhost:3000/api/students \
   -H "Content-Type: application/json" \
-  -d '{
-    "nombre": "Carlos López",
-    "grado": "4°",
-    "tiene_ficha": "Sí",
-    "edad": "Grandes",
-    "observaciones": "Entusiasta",
-    "fecha": "2024-01-15"
-  }'
+  -d '{"nombre":"Carlos","apellido":"López","grado_id":4,"edad_id":3,"entrego_ficha":true,"fecha":"2024-01-15"}'
 ```
 
 **Error Response** (400):
 ```json
-{
-  "error": "Missing nombre"
-}
+{ "error": "Missing nombre, apellido, grado_id or edad_id" }
 ```
 
 ---
 
-### 4. Update Student
+### 5. Update Pibe
 
 **Endpoint**: `PATCH /api/students/:id`
 
-Update a student's ficha status and observations.
-
-**URL Parameters**:
-- `id` (integer, required): Student ID
+Updates ficha status and/or observations. `id` is the pibe's uuid.
 
 **Request Body**:
 ```json
 {
-  "tiene_ficha": "Sí",
-  "observaciones": "Updated observation"
+  "entrego_ficha": true,
+  "observaciones": "Ficha recibida"
 }
 ```
 
-**Parameters**:
-- `tiene_ficha` (string, optional): "Sí" or "No"
-- `observaciones` (string, optional): Updated notes
-
 **Response** (200):
 ```json
-{
-  "ok": true
-}
+{ "ok": true }
 ```
 
 **Example Request**:
 ```bash
-curl -X PATCH http://localhost:3000/api/students/1 \
+curl -X PATCH http://localhost:3000/api/students/a1b2c3d4-... \
   -H "Content-Type: application/json" \
-  -d '{
-    "tiene_ficha": "Sí",
-    "observaciones": "Ficha recibida"
-  }'
-```
-
-**Error Response** (500):
-```json
-{
-  "error": "Database error"
-}
+  -d '{"entrego_ficha":true,"observaciones":"Ficha recibida"}'
 ```
 
 ---
 
-### 5. Health Check
+### 6. Health Check
 
 **Endpoint**: `GET /api/health`
 
-Simple endpoint to verify API is running.
-
 **Response** (200):
 ```json
-{
-  "status": "ok"
-}
-```
-
-**Example Request**:
-```bash
-curl http://localhost:3000/api/health
+{ "status": "ok" }
 ```
 
 ---
@@ -233,87 +213,19 @@ curl http://localhost:3000/api/health
 ## Error Handling
 
 All errors follow this format:
-
 ```json
-{
-  "error": "Description of what went wrong"
-}
+{ "error": "Description of what went wrong" }
 ```
 
-Common HTTP Status Codes:
-- `200`: Success
-- `400`: Bad request (missing required parameters)
-- `500`: Server error
-
----
-
-## Rate Limiting
-
-Currently not implemented. Add rate limiting for production deployments.
-
----
+HTTP status codes: `200` success, `400` bad request, `500` server error.
 
 ## CORS
 
-The API accepts requests from any origin. For production, configure CORS to allow only your frontend domain.
-
----
-
-## Testing the API
-
-### Using curl
-
-```bash
-# Search
-curl "http://localhost:3000/api/students/search?q=juan"
-
-# Mark present
-curl -X POST http://localhost:3000/api/attendance/mark \
-  -H "Content-Type: application/json" \
-  -d '{"student_id":1,"fecha":"2024-01-15"}'
-
-# Create student
-curl -X POST http://localhost:3000/api/students \
-  -H "Content-Type: application/json" \
-  -d '{"nombre":"Test","edad":"Medianos"}'
-
-# Update student
-curl -X PATCH http://localhost:3000/api/students/1 \
-  -H "Content-Type: application/json" \
-  -d '{"tiene_ficha":"Sí"}'
-
-# Health check
-curl http://localhost:3000/api/health
-```
-
-### Using JavaScript/Fetch
-
-```javascript
-// Search
-fetch('http://localhost:3000/api/students/search?q=juan')
-  .then(r => r.json())
-  .then(data => console.log(data));
-
-// Mark present
-fetch('http://localhost:3000/api/attendance/mark', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    student_id: 1,
-    fecha: '2024-01-15'
-  })
-})
-  .then(r => r.json())
-  .then(data => console.log(data));
-```
-
----
+CORS is enabled for all origins. Restrict this in `backend/api/index.js` for production if the frontend is hosted on a known domain.
 
 ## Future Enhancements
 
-- Add JWT authentication
-- Implement rate limiting
-- Add request logging/monitoring
-- Support batch operations
+- Add authentication (Supabase Auth)
+- Add rate limiting
+- Support deleting/un-marking an asistencia
 - Add data export endpoints (CSV/PDF)
-- Add analytics endpoints (attendance reports)
