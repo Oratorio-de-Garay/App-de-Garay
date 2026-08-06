@@ -74,6 +74,12 @@ header {
   gap: 8px;
 }
 
+.search-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .search-input,
 .form-input,
 .url-input {
@@ -94,6 +100,7 @@ header {
 
 .search-input {
   flex: 1;
+  min-width: 0;
 }
 
 .search-btn,
@@ -113,9 +120,43 @@ header {
   transition: opacity 0.15s;
 }
 
+.new-student-btn {
+  background: transparent;
+  color: var(--verde);
+  border: 1.5px solid var(--verde);
+  border-radius: 10px;
+  padding: 0 18px;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  transition: background 0.15s, opacity 0.15s;
+}
+
 .search-btn:active,
 .btn-main:active {
   opacity: 0.8;
+}
+
+.new-student-btn:active {
+  background: var(--verde-light);
+}
+
+.search-btn:disabled,
+.new-student-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.search-btn:focus-visible,
+.new-student-btn:focus-visible,
+.btn-main:focus-visible,
+.btn-sec:focus-visible,
+.form-select:focus-visible {
+  outline: 3px solid var(--verde-soft);
+  outline-offset: 2px;
 }
 
 .content {
@@ -340,6 +381,11 @@ header {
   animation: spin 0.7s linear infinite;
 }
 
+.spinner-verde {
+  border-color: rgba(26, 58, 42, 0.25);
+  border-top-color: var(--verde);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -469,4 +515,25 @@ input[type=checkbox] {
   height: 20px;
   cursor: pointer;
   accent-color: var(--verde);
+}
+
+@media (max-width: 600px) {
+  .search-row {
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    flex-basis: 100%;
+  }
+
+  .search-actions {
+    width: 100%;
+  }
+
+  .search-actions > button {
+    flex: 1;
+    justify-content: center;
+    min-height: 46px;
+    padding: 12px;
+  }
 }
