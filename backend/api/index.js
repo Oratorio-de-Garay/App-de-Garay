@@ -68,10 +68,8 @@ app.get("/api/students/search", async (req, res) => {
       return res.json([]);
     }
 
-    const term = `%${sanitizeSearchTerm(q.toLowerCase())}%`;
-
     const { data, error } = await supabase
-      .from("pibes")
+      .rpc("buscar_pibes", { termino: sanitizeSearchTerm(q) })
       .select(
         `
         id,
@@ -83,8 +81,7 @@ app.get("/api/students/search", async (req, res) => {
         grados_pibes ( id, nivel, grado ),
         edades ( id, nombre )
       `
-      )
-      .or(`nombre.ilike.${term},apellido.ilike.${term}`);
+      );
 
     if (error) throw error;
 
