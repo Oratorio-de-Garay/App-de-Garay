@@ -6,6 +6,10 @@ const API_URL = window.API_URL || "";
 let currentStudentId = null;
 let marcadoPresente = false;
 let lookups = { grados: [], edades: [] };
+let lookupsPromise = null;
+let activeSearchController = null;
+let altaOrigen = null;
+let renderRequestId = 0;
 
 function init() {
   const hoy = new Date();
@@ -18,11 +22,12 @@ function init() {
   });
 
   document.getElementById("btn-buscar").addEventListener("click", buscar);
+  document.getElementById("btn-nuevo").addEventListener("click", iniciarAltaManual);
   document.getElementById("modal-overlay").addEventListener("click", cerrarModal);
   document.getElementById("btn-guardar-edit").addEventListener("click", guardarEdicion);
   document.getElementById("btn-cancelar-edit").addEventListener("click", cerrarModal);
 
-  cargarLookups();
+  lookupsPromise = cargarLookups();
 }
 
 async function cargarLookups() {
@@ -30,9 +35,23 @@ async function cargarLookups() {
     const res = await fetch(`${API_URL}/api/lookups`);
     if (!res.ok) throw new Error("Server error");
     lookups = await res.json();
+    return true;
   } catch (error) {
     console.error("Error cargando grados/edades:", error);
+    return false;
   }
+}
+
+async function asegurarLookups() {
+  if (!lookupsPromise) {
+    lookupsPromise = cargarLookups();
+  }
+
+  const cargados = await lookupsPromise;
+  if (!cargados) {
+    lookupsPromise = null;
+  }
+  return cargados;
 }
 
 function getTodayInputValue(date = new Date()) {
@@ -46,29 +65,80 @@ async function buscar() {
   const termino = document.getElementById("input-apellido").value.trim();
   if (!termino) return;
 
+  activeSearchController?.abort();
+  const controller = new AbortController();
+  activeSearchController = controller;
+  const requestId = ++renderRequestId;
+
   setBtnCargando(true);
+  setBtnNuevoCargando(false);
+  altaOrigen = null;
   marcadoPresente = false;
   limpiarContenido();
 
   try {
-    const res = await fetch(`${API_URL}/api/students/search?q=${encodeURIComponent(termino)}`);
+    const res = await fetch(`${API_URL}/api/students/search?q=${encodeURIComponent(termino)}`, {
+      signal: controller.signal,
+    });
     if (!res.ok) throw new Error("Server error");
 
     const data = await res.json();
+    if (controller.signal.aborted || requestId !== renderRequestId) return;
 
     if (data.length === 0) {
-      mostrarNuevoChico(termino);
+      const lookupsCargados = await asegurarLookups();
+      if (controller.signal.aborted || requestId !== renderRequestId) return;
+      if (!lookupsCargados) {
+        mostrarMensaje("err", "❌ No se pudieron cargar los grados y categorías. Intentá nuevamente.");
+        return;
+      }
+      mostrarNuevoChico({ origen: "busqueda", termino });
     } else if (data.length === 1) {
       mostrarResultado(data[0]);
     } else {
       mostrarMultiples(data);
     }
   } catch (error) {
+    if (error.name === "AbortError") return;
     console.error("Error:", error);
     mostrarMensaje("err", "❌ No se pudo conectar. Verificá la URL o tu conexión a internet.");
   } finally {
-    setBtnCargando(false);
+    if (activeSearchController === controller) {
+      activeSearchController = null;
+      setBtnCargando(false);
+    }
   }
+}
+
+async function iniciarAltaManual() {
+  const nombreInput = document.getElementById("nuevo-nombre");
+  if (altaOrigen === "manual" && nombreInput) {
+    nombreInput.focus();
+    return;
+  }
+
+  activeSearchController?.abort();
+  activeSearchController = null;
+  setBtnCargando(false);
+
+  const requestId = ++renderRequestId;
+  currentStudentId = null;
+  marcadoPresente = false;
+  altaOrigen = null;
+  document.getElementById("input-apellido").value = "";
+  limpiarContenido();
+  setBtnNuevoCargando(true);
+
+  const lookupsCargados = await asegurarLookups();
+  if (requestId !== renderRequestId) return;
+
+  setBtnNuevoCargando(false);
+  if (!lookupsCargados) {
+    mostrarMensaje("err", "❌ No se pudieron cargar los grados y categorías. Intentá nuevamente.");
+    return;
+  }
+
+  mostrarNuevoChico({ origen: "manual" });
 }
 
 function mostrarResultado(chico) {
@@ -191,43 +261,51 @@ function opcionesEdades() {
     .join("");
 }
 
-function mostrarNuevoChico(termino) {
+function mostrarNuevoChico({ origen, termino = "" }) {
+  const esBusqueda = origen === "busqueda";
+  const aviso = esBusqueda
+    ? `
+      <div class="alert alert-warn">
+        <span class="alert-icon">⚠️</span>
+        <span>No se encontró "<strong>${escapeHtml(termino)}</strong>". Si es la primera vez que viene, completá los datos:</span>
+      </div>
+    `
+    : "";
+
+  altaOrigen = origen;
   agregarHTML(`
-    <div class="alert alert-warn">
-      <span class="alert-icon">⚠️</span>
-      <span>No se encontró "<strong>${escapeHtml(termino)}</strong>". Si es la primera vez que viene, completá los datos:</span>
-    </div>
-    <div class="form-card">
-      <div class="form-title">Nuevo chico</div>
+    ${aviso}
+    <div class="form-card" aria-labelledby="nuevo-chico-titulo">
+      <div class="form-title" id="nuevo-chico-titulo">Nuevo chico</div>
       <div class="form-group">
-        <label class="form-label">Nombre</label>
-        <input class="form-input" type="text" id="nuevo-nombre" autocapitalize="words">
+        <label class="form-label" for="nuevo-nombre">Nombre</label>
+        <input class="form-input" type="text" id="nuevo-nombre" autocomplete="given-name" autocapitalize="words">
       </div>
       <div class="form-group">
-        <label class="form-label">Apellido</label>
-        <input class="form-input" type="text" id="nuevo-apellido" value="${escapeHtml(termino)}" autocapitalize="words">
+        <label class="form-label" for="nuevo-apellido">Apellido</label>
+        <input class="form-input" type="text" id="nuevo-apellido" value="${esBusqueda ? escapeHtml(termino) : ""}" autocomplete="family-name" autocapitalize="words">
       </div>
       <div class="form-group">
-        <label class="form-label">Grado</label>
+        <label class="form-label" for="nuevo-grado">Grado</label>
         <select class="form-select" id="nuevo-grado">${opcionesGrados()}</select>
       </div>
       <div class="form-group">
-        <label class="form-label">Categoría</label>
+        <label class="form-label" for="nuevo-edad">Categoría</label>
         <select class="form-select" id="nuevo-edad">${opcionesEdades()}</select>
       </div>
       <div class="form-group">
-        <label class="form-label">¿Trajo la ficha?</label>
+        <label class="form-label" for="nuevo-ficha">¿Trajo la ficha?</label>
         <select class="form-select" id="nuevo-ficha">
           <option value="true">✅ Sí, trajo la ficha</option>
           <option value="false">❌ No trajo la ficha</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Teléfono de emergencia (opcional)</label>
-        <input class="form-input" type="tel" id="nuevo-telefono" placeholder="Ej: 1122334455">
+        <label class="form-label" for="nuevo-telefono">Teléfono de emergencia (opcional)</label>
+        <input class="form-input" type="tel" id="nuevo-telefono" placeholder="Ej: 1122334455" autocomplete="tel">
       </div>
       <div class="form-group">
-        <label class="form-label">Observaciones (opcional)</label>
+        <label class="form-label" for="nuevo-obs">Observaciones (opcional)</label>
         <input class="form-input" type="text" id="nuevo-obs" placeholder="Ej: pendiente de ficha médica...">
       </div>
       <button class="btn-main" id="btn-agregar" type="button">+ Agregar y marcar presente</button>
@@ -235,6 +313,7 @@ function mostrarNuevoChico(termino) {
   `);
 
   document.getElementById("btn-agregar").addEventListener("click", agregarNuevo);
+  document.getElementById("nuevo-nombre").focus();
 }
 
 async function marcarPresente() {
@@ -318,6 +397,7 @@ async function agregarNuevo() {
 
     if (!res.ok) throw new Error("Server error");
 
+    altaOrigen = null;
     limpiarContenido();
     agregarHTML(`<div class="alert alert-ok"><span class="alert-icon">🎉</span><span><strong>${escapeHtml(nombre)} ${escapeHtml(apellido)}</strong> fue agregado y el presente quedó marcado para hoy.</span></div>`);
     document.getElementById("input-apellido").value = "";
@@ -377,6 +457,13 @@ function setBtnCargando(cargando) {
   const btn = document.getElementById("btn-buscar-icon");
   btn.innerHTML = cargando ? '<span class="spinner"></span>' : "Buscar";
   document.getElementById("btn-buscar").disabled = cargando;
+}
+
+function setBtnNuevoCargando(cargando) {
+  const btn = document.getElementById("btn-nuevo");
+  const label = document.getElementById("btn-nuevo-icon");
+  label.innerHTML = cargando ? '<span class="spinner spinner-verde"></span>' : "Nuevo chico";
+  btn.disabled = cargando;
 }
 
 function limpiarContenido() {
