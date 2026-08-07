@@ -134,6 +134,26 @@ header {
   font-weight: 600;
   transition: background 0.15s, opacity 0.15s;
 }
+.history-btn {
+  background: #f59e0b;
+  color: white;
+  border: 2px solid #f59e0b;
+  border-radius: 12px;
+  padding: 14px 22px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-btn:hover {
+  background: #d97706;
+  border-color: #d97706;
+}
+
+.history-btn:active {
+  transform: scale(0.98);
+}
 
 .search-btn:active,
 .btn-main:active {
@@ -535,5 +555,327 @@ input[type=checkbox] {
     justify-content: center;
     min-height: 46px;
     padding: 12px;
+  }
+}
+
+/* ===================================================== */
+/* TOP 3 DE ASISTENCIA */
+/* ===================================================== */
+
+.top-asistencia {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+
+  min-height: 72px;
+
+  margin-bottom: 16px;
+  padding: 12px 22px;
+
+  background: #fffaf1;
+
+  border: 1px solid #f1d7a7;
+  border-radius: 16px;
+}
+
+
+.top-asistencia-cargando {
+  color: #777;
+  font-size: 14px;
+}
+
+
+.top-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  padding-right: 22px;
+
+  border-right: 1px solid #ead6b5;
+
+  white-space: nowrap;
+}
+
+
+.top-corona {
+  font-size: 22px;
+}
+
+
+.top-personas {
+  display: flex;
+  align-items: center;
+
+  flex: 1;
+
+  gap: 0;
+}
+
+
+.top-persona {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  flex: 1;
+
+  padding: 2px 22px;
+
+  border-right: 1px solid #ead6b5;
+}
+
+
+.top-persona:last-child {
+  border-right: none;
+}
+
+
+.top-puesto {
+  width: 38px;
+  height: 38px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  border-radius: 50%;
+
+  font-weight: 700;
+  color: white;
+}
+
+
+.top-puesto-1 {
+  background: #f4b400;
+}
+
+
+.top-puesto-2 {
+  background: #9ca3af;
+}
+
+
+.top-puesto-3 {
+  background: #c98a4b;
+}
+
+
+.top-avatar {
+  width: 38px;
+  height: 38px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  border-radius: 50%;
+
+  background: #d9efe2;
+  color: #164b38;
+
+  font-weight: 600;
+}
+
+
+.top-datos {
+  min-width: 0;
+}
+
+
+.top-nombre {
+  font-weight: 700;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+.top-total {
+  margin-top: 2px;
+
+  color: #68707d;
+
+  font-size: 13px;
+}
+
+
+/* CELULAR */
+
+@media (max-width: 800px) {
+
+  .top-asistencia {
+    align-items: flex-start;
+    flex-direction: column;
+
+    gap: 10px;
+  }
+
+
+  .top-titulo {
+    width: 100%;
+
+    padding-right: 0;
+    padding-bottom: 8px;
+
+    border-right: none;
+    border-bottom: 1px solid #ead6b5;
+  }
+
+
+  .top-personas {
+    width: 100%;
+
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+
+  .top-persona {
+    width: 100%;
+
+    padding: 8px 0;
+
+    border-right: none;
+    border-bottom: 1px solid #ead6b5;
+  }
+
+
+  .top-persona:last-child {
+    border-bottom: none;
+  }
+
+}
+
+.top-persona-click {
+  cursor: pointer;
+  transition: background 0.2s ease;
+  border-radius: 10px;
+}
+
+.top-persona-click:hover {
+  background: rgba(244, 160, 0, 0.08);
+}
+
+/* ========================================================
+   RESULTADO + BOTON PRESENTE RAPIDO
+   ======================================================== */
+
+.resultado-con-presente {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.resultado-con-presente .result-item {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+
+/* BOTON VERDE */
+
+.btn-presente-rapido {
+  width: 220px;
+  min-width: 220px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0 20px;
+
+  border: none;
+  border-radius: 14px;
+
+  background: #164b38;
+  color: #ffffff;
+
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  box-sizing: border-box;
+}
+
+
+/* Cuando todavia se puede marcar */
+
+.btn-presente-rapido:hover:not(:disabled) {
+  background: #123d2e;
+}
+
+
+/* YA ESTA PRESENTE */
+
+.btn-presente-rapido.done,
+.btn-presente-rapido:disabled.done {
+  background: #969696;
+  color: #ffffff;
+
+  opacity: 1;
+
+  cursor: default;
+}
+
+
+/* Texto grande */
+
+.presente-rapido-texto {
+  display: inline;
+}
+
+
+/* Tick para celular */
+
+.presente-rapido-icono {
+  display: none;
+}
+
+
+/* ========================================================
+   CELULAR
+   ======================================================== */
+
+@media (max-width: 650px) {
+
+  .resultado-con-presente {
+    gap: 10px;
+  }
+
+  .btn-presente-rapido {
+    width: 58px;
+    min-width: 58px;
+
+    padding: 0;
+
+    border-radius: 12px;
+
+    font-size: 24px;
+  }
+
+  .presente-rapido-texto {
+    display: none;
+  }
+
+  .presente-rapido-icono {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .resultado-con-presente .result-item-chevron {
+    display: none;
   }
 }
