@@ -1,21 +1,53 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Registro · Voluntariado</title>
-<link rel="stylesheet" href="base.css">
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1"
+  >
+
+  <meta
+    name="apple-mobile-web-app-capable"
+    content="yes"
+  >
+
+  <meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent"
+  >
+
+  <title>Registro · Voluntariado</title>
+
+  <link
+    rel="stylesheet"
+    href="base.css"
+  >
 </head>
+
 <body>
 
-<header>
-  <div class="header-top">
-    <div class="dot"></div>
-    <div>
-      <div class="header-title">Registro de ingreso</div>
-      <div class="header-sub" id="fecha-hoy"></div>
+
+  <header>
+
+    <div class="header-top">
+
+      <div class="dot"></div>
+
+      <div>
+
+        <div class="header-title">
+          Registro de ingreso
+        </div>
+
+        <div
+          class="header-sub"
+          id="fecha-hoy"
+        ></div>
+
+      </div>
+
     </div>
     <button class="btn-logout" id="btn-logout" type="button" hidden>Salir</button>
   </div>
@@ -26,39 +58,146 @@
 </div>
 
 <div id="app-shell" hidden>
-  <div class="search-box">
+    <div class="search-box">
+
     <div class="search-row">
-      <input class="search-input" type="text" id="input-apellido"
-        placeholder="Nombre o Apellido del pibe..." autocomplete="off" autocorrect="off"
-        autocapitalize="words" spellcheck="false">
-      <button class="search-btn" id="btn-buscar" type="button">
-        <span id="btn-buscar-icon">Buscar</span>
-      </button>
+
+      <input
+        class="search-input"
+        type="text"
+        id="input-apellido"
+        placeholder="Nombre o Apellido del pibe..."
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="words"
+        spellcheck="false"
+      >
+
+
+      <div class="search-actions">
+
+        <button
+          class="search-btn"
+          id="btn-buscar"
+          type="button"
+        >
+
+          <span id="btn-buscar-icon">
+            Buscar
+          </span>
+
+        </button>
+
+
+        <button
+          class="new-student-btn"
+          id="btn-nuevo"
+          type="button"
+          aria-controls="contenido"
+        >
+
+          <span id="btn-nuevo-icon">
+            Nuevo chico
+          </span>
+
+        </button>
+
+
+        <button
+          class="history-btn"
+          id="btn-historial"
+          type="button"
+          aria-controls="contenido"
+        >
+          Historial
+        </button>
+
+      </div>
+
     </div>
+
   </div>
 
   <div class="content" id="contenido"></div>
 </div>
 
-<div class="modal-overlay" id="modal-overlay">
-  <div class="modal">
-    <div class="modal-title">Editar datos</div>
-    <div class="form-group">
-      <label class="form-label">Ficha presentada</label>
-      <select class="form-select" id="edit-ficha">
-        <option value="true">✅ Sí, trajo la ficha</option>
-        <option value="false">❌ No trajo la ficha</option>
-      </select>
+      <div class="form-group">
+
+        <label class="form-label">
+          Ficha presentada
+        </label>
+
+        <select
+          class="form-select"
+          id="edit-ficha"
+        >
+
+          <option value="true">
+            ✅ Sí, trajo la ficha
+          </option>
+
+          <option value="false">
+            ❌ No trajo la ficha
+          </option>
+
+        </select>
+
+      </div>
+
+
+      <div class="form-group">
+
+        <label class="form-label">
+          Observaciones
+        </label>
+
+        <input
+          class="form-input"
+          type="text"
+          id="edit-obs"
+          placeholder="Observación..."
+        >
+
+      </div>
+
+
+      <div class="modal-actions">
+
+        <button
+          class="btn-main"
+          id="btn-guardar-edit"
+          type="button"
+        >
+          Guardar cambios
+        </button>
+
+
+        <button
+          class="btn-sec"
+          id="btn-cancelar-edit"
+          type="button"
+        >
+          Cancelar
+        </button>
+
+      </div>
+
     </div>
-    <div class="form-group">
-      <label class="form-label">Observaciones</label>
-      <input class="form-input" type="text" id="edit-obs" placeholder="Observación...">
-    </div>
-    <div class="modal-actions">
-      <button class="btn-main" id="btn-guardar-edit" type="button">Guardar cambios</button>
-      <button class="btn-sec" id="btn-cancelar-edit" type="button">Cancelar</button>
-    </div>
+
   </div>
+
+
+  <!--
+    API URL configuration
+    Se deja vacío porque el backend
+    sirve también el frontend.
+  -->
+
+  <script>
+
+    window.API_URL = "";
+
+  </script>
 </div>
 
 <!-- API URL / Supabase configuration - set before loading index.js -->
