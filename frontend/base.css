@@ -560,6 +560,10 @@ input[type=checkbox] {
   padding: 24px 18px;
 }
 
+.auth-screen[hidden] {
+  display: none;
+}
+
 .auth-card {
   background: var(--card);
   border: 1px solid var(--borde);
@@ -617,29 +621,6 @@ input[type=checkbox] {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-.btn-logout {
-  margin-left: auto;
-  background: transparent;
-  color: var(--verde-light);
-  border: 1.5px solid #3f6b53;
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.btn-logout:active {
-  background: rgba(255,255,255,0.08);
-}
-
-.auth-screen {
-  min-height: calc(100vh - 66px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 18px;
 }
 
 .auth-card {

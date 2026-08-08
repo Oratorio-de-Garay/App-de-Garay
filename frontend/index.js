@@ -775,9 +775,9 @@ async function verificarPresenteRapido(
   try {
 
     const res =
-      await fetch(
+      await window.apiFetch(
 
-        `${API_URL}/api/attendance/check?student_id=${encodeURIComponent(
+        `/api/attendance/check?student_id=${encodeURIComponent(
           pibeId
         )}&date=${encodeURIComponent(
           fecha
@@ -883,8 +883,8 @@ async function marcarPresenteRapido(btn) {
 
   try {
 
-    const res = await fetch(
-      `${API_URL}/api/attendance/mark`,
+    const res = await window.apiFetch(
+      `/api/attendance/mark`,
       {
         method: "POST",
 
@@ -1272,8 +1272,8 @@ async function verificarPresenteFecha() {
 
   try {
 
-    const res = await fetch(
-      `${API_URL}/api/attendance/check?student_id=${encodeURIComponent(currentStudentId)}&date=${encodeURIComponent(fecha)}`
+    const res = await window.apiFetch(
+      `/api/attendance/check?student_id=${encodeURIComponent(currentStudentId)}&date=${encodeURIComponent(fecha)}`
     );
 
     if (!res.ok) {
@@ -1827,12 +1827,12 @@ async function cargarHistorial(year) {
       resFechas
     ] = await Promise.all([
 
-      fetch(
-        `${API_URL}/api/attendance/top?year=${encodeURIComponent(year)}`
+      apiFetch(
+        `/api/attendance/top?year=${encodeURIComponent(year)}`
       ),
 
-      fetch(
-        `${API_URL}/api/attendance/dates?year=${encodeURIComponent(year)}`
+      apiFetch(
+        `/api/attendance/dates?year=${encodeURIComponent(year)}`
       )
 
     ]);
@@ -2012,8 +2012,8 @@ function renderTopAsistencia(top3, year) {
 
         try {
 
-          const res = await fetch(
-            `${API_URL}/api/students/${encodeURIComponent(id)}`
+          const res = await window.apiFetch(
+            `/api/students/${encodeURIComponent(id)}`
           );
 
           if (!res.ok) {
@@ -2441,8 +2441,8 @@ async function verAsistenciasFecha(fechaISO) {
   try {
 
     const res =
-      await fetch(
-        `${API_URL}/api/attendance/by-date?date=${encodeURIComponent(fechaISO)}`
+      await window.apiFetch(
+        `/api/attendance/by-date?date=${encodeURIComponent(fechaISO)}`
       );
 
 
@@ -2584,8 +2584,8 @@ async function verAsistenciasFecha(fechaISO) {
 
       try {
 
-        const res = await fetch(
-          `${API_URL}/api/students/${encodeURIComponent(id)}`
+        const res = await window.apiFetch(
+          `/api/students/${encodeURIComponent(id)}`
         );
 
         if (!res.ok) {

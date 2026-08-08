@@ -24,6 +24,10 @@ create trigger trg_normalize_allowed_email
 -- policies are needed (and none are added on purpose).
 alter table public.allowed_emails enable row level security;
 
+-- RLS bypass does not imply the base table GRANT — service_role still
+-- needs explicit SELECT or reads fail with "permission denied" (42501).
+grant select on public.allowed_emails to service_role;
+
 -- Seed with a placeholder — replace with your teachers' real Google emails.
 -- insert into public.allowed_emails (email, note) values
 --   ('teacher1@gmail.com', 'Maestra 1°'),

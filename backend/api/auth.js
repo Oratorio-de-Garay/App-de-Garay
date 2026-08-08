@@ -1,11 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
+import ws from "ws";
+
+dotenv.config();
 
 // Service-role client: bypasses RLS, used only server-side to verify
 // tokens and check the allowed_emails table. Never expose this key to
 // the frontend.
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    realtime: {
+      transport: ws,
+    },
+  }
 );
 
 /**
