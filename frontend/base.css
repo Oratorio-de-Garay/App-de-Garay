@@ -537,6 +537,151 @@ input[type=checkbox] {
   accent-color: var(--verde);
 }
 
+.btn-logout {
+  margin-left: auto;
+  background: transparent;
+  color: var(--verde-light);
+  border: 1.5px solid #3f6b53;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-logout:active {
+  background: rgba(255,255,255,0.08);
+}
+
+.auth-screen {
+  min-height: calc(100vh - 66px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 18px;
+}
+
+.auth-screen[hidden] {
+  display: none;
+}
+
+.auth-card {
+  background: var(--card);
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  padding: 28px 22px;
+  max-width: 360px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: center;
+}
+
+.auth-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.auth-sub {
+  font-size: 14px;
+  color: var(--texto-sec);
+  line-height: 1.5;
+}
+
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--card);
+  color: var(--texto);
+  border: 1.5px solid var(--borde);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-google:active {
+  background: var(--bg);
+}
+
+.btn-google-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #4285f4;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.auth-card {
+  background: var(--card);
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  padding: 28px 22px;
+  max-width: 360px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: center;
+}
+
+.auth-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.auth-sub {
+  font-size: 14px;
+  color: var(--texto-sec);
+  line-height: 1.5;
+}
+
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--card);
+  color: var(--texto);
+  border: 1.5px solid var(--borde);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-google:active {
+  background: var(--bg);
+}
+
+.btn-google-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #4285f4;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 @media (max-width: 600px) {
   .search-row {
     flex-wrap: wrap;
@@ -845,7 +990,7 @@ input[type=checkbox] {
 
 
 /* ========================================================
-   CELULAR
+   MOBILE
    ======================================================== */
 
 @media (max-width: 650px) {

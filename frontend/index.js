@@ -1,8 +1,3 @@
-// Backend API URL. Empty string = same origin as the page (default when the
-// backend serves this frontend). Override window.API_URL before this script
-// loads if the frontend is hosted separately from the backend.
-const API_URL = window.API_URL || "";
-
 let currentStudentId = null;
 let marcadoPresente = false;
 let lookups = { grados: [], edades: [] };
@@ -108,13 +103,8 @@ if (btnHistorial) {
 async function cargarLookups() {
 
   try {
-
-    const res = await fetch(`${API_URL}/api/lookups`);
-
-    if (!res.ok) {
-      throw new Error("Server error");
-    }
-
+    const res = await apiFetch("/api/lookups");
+    if (!res.ok) throw new Error("Server error");
     lookups = await res.json();
 
     return true;
@@ -234,17 +224,8 @@ async function buscar(asistida = false) {
 
 
   try {
-
-    const res = await fetch(
-      `${API_URL}/api/students/search?q=${encodeURIComponent(termino)}`,
-      {
-        signal: controller.signal
-      }
-    );
-
-    if (!res.ok) {
-      throw new Error("Server error");
-    }
+    const res = await apiFetch(`/api/students/search?q=${encodeURIComponent(termino)}`);
+    if (!res.ok) throw new Error("Server error");
 
     const data = await res.json();
 
@@ -794,9 +775,9 @@ async function verificarPresenteRapido(
   try {
 
     const res =
-      await fetch(
+      await window.apiFetch(
 
-        `${API_URL}/api/attendance/check?student_id=${encodeURIComponent(
+        `/api/attendance/check?student_id=${encodeURIComponent(
           pibeId
         )}&date=${encodeURIComponent(
           fecha
@@ -902,8 +883,8 @@ async function marcarPresenteRapido(btn) {
 
   try {
 
-    const res = await fetch(
-      `${API_URL}/api/attendance/mark`,
+    const res = await window.apiFetch(
+      `/api/attendance/mark`,
       {
         method: "POST",
 
@@ -1291,8 +1272,8 @@ async function verificarPresenteFecha() {
 
   try {
 
-    const res = await fetch(
-      `${API_URL}/api/attendance/check?student_id=${encodeURIComponent(currentStudentId)}&date=${encodeURIComponent(fecha)}`
+    const res = await window.apiFetch(
+      `/api/attendance/check?student_id=${encodeURIComponent(currentStudentId)}&date=${encodeURIComponent(fecha)}`
     );
 
     if (!res.ok) {
@@ -1376,26 +1357,14 @@ async function marcarPresente() {
 
 
   try {
-
-    const res = await fetch(
-      `${API_URL}/api/attendance/mark`,
-      {
-
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify({
-
-          student_id: currentStudentId,
-
-          fecha
-        })
-      }
-    );
-
+    const res = await apiFetch("/api/attendance/mark", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        student_id: currentStudentId,
+        fecha,
+      }),
+    });
 
     if (!res.ok) {
       throw new Error("Server error");
@@ -1536,40 +1505,20 @@ async function agregarNuevo() {
 
 
   try {
-
-    const res = await fetch(
-      `${API_URL}/api/students`,
-      {
-
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify({
-
-          nombre,
-
-          apellido,
-
-          grado_id,
-
-          edad_id,
-
-          entrego_ficha,
-
-          telefono_emergencia:
-            telefono_emergencia || null,
-
-          observaciones,
-
-          fecha:
-            getTodayInputValue()
-        })
-      }
-    );
-
+    const res = await apiFetch("/api/students", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nombre,
+        apellido,
+        grado_id,
+        edad_id,
+        entrego_ficha,
+        telefono_emergencia: telefono_emergencia || null,
+        observaciones,
+        fecha: getTodayInputValue(),
+      }),
+    });
 
     if (!res.ok) {
       throw new Error("Server error");
@@ -1688,26 +1637,14 @@ async function guardarEdicion() {
 
 
   try {
-
-    const res = await fetch(
-      `${API_URL}/api/students/${currentStudentId}`,
-      {
-
-        method: "PATCH",
-
-        headers: {
-          "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify({
-
-          entrego_ficha,
-
-          observaciones
-        })
-      }
-    );
-
+    const res = await apiFetch(`/api/students/${currentStudentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entrego_ficha,
+        observaciones,
+      }),
+    });
 
     if (!res.ok) {
       throw new Error("Server error");
@@ -1890,12 +1827,12 @@ async function cargarHistorial(year) {
       resFechas
     ] = await Promise.all([
 
-      fetch(
-        `${API_URL}/api/attendance/top?year=${encodeURIComponent(year)}`
+      apiFetch(
+        `/api/attendance/top?year=${encodeURIComponent(year)}`
       ),
 
-      fetch(
-        `${API_URL}/api/attendance/dates?year=${encodeURIComponent(year)}`
+      apiFetch(
+        `/api/attendance/dates?year=${encodeURIComponent(year)}`
       )
 
     ]);
@@ -2075,8 +2012,8 @@ function renderTopAsistencia(top3, year) {
 
         try {
 
-          const res = await fetch(
-            `${API_URL}/api/students/${encodeURIComponent(id)}`
+          const res = await window.apiFetch(
+            `/api/students/${encodeURIComponent(id)}`
           );
 
           if (!res.ok) {
@@ -2504,8 +2441,8 @@ async function verAsistenciasFecha(fechaISO) {
   try {
 
     const res =
-      await fetch(
-        `${API_URL}/api/attendance/by-date?date=${encodeURIComponent(fechaISO)}`
+      await window.apiFetch(
+        `/api/attendance/by-date?date=${encodeURIComponent(fechaISO)}`
       );
 
 
@@ -2647,8 +2584,8 @@ async function verAsistenciasFecha(fechaISO) {
 
       try {
 
-        const res = await fetch(
-          `${API_URL}/api/students/${encodeURIComponent(id)}`
+        const res = await window.apiFetch(
+          `/api/students/${encodeURIComponent(id)}`
         );
 
         if (!res.ok) {
@@ -2846,5 +2783,7 @@ function unescapeHtml(text) {
   return textarea.value;
 }
 
+// Started by auth.js once Google sign-in succeeds and the email is allowlisted.
+window.onAuthenticated = init;
 
 init();
