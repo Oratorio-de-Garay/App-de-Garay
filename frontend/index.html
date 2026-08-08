@@ -17,21 +17,28 @@
       <div class="header-title">Registro de ingreso</div>
       <div class="header-sub" id="fecha-hoy"></div>
     </div>
+    <button class="btn-logout" id="btn-logout" type="button" hidden>Salir</button>
   </div>
 </header>
 
-<div class="search-box">
-  <div class="search-row">
-    <input class="search-input" type="text" id="input-apellido"
-      placeholder="Nombre o Apellido del pibe..." autocomplete="off" autocorrect="off"
-      autocapitalize="words" spellcheck="false">
-    <button class="search-btn" id="btn-buscar" type="button">
-      <span id="btn-buscar-icon">Buscar</span>
-    </button>
-  </div>
+<div class="auth-screen" id="auth-screen" hidden>
+  <div class="auth-card" id="auth-card"></div>
 </div>
 
-<div class="content" id="contenido"></div>
+<div id="app-shell" hidden>
+  <div class="search-box">
+    <div class="search-row">
+      <input class="search-input" type="text" id="input-apellido"
+        placeholder="Nombre o Apellido del pibe..." autocomplete="off" autocorrect="off"
+        autocapitalize="words" spellcheck="false">
+      <button class="search-btn" id="btn-buscar" type="button">
+        <span id="btn-buscar-icon">Buscar</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="content" id="contenido"></div>
+</div>
 
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal">
@@ -54,13 +61,20 @@
   </div>
 </div>
 
-<!-- API URL configuration - set before loading index.js -->
+<!-- API URL / Supabase configuration - set before loading index.js -->
 <script>
   // Configure API URL - override with your backend URL
   // Leave empty to use the same origin (default, works when backend serves the frontend)
   window.API_URL = "";
+
+  // Supabase project config (safe to expose publicly - this is the anon key,
+  // access is enforced server-side via the allowed_emails table).
+  window.SUPABASE_URL = "https://tcrrxgqwuxlykwyeymsp.supabase.co";
+  window.SUPABASE_ANON_KEY = "sb_publishable_86o3bgdc_aHgXPhTW7AzRQ_PH4yHoNT";
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="auth.js" defer></script>
 <script src="index.js" defer></script>
 </body>
 </html>

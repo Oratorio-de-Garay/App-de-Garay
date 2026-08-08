@@ -1,8 +1,3 @@
-// Backend API URL. Empty string = same origin as the page (default when the
-// backend serves this frontend). Override window.API_URL before this script
-// loads if the frontend is hosted separately from the backend.
-const API_URL = window.API_URL || "";
-
 let currentStudentId = null;
 let marcadoPresente = false;
 let lookups = { grados: [], edades: [] };
@@ -27,7 +22,7 @@ function init() {
 
 async function cargarLookups() {
   try {
-    const res = await fetch(`${API_URL}/api/lookups`);
+    const res = await apiFetch("/api/lookups");
     if (!res.ok) throw new Error("Server error");
     lookups = await res.json();
   } catch (error) {
@@ -51,7 +46,7 @@ async function buscar() {
   limpiarContenido();
 
   try {
-    const res = await fetch(`${API_URL}/api/students/search?q=${encodeURIComponent(termino)}`);
+    const res = await apiFetch(`/api/students/search?q=${encodeURIComponent(termino)}`);
     if (!res.ok) throw new Error("Server error");
 
     const data = await res.json();
@@ -252,7 +247,7 @@ async function marcarPresente() {
   btn.disabled = true;
 
   try {
-    const res = await fetch(`${API_URL}/api/attendance/mark`, {
+    const res = await apiFetch("/api/attendance/mark", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -301,7 +296,7 @@ async function agregarNuevo() {
   btn.disabled = true;
 
   try {
-    const res = await fetch(`${API_URL}/api/students`, {
+    const res = await apiFetch("/api/students", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -349,7 +344,7 @@ async function guardarEdicion() {
   btn.disabled = true;
 
   try {
-    const res = await fetch(`${API_URL}/api/students/${currentStudentId}`, {
+    const res = await apiFetch(`/api/students/${currentStudentId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -407,4 +402,5 @@ function unescapeHtml(text) {
   return textarea.value;
 }
 
-init();
+// Started by auth.js once Google sign-in succeeds and the email is allowlisted.
+window.onAuthenticated = init;

@@ -5,6 +5,7 @@ import ws from "ws";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import { requireAllowedUser } from "./auth.js";
 
 dotenv.config();
 
@@ -23,6 +24,21 @@ const supabase = createClient(
   process.env.SUPABASE_KEY,
   { realtime: { transport: ws } }
 );
+
+// Every /api route requires a signed-in, allowlisted Google account,
+// except the health check (used for uptime monitoring).
+app.use("/api", (req, res, next) => {
+  if (req.path === "/health") return next();
+  return requireAllowedUser(req, res, next);
+});
+
+// ─────────────────────────────────────────────────────────
+// Confirms the caller's token is valid and allowlisted.
+// The frontend calls this right after Google sign-in.
+// ─────────────────────────────────────────────────────────
+app.get("/api/auth/me", (req, res) => {
+  res.json({ email: req.user.email });
+});
 
 // Escape ilike wildcards/operators so user input can't break the .or() filter syntax
 function sanitizeSearchTerm(term) {
