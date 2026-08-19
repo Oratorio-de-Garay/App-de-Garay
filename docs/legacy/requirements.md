@@ -1,3 +1,5 @@
+> ⚠️ **Histórico / desactualizado.** Describe la versión original en Google Apps Script + Google Sheets, previa a la migración a Supabase + Express + Vercel. Se conserva sólo como contexto de negocio. Para el estado actual ver [../ARCHITECTURE.md](../ARCHITECTURE.md), [../DATABASE.md](../DATABASE.md) y [../API.md](../API.md).
+
 # requirements.md
 
 # Registro de ingreso · Requerimientos funcionales
