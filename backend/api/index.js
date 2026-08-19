@@ -23,10 +23,14 @@ app.use(
   )
 );
 
-// Conexión a Supabase
+// Conexión a Supabase.
+// Se usa la service role key (no la anon) porque estas rutas ya están
+// protegidas por requireAllowedUser, y las tablas de buffet tienen RLS
+// con políticas "to authenticated": con la clave anon el cliente actúa
+// como rol anon y Supabase rechaza los INSERT/UPDATE por RLS.
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
   {
     realtime: {
       transport: ws,
@@ -47,6 +51,280 @@ app.use("/api", (req, res, next) => {
 // ─────────────────────────────────────────────────────────
 app.get("/api/auth/me", (req, res) => {
   res.json({ email: req.user.email });
+});
+
+// ========================================================
+// BUFFET
+// ========================================================
+
+app.get("/api/buffet/meta", async (req, res) => {
+  try {
+    const [categoriesRes, unitsRes, suppliersRes] = await Promise.all([
+      supabase.from("buffet_categories").select("id, name, active").order("name"),
+      supabase.from("buffet_units").select("id, name, abbreviation, pack_size, active").order("name"),
+      supabase.from("buffet_suppliers").select("id, name, active").order("name"),
+    ]);
+
+    if (categoriesRes.error) throw categoriesRes.error;
+    if (unitsRes.error) throw unitsRes.error;
+    if (suppliersRes.error) throw suppliersRes.error;
+
+    res.json({
+      categories: categoriesRes.data,
+      units: unitsRes.data,
+      suppliers: suppliersRes.data,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/buffet/products", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("buffet_products")
+      .select(`
+        id, name, stock_current, sale_price, observation, active,
+        category_id, unit_id,
+        buffet_categories(name),
+        buffet_units(name, abbreviation, pack_size)
+      `)
+      .order("name");
+    if (error) throw error;
+    res.json((data || []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      stock_current: row.stock_current,
+      sale_price: row.sale_price,
+      observation: row.observation,
+      active: row.active,
+      category_id: row.category_id,
+      unit_id: row.unit_id,
+      category_name: row.buffet_categories?.name || null,
+      unit_name: row.buffet_units?.name || null,
+      unit_abbreviation: row.buffet_units?.abbreviation || null,
+      pack_size: row.buffet_units?.pack_size || 1,
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/buffet/products", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const { data, error } = await supabase
+      .from("buffet_products")
+      .insert({
+        name: payload.name,
+        category_id: payload.category_id || null,
+        unit_id: payload.unit_id || null,
+        stock_current: payload.stock_current ?? 0,
+        sale_price: payload.sale_price ?? 0,
+        observation: payload.observation || null,
+        active: payload.active ?? true,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/buffet/products/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const payload = req.body || {};
+    const { data, error } = await supabase
+      .from("buffet_products")
+      .update({
+        name: payload.name,
+        category_id: payload.category_id || null,
+        unit_id: payload.unit_id || null,
+        stock_current: payload.stock_current ?? 0,
+        sale_price: payload.sale_price ?? 0,
+        observation: payload.observation || null,
+        active: payload.active ?? true,
+      })
+      .eq("id", id)
+      .select("id")
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/buffet/products/:id", async (req, res) => {
+  try {
+    const { error } = await supabase.from("buffet_products").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/buffet/combos", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("buffet_combos")
+      .select("id, name, description, sale_price, active")
+      .order("name");
+    if (error) throw error;
+    const combos = await Promise.all((data || []).map(async (row) => {
+      const { count } = await supabase
+        .from("buffet_combo_items")
+        .select("*", { count: "exact", head: true })
+        .eq("combo_id", row.id);
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        sale_price: row.sale_price,
+        active: row.active,
+        items_count: count || 0,
+      };
+    }));
+    res.json(combos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/buffet/combos", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const { data, error } = await supabase
+      .from("buffet_combos")
+      .insert({
+        name: payload.name,
+        description: payload.description || null,
+        sale_price: payload.sale_price ?? 0,
+        active: payload.active ?? true,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/buffet/combos/:id", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const { data, error } = await supabase
+      .from("buffet_combos")
+      .update({
+        name: payload.name,
+        description: payload.description || null,
+        sale_price: payload.sale_price ?? 0,
+        active: payload.active ?? true,
+      })
+      .eq("id", req.params.id)
+      .select("id")
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/buffet/combos/:id", async (req, res) => {
+  try {
+    const { error } = await supabase.from("buffet_combos").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/buffet/budgets", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("buffet_budgets")
+      .select("id, title, client_name, observation, status, total_amount")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    const budgets = await Promise.all((data || []).map(async (row) => {
+      const { count } = await supabase
+        .from("buffet_budget_items")
+        .select("*", { count: "exact", head: true })
+        .eq("budget_id", row.id);
+      return {
+        id: row.id,
+        title: row.title,
+        client_name: row.client_name,
+        observation: row.observation,
+        status: row.status,
+        total_amount: row.total_amount,
+        items_count: count || 0,
+      };
+    }));
+    res.json(budgets);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/buffet/budgets", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const { data, error } = await supabase
+      .from("buffet_budgets")
+      .insert({
+        title: payload.title,
+        client_name: payload.client_name || null,
+        observation: payload.observation || null,
+        status: payload.status || "borrador",
+        total_amount: payload.total_amount ?? 0,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/buffet/budgets/:id", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const { data, error } = await supabase
+      .from("buffet_budgets")
+      .update({
+        title: payload.title,
+        client_name: payload.client_name || null,
+        observation: payload.observation || null,
+        status: payload.status || "borrador",
+        total_amount: payload.total_amount ?? 0,
+      })
+      .eq("id", req.params.id)
+      .select("id")
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/buffet/budgets/:id", async (req, res) => {
+  try {
+    const { error } = await supabase.from("buffet_budgets").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Every /api route requires a signed-in, allowlisted Google account,
