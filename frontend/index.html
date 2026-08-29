@@ -33,6 +33,22 @@
 
     <div class="header-top">
 
+      <button
+        class="nav-toggle"
+        id="nav-toggle"
+        type="button"
+        aria-label="Abrir menú"
+        aria-controls="side-nav"
+        aria-expanded="false"
+        hidden
+      >
+        <span class="nav-toggle-bars">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+      </button>
+
       <div class="dot"></div>
 
       <div>
@@ -59,7 +75,10 @@
 </div>
 
 <div id="app-shell" hidden class="app-layout">
-  <aside class="side-nav">
+  <div class="nav-scrim" id="nav-scrim"></div>
+
+  <aside class="side-nav" id="side-nav">
+    <button class="side-nav-close" id="nav-close" type="button" aria-label="Cerrar menú">&times;</button>
     <a class="side-link active" href="index.html">Registro</a>
     <a class="side-link" href="buffet.html">Buffet</a>
   </aside>
@@ -225,6 +244,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="auth.js" defer></script>
+<script src="nav.js" defer></script>
 <script src="index.js" defer></script>
 </body>
 </html>
