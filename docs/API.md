@@ -127,6 +127,66 @@ Lista completa de pibes presentes en una fecha puntual (drill-down del historial
 
 **Respuesta 200:** array de objetos "pibe" (sin `visitas` ni `ultima_asistencia`, incluye `ficha`, `telefono`, `obs`).
 
+---
+
+## Buffet: eventos y ventas
+
+Todo el módulo de buffet (`/api/buffet/*`) está scopeado por `X-Organization-Id`: cada query filtra por `organizacion_id`. Acá se documentan sólo eventos y ventas; el resto (`/products`, `/combos`, `/budgets`, `/meta`) sigue el mismo patrón CRUD.
+
+Un **evento** ("Feria del Plato 29/08/2026") se crea una vez y después se le cargan las ventas de a una: cada venta es un cobro, con los ítems que sean.
+
+### `GET /api/buffet/events`
+
+Query params opcionales: `q` (búsqueda parcial por nombre).
+
+**Respuesta 200:** array de `{ id, nombre, fecha, estado, observacion, sales_count, total_amount }`, ordenado por fecha descendente.
+
+### `POST /api/buffet/events`
+
+**Body:** `{ "nombre": "Feria del Plato 29/08/2026", "fecha": "2026-08-29", "observacion": null }`. `nombre` es obligatorio (`400` si viene vacío); `fecha` default hoy; `estado` default `"abierto"`.
+
+**Respuesta 201:** el evento creado.
+
+### `PATCH /api/buffet/events/:id`
+
+Permite renombrar y cambiar `fecha`, `estado` y `observacion`. Sólo aplica sobre eventos de la organización del header.
+
+### `DELETE /api/buffet/events/:id`
+
+**`400`** si el evento tiene ventas cargadas (borrarlo en cascada se llevaría las ventas sin devolver el stock). Hay que eliminar las ventas primero.
+
+### `GET /api/buffet/sales`
+
+Query params opcionales: `event_id` (el que usa el detalle de evento), `from`, `to` (rango sobre `sale_date`), `event` (búsqueda parcial sobre el nombre del evento guardado en la venta).
+
+**Respuesta 200:** `{ sales: [...], summary: { sales_count, total_amount } }`, donde cada venta trae sus `items` y el `items_count`.
+
+### `POST /api/buffet/sales`
+
+**Body:**
+```json
+{
+  "event_id": "uuid",
+  "payment_method": "efectivo",
+  "observation": null,
+  "items": [{ "product_id": "uuid|null", "combo_id": "uuid|null", "description": "Empanada de carne", "quantity": 3, "unit_price": 2500 }]
+}
+```
+
+`event_id` es obligatorio (`400 "Falta el evento."`) y tiene que pertenecer a la organización del header (`400 "El evento no existe."`). `sale_date` y `event_name` salen del evento; `event_name` queda como snapshot.
+
+El servidor **recalcula los totales** y **redondea `quantity` y `unit_price` a enteros**; los ítems sin producto/combo o con cantidad ≤ 0 se descartan. Si no queda ninguno: `400 "La venta debe tener al menos un ítem."`.
+
+Registrar la venta descuenta stock (los combos se expanden a sus productos). Se permite stock negativo a propósito: en las ferias los productos son donaciones y no suelen tener stock cargado.
+
+**Respuesta 201:** `{ id, total_amount }`.
+
+### `DELETE /api/buffet/sales/:id`
+
+Devuelve el stock descontado y borra la venta (los ítems caen por cascada). **Respuesta 200:** `{ "ok": true }`.
+
+---
+
 ## `GET /api/auth/me`
 
 Devuelve el email de la sesión actual si el token es válido y está en la allowlist. Usado por el frontend justo después del login para decidir si mostrar la app o la pantalla de "no autorizado".

@@ -77,6 +77,27 @@
 /* Las ventas tienen columnas distintas a las de productos. */
 .row.row-sale { grid-template-columns: 1.2fr .5fr 1.6fr .7fr auto; }
 
+/* La fila entera del evento es clickeable para entrar a su detalle. */
+.row.row-event { grid-template-columns: 1.6fr .6fr .8fr auto; cursor: pointer; }
+.row.row-event:hover { border-color: var(--verde-mid); }
+
+.event-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: #f7fbf8;
+  border: 1px solid var(--borde);
+}
+.event-header-title { display: flex; flex-direction: column; }
+.event-header-title strong { font-size: 18px; }
+.event-header-title small, .event-header-total small { color: var(--texto-sec); }
+.event-header-total { margin-left: auto; text-align: right; }
+.event-header-total strong { font-size: 20px; }
+
 .filters {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
@@ -114,10 +135,36 @@
 
 .sale-picker {
   display: grid;
-  grid-template-columns: 2fr .7fr .9fr auto;
+  grid-template-columns: 2fr 1.1fr 1.3fr auto;
   gap: 8px;
-  align-items: center;
+  align-items: end;
 }
+
+.picker-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.picker-label { font-size: 12px; color: var(--texto-sec); }
+
+/* Cantidades y precios se cargan con los botones, sin teclado: paso 1 y $50. */
+.stepper { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px; align-items: center; }
+.stepper .form-input { text-align: center; padding-left: 4px; padding-right: 4px; }
+
+/* Ocultar las flechitas nativas: duplican los botones y saltan de a un paso raro. */
+.stepper input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.stepper input[type="number"]::-webkit-outer-spin-button,
+.stepper input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.stepper-btn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--verde);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.stepper-btn:hover { background: var(--verde-light); }
 
 .sale-cart { display: grid; gap: 8px; }
 
@@ -134,11 +181,25 @@
 
 .empty-cart { color: var(--texto-sec); font-size: 14px; }
 
+/* El evento ya viene dado por la pantalla: en el modal es sólo informativo. */
+.sale-event-line {
+  font-size: 14px;
+  color: var(--texto-sec);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f7fbf8;
+  border: 1px solid var(--borde);
+}
+.sale-event-line strong { color: var(--verde); }
+
 .sale-total-row { text-align: right; font-size: 16px; }
 
 @media (max-width: 900px) {
   .hero-card { flex-direction: column; }
   .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
-  .row, .row.row-sale { grid-template-columns: 1fr; }
+  .row, .row.row-sale, .row.row-event { grid-template-columns: 1fr; }
   .filters, .sale-picker, .sale-item-row { grid-template-columns: 1fr; }
+  /* El stepper no se apila: los botones tienen que quedar a los costados. */
+  .stepper { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .event-header-total { margin-left: 0; text-align: left; }
 }

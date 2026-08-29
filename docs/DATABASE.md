@@ -78,12 +78,34 @@ Allowlist de logins de Google permitidos. Versionada en `supabase/migrations/202
 
 Para agregar a alguien: `insert into public.allowed_emails (email, note) values ('persona@gmail.com', 'Motivo/rol');` en el SQL Editor de Supabase. **No hay UI para esto.**
 
+### `buffet_eventos`
+Una jornada de venta ("Feria del Plato 29/08/2026"). Se crea una vez y agrupa todas sus ventas. Versionada en `supabase/migrations/20260830000000_buffet_eventos.sql`.
+| Columna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK, `gen_random_uuid()` |
+| nombre | text | not null — único por organización |
+| fecha | date | not null, default `current_date` |
+| estado | text | not null, default `'abierto'` — `abierto` \| `cerrado` |
+| observacion | text | nullable |
+| organizacion_id | uuid | FK → `organizaciones.id`, not null |
+| created_at / updated_at | timestamptz | `updated_at` por trigger |
+
+### `buffet_sales` / `buffet_sale_items`
+Una venta = un cobro dentro de un evento. Definidas en `20260828000000_buffet_sales.sql`; `event_id` se agregó en `20260830000000_buffet_eventos.sql`.
+
+Columnas relevantes de `buffet_sales`: `event_id` (FK → `buffet_eventos.id`, ON DELETE CASCADE, **not null**), `event_name` (snapshot del nombre del evento al momento de la venta, se conserva legible aunque después se renombre), `sale_date`, `payment_method`, `observation`, `total_amount`, `organizacion_id`.
+
+`buffet_sale_items` guarda `description` (snapshot del nombre del producto/combo), `quantity`, `unit_price` y `line_total`. Las columnas son `numeric(12,2)` pero **el backend redondea cantidades y precios a enteros**: no se venden medias porciones ni se cobran centavos.
+
+Los totales los recalcula siempre el servidor (`normalizeSaleItems` en `backend/api/index.js`); lo que manda el cliente no se toma como fuente de verdad.
+
 ## Relaciones
 
 ```
 organizaciones ──< edades
 niveles_grados_pibes ──< grados_pibes ──< pibes >── edades
 pibes ──< asistencias
+organizaciones ──< buffet_eventos ──< buffet_sales ──< buffet_sale_items
 ```
 
 ## Row Level Security (RLS)

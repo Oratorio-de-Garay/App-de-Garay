@@ -366,8 +366,129 @@ app.delete("/api/buffet/budgets/:id", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────
-// VENTAS
+// EVENTOS Y VENTAS
 // ─────────────────────────────────────────────────────────
+
+/**
+ * Un evento ("Feria del plato 29/08/2026") agrupa todas las ventas de esa
+ * jornada. Se crea una vez y después se le cargan las ventas de a una.
+ */
+app.get("/api/buffet/events", async (req, res) => {
+  try {
+    let query = supabase
+      .from("buffet_eventos")
+      .select("id, nombre, fecha, estado, observacion, buffet_sales(id, total_amount)")
+      .eq("organizacion_id", req.user.organizationId)
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (req.query.q) query = query.ilike("nombre", `%${req.query.q}%`);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const events = (data || []).map((row) => {
+      const sales = row.buffet_sales || [];
+      return {
+        id: row.id,
+        nombre: row.nombre,
+        fecha: row.fecha,
+        estado: row.estado,
+        observacion: row.observacion,
+        sales_count: sales.length,
+        total_amount: Number(sales.reduce((acc, s) => acc + Number(s.total_amount || 0), 0).toFixed(2)),
+      };
+    });
+
+    res.json(events);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/buffet/events", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const nombre = (payload.nombre || "").trim();
+    if (!nombre) return res.status(400).json({ error: "El nombre del evento es obligatorio." });
+
+    const { data, error } = await supabase
+      .from("buffet_eventos")
+      .insert({
+        nombre,
+        fecha: payload.fecha || new Date().toISOString().slice(0, 10),
+        estado: payload.estado || "abierto",
+        observacion: payload.observacion || null,
+        organizacion_id: req.user.organizationId,
+      })
+      .select("id, nombre, fecha, estado, observacion")
+      .single();
+    if (error) throw error;
+
+    res.status(201).json({ ...data, sales_count: 0, total_amount: 0 });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/buffet/events/:id", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const updates = {};
+    if (payload.nombre !== undefined) {
+      const nombre = (payload.nombre || "").trim();
+      if (!nombre) return res.status(400).json({ error: "El nombre del evento es obligatorio." });
+      updates.nombre = nombre;
+    }
+    if (payload.fecha !== undefined) updates.fecha = payload.fecha;
+    if (payload.estado !== undefined) updates.estado = payload.estado;
+    if (payload.observacion !== undefined) updates.observacion = payload.observacion || null;
+
+    const { data, error } = await supabase
+      .from("buffet_eventos")
+      .update(updates)
+      .eq("id", req.params.id)
+      .eq("organizacion_id", req.user.organizationId)
+      .select("id, nombre, fecha, estado, observacion")
+      .single();
+    if (error) throw error;
+
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/buffet/events/:id", async (req, res) => {
+  try {
+    const org = req.user.organizationId;
+
+    // El borrado en cascada se llevaría las ventas sin devolver el stock, así
+    // que se pide vaciar el evento primero.
+    const { data: sales, error: salesError } = await supabase
+      .from("buffet_sales")
+      .select("id")
+      .eq("event_id", req.params.id)
+      .eq("organizacion_id", org)
+      .limit(1);
+    if (salesError) throw salesError;
+    if ((sales || []).length) {
+      return res.status(400).json({ error: "El evento tiene ventas cargadas. Eliminá las ventas primero." });
+    }
+
+    const { error } = await supabase
+      .from("buffet_eventos")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("organizacion_id", org);
+    if (error) throw error;
+
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 /**
  * Traduce los ítems de una venta a un descuento (sign = -1) o devolución
@@ -421,12 +542,16 @@ async function applyStockDelta(items, sign, organizationId) {
   }
 }
 
-/** Normaliza los ítems del cliente y recalcula los totales en el servidor. */
+/**
+ * Normaliza los ítems del cliente y recalcula los totales en el servidor.
+ * Cantidades y precios se manejan en enteros: no se venden medias porciones ni
+ * se cobran centavos en una feria del plato.
+ */
 function normalizeSaleItems(rawItems) {
   const items = (rawItems || [])
     .map((item) => {
-      const quantity = Number(item.quantity) || 0;
-      const unitPrice = Number(item.unit_price) || 0;
+      const quantity = Math.round(Number(item.quantity) || 0);
+      const unitPrice = Math.round(Number(item.unit_price) || 0);
       return {
         product_id: item.product_id || null,
         combo_id: item.combo_id || null,
@@ -447,7 +572,7 @@ app.get("/api/buffet/sales", async (req, res) => {
     let query = supabase
       .from("buffet_sales")
       .select(`
-        id, sale_date, event_name, payment_method, observation, total_amount,
+        id, sale_date, event_id, event_name, payment_method, observation, total_amount, created_at,
         buffet_sale_items(id, product_id, combo_id, description, quantity, unit_price, line_total)
       `)
       // Filtrar la cabecera alcanza: el select anidado de ítems ya queda acotado.
@@ -455,6 +580,7 @@ app.get("/api/buffet/sales", async (req, res) => {
       .order("sale_date", { ascending: false })
       .order("created_at", { ascending: false });
 
+    if (req.query.event_id) query = query.eq("event_id", req.query.event_id);
     if (req.query.from) query = query.gte("sale_date", req.query.from);
     if (req.query.to) query = query.lte("sale_date", req.query.to);
     if (req.query.event) query = query.ilike("event_name", `%${req.query.event}%`);
@@ -465,6 +591,8 @@ app.get("/api/buffet/sales", async (req, res) => {
     const sales = (data || []).map((row) => ({
       id: row.id,
       sale_date: row.sale_date,
+      created_at: row.created_at,
+      event_id: row.event_id,
       event_name: row.event_name,
       payment_method: row.payment_method,
       observation: row.observation,
@@ -491,12 +619,25 @@ app.post("/api/buffet/sales", async (req, res) => {
     const org = req.user.organizationId;
     const { items, total } = normalizeSaleItems(payload.items);
     if (!items.length) return res.status(400).json({ error: "La venta debe tener al menos un ítem." });
+    if (!payload.event_id) return res.status(400).json({ error: "Falta el evento." });
+
+    // Buscar el evento dentro de la organización valida de paso que sea propio.
+    const { data: evento, error: eventoError } = await supabase
+      .from("buffet_eventos")
+      .select("id, nombre, fecha")
+      .eq("id", payload.event_id)
+      .eq("organizacion_id", org)
+      .maybeSingle();
+    if (eventoError) throw eventoError;
+    if (!evento) return res.status(400).json({ error: "El evento no existe." });
 
     const { data: sale, error } = await supabase
       .from("buffet_sales")
       .insert({
-        sale_date: payload.sale_date || new Date().toISOString().slice(0, 10),
-        event_name: payload.event_name || null,
+        sale_date: payload.sale_date || evento.fecha,
+        event_id: evento.id,
+        // Snapshot del nombre: el historial sigue legible si el evento se renombra.
+        event_name: evento.nombre,
         payment_method: payload.payment_method || "efectivo",
         observation: payload.observation || null,
         total_amount: total,
