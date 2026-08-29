@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Buffet · Oratorio</title>
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="buffet.css">
+</head>
+<body>
+  <header class="buffet-header">
+    <div class="header-top">
+      <div class="dot"></div>
+      <div>
+        <div class="header-title">Buffet</div>
+        <div class="header-sub">Productos, precios, combos y presupuestos</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a class="btn-sec" href="index.html">Volver</a>
+      <button class="btn-logout" id="btn-logout" type="button" hidden>Salir</button>
+    </div>
+  </header>
+
+  <div class="auth-screen" id="auth-screen" hidden>
+    <div class="auth-card" id="auth-card"></div>
+  </div>
+
+  <div id="app-shell" hidden class="buffet-shell">
+    <aside class="side-nav">
+      <a class="side-link active" href="buffet.html">Buffet</a>
+      <a class="side-link" href="index.html">Registro</a>
+    </aside>
+
+    <main class="buffet-main">
+      <section class="hero-card">
+        <div>
+          <div class="hero-kicker">Gestión de buffet</div>
+          <h1>Catálogo, ventas, combos y presupuestos</h1>
+          <p>Administrá productos, registrá las ventas de cada evento y armá combos y presupuestos desde una única pantalla.</p>
+        </div>
+        <div class="hero-stats" id="dashboard-stats"></div>
+      </section>
+
+      <section class="tabs">
+        <button class="tab active" data-tab="productos" type="button">Productos</button>
+        <button class="tab" data-tab="ventas" type="button">Ventas</button>
+        <button class="tab" data-tab="combos" type="button">Combos</button>
+        <button class="tab" data-tab="presupuestos" type="button">Presupuestos</button>
+      </section>
+
+      <section class="panel active" id="panel-productos"></section>
+      <section class="panel" id="panel-ventas"></section>
+      <section class="panel" id="panel-combos"></section>
+      <section class="panel" id="panel-presupuestos"></section>
+    </main>
+
+    <div class="modal-overlay" id="buffet-modal-overlay">
+      <div class="modal" id="buffet-modal"></div>
+    </div>
+  </div>
+
+  <script>
+    window.API_URL = "";
+    window.SUPABASE_URL = "https://tcrrxgqwuxlykwyeymsp.supabase.co";
+    window.SUPABASE_ANON_KEY = "sb_publishable_86o3bgdc_aHgXPhTW7AzRQ_PH4yHoNT";
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="auth.js" defer></script>
+  <script src="buffet.js" defer></script>
+</body>
+</html>

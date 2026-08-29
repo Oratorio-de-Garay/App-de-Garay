@@ -35,12 +35,22 @@ header {
   position: sticky;
   top: 0;
   z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
 .header-top {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .dot {
@@ -550,6 +560,31 @@ input[type=checkbox] {
 
 .btn-logout:active {
   background: rgba(255,255,255,0.08);
+}
+
+/* Selector de organización, inyectado por auth.js junto al botón de salir.
+   Va sobre el header verde, así que no reusa los colores de .form-select. */
+#org-select {
+  margin-left: auto;
+  width: auto;
+  max-width: 160px;
+  background: transparent;
+  color: var(--verde-light);
+  border: 1.5px solid #3f6b53;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#org-select option {
+  color: var(--texto);
+  background: #fff;
+}
+
+/* Con el selector presente, el margen automático lo lleva él. */
+#org-select ~ .btn-logout {
+  margin-left: 8px;
 }
 
 .auth-screen {
