@@ -535,7 +535,7 @@ function openSaleForm(evento) {
             <span class="picker-label">Precio</span>
             ${stepperHtml("sale-price", { value: 0, step: 50, min: 0, label: "precio" })}
           </div>
-          <button class="btn-sec" type="button" id="sale-add">Agregar</button>
+          <button class="btn-add" type="button" id="sale-add">Agregar</button>
         </div>
       </div>
 
