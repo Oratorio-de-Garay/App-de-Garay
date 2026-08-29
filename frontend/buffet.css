@@ -107,10 +107,84 @@
 .row small { color: var(--texto-sec); }
 .row-actions { display: flex; gap: 8px; justify-content: end; }
 
+.chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--verde-light);
+  color: var(--verde);
+  border: 1px solid var(--verde-soft);
+}
+
+/* Las ventas tienen columnas distintas a las de productos. */
+.row.row-sale { grid-template-columns: 1.2fr .5fr 1.6fr .7fr auto; }
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+}
+
+.summary-line {
+  display: flex;
+  gap: 20px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f7fbf8;
+  border: 1px solid var(--borde);
+}
+.summary-line strong { font-size: 18px; }
+
+/* Modal de venta: carrito de ítems */
+.modal-body { display: flex; flex-direction: column; gap: 14px; max-height: 60vh; overflow-y: auto; }
+
+.modal-error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fdecea;
+  border: 1px solid #f5c6c0;
+  color: #a33228;
+  font-size: 13px;
+}
+
+.check-line { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+
+.sale-picker {
+  display: grid;
+  grid-template-columns: 2fr .7fr .9fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.sale-cart { display: grid; gap: 8px; }
+
+.sale-item-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr .7fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.empty-cart { color: var(--texto-sec); font-size: 14px; }
+
+.sale-total-row { text-align: right; font-size: 16px; }
+
 @media (max-width: 900px) {
   .buffet-shell { grid-template-columns: 1fr; }
   .side-nav { flex-direction: row; overflow-x: auto; }
   .hero-card { flex-direction: column; }
   .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
-  .row { grid-template-columns: 1fr; }
+  .row, .row.row-sale { grid-template-columns: 1fr; }
+  .filters, .sale-picker, .sale-item-row { grid-template-columns: 1fr; }
 }

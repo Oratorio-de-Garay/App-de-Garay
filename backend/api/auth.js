@@ -19,7 +19,11 @@ const supabaseAdmin = createClient(
 
 /**
  * Express middleware: requires a valid Supabase session (Google SSO)
- * whose email is present in the allowed_emails table.
+ * whose email is present in the allowed_emails table, and resolves the
+ * organization the request operates on.
+ *
+ * Leaves on req.user:
+ *   email, organizationId (the active one), organizations (all memberships)
  */
 export async function requireAllowedUser(req, res, next) {
   try {
@@ -49,7 +53,38 @@ export async function requireAllowedUser(req, res, next) {
       return res.status(403).json({ error: "No tenés acceso a esta aplicación" });
     }
 
-    req.user = { email };
+    const { data: memberships, error: membershipError } = await supabaseAdmin
+      .from("organizacion_miembros")
+      .select("organizacion_id, organizaciones(id, nombre)")
+      .eq("email", email);
+
+    if (membershipError) throw membershipError;
+
+    const organizations = (memberships || [])
+      .filter((row) => row.organizaciones)
+      .map((row) => ({ id: row.organizaciones.id, name: row.organizaciones.nombre }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    // El code permite al frontend distinguir esto de "email no autorizado".
+    if (!organizations.length) {
+      return res.status(403).json({
+        error: "Tu cuenta todavía no está asignada a ninguna organización",
+        code: "SIN_ORGANIZACION",
+      });
+    }
+
+    // La organización activa la elige el cliente, pero se valida contra sus
+    // membresías: sin esto bastaría con mandar otro id para ver datos ajenos.
+    const requested = req.headers["x-organization-id"];
+    if (requested && !organizations.some((org) => org.id === requested)) {
+      return res.status(403).json({ error: "No pertenecés a esa organización" });
+    }
+
+    req.user = {
+      email,
+      organizationId: requested || organizations[0].id,
+      organizations,
+    };
     next();
   } catch (error) {
     console.error("Auth check error:", error);

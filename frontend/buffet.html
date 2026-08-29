@@ -36,22 +36,28 @@
       <section class="hero-card">
         <div>
           <div class="hero-kicker">Gestión de buffet</div>
-          <h1>Catálogo, costos, venta y presupuestos</h1>
-          <p>Administrá productos, sus proveedores, precios de venta y combos desde una única pantalla.</p>
+          <h1>Catálogo, ventas, combos y presupuestos</h1>
+          <p>Administrá productos, registrá las ventas de cada evento y armá combos y presupuestos desde una única pantalla.</p>
         </div>
         <div class="hero-stats" id="dashboard-stats"></div>
       </section>
 
       <section class="tabs">
         <button class="tab active" data-tab="productos" type="button">Productos</button>
+        <button class="tab" data-tab="ventas" type="button">Ventas</button>
         <button class="tab" data-tab="combos" type="button">Combos</button>
         <button class="tab" data-tab="presupuestos" type="button">Presupuestos</button>
       </section>
 
       <section class="panel active" id="panel-productos"></section>
+      <section class="panel" id="panel-ventas"></section>
       <section class="panel" id="panel-combos"></section>
       <section class="panel" id="panel-presupuestos"></section>
     </main>
+
+    <div class="modal-overlay" id="buffet-modal-overlay">
+      <div class="modal" id="buffet-modal"></div>
+    </div>
   </div>
 
   <script>

@@ -50,7 +50,11 @@ app.use("/api", (req, res, next) => {
 // The frontend calls this right after Google sign-in.
 // ─────────────────────────────────────────────────────────
 app.get("/api/auth/me", (req, res) => {
-  res.json({ email: req.user.email });
+  res.json({
+    email: req.user.email,
+    organizacion_id: req.user.organizationId,
+    organizations: req.user.organizations,
+  });
 });
 
 // ========================================================
@@ -59,10 +63,13 @@ app.get("/api/auth/me", (req, res) => {
 
 app.get("/api/buffet/meta", async (req, res) => {
   try {
+    const org = req.user.organizationId;
     const [categoriesRes, unitsRes, suppliersRes] = await Promise.all([
-      supabase.from("buffet_categories").select("id, name, active").order("name"),
+      // Las categorías sin organización son globales y las ven todas.
+      supabase.from("buffet_categories").select("id, name, active").or(`organizacion_id.is.null,organizacion_id.eq.${org}`).order("name"),
+      // buffet_units es un catálogo global: no se filtra.
       supabase.from("buffet_units").select("id, name, abbreviation, pack_size, active").order("name"),
-      supabase.from("buffet_suppliers").select("id, name, active").order("name"),
+      supabase.from("buffet_suppliers").select("id, name, active").eq("organizacion_id", org).order("name"),
     ]);
 
     if (categoriesRes.error) throw categoriesRes.error;
@@ -84,11 +91,12 @@ app.get("/api/buffet/products", async (req, res) => {
     const { data, error } = await supabase
       .from("buffet_products")
       .select(`
-        id, name, stock_current, sale_price, observation, active,
+        id, name, stock_current, sale_price, observation, active, is_donated,
         category_id, unit_id,
         buffet_categories(name),
         buffet_units(name, abbreviation, pack_size)
       `)
+      .eq("organizacion_id", req.user.organizationId)
       .order("name");
     if (error) throw error;
     res.json((data || []).map((row) => ({
@@ -98,6 +106,7 @@ app.get("/api/buffet/products", async (req, res) => {
       sale_price: row.sale_price,
       observation: row.observation,
       active: row.active,
+      is_donated: row.is_donated,
       category_id: row.category_id,
       unit_id: row.unit_id,
       category_name: row.buffet_categories?.name || null,
@@ -123,6 +132,8 @@ app.post("/api/buffet/products", async (req, res) => {
         sale_price: payload.sale_price ?? 0,
         observation: payload.observation || null,
         active: payload.active ?? true,
+        is_donated: payload.is_donated ?? false,
+        organizacion_id: req.user.organizationId,
       })
       .select("id")
       .single();
@@ -147,11 +158,16 @@ app.patch("/api/buffet/products/:id", async (req, res) => {
         sale_price: payload.sale_price ?? 0,
         observation: payload.observation || null,
         active: payload.active ?? true,
+        is_donated: payload.is_donated ?? false,
       })
+      // El filtro por organización va además del id: sin él, conociendo un UUID
+      // se podría editar una fila de otra organización.
       .eq("id", id)
+      .eq("organizacion_id", req.user.organizationId)
       .select("id")
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Producto no encontrado" });
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -160,7 +176,11 @@ app.patch("/api/buffet/products/:id", async (req, res) => {
 
 app.delete("/api/buffet/products/:id", async (req, res) => {
   try {
-    const { error } = await supabase.from("buffet_products").delete().eq("id", req.params.id);
+    const { error } = await supabase
+      .from("buffet_products")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("organizacion_id", req.user.organizationId);
     if (error) throw error;
     res.json({ ok: true });
   } catch (error) {
@@ -173,13 +193,15 @@ app.get("/api/buffet/combos", async (req, res) => {
     const { data, error } = await supabase
       .from("buffet_combos")
       .select("id, name, description, sale_price, active")
+      .eq("organizacion_id", req.user.organizationId)
       .order("name");
     if (error) throw error;
     const combos = await Promise.all((data || []).map(async (row) => {
       const { count } = await supabase
         .from("buffet_combo_items")
         .select("*", { count: "exact", head: true })
-        .eq("combo_id", row.id);
+        .eq("combo_id", row.id)
+        .eq("organizacion_id", req.user.organizationId);
       return {
         id: row.id,
         name: row.name,
@@ -205,6 +227,7 @@ app.post("/api/buffet/combos", async (req, res) => {
         description: payload.description || null,
         sale_price: payload.sale_price ?? 0,
         active: payload.active ?? true,
+        organizacion_id: req.user.organizationId,
       })
       .select("id")
       .single();
@@ -227,9 +250,11 @@ app.patch("/api/buffet/combos/:id", async (req, res) => {
         active: payload.active ?? true,
       })
       .eq("id", req.params.id)
+      .eq("organizacion_id", req.user.organizationId)
       .select("id")
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Combo no encontrado" });
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -238,7 +263,11 @@ app.patch("/api/buffet/combos/:id", async (req, res) => {
 
 app.delete("/api/buffet/combos/:id", async (req, res) => {
   try {
-    const { error } = await supabase.from("buffet_combos").delete().eq("id", req.params.id);
+    const { error } = await supabase
+      .from("buffet_combos")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("organizacion_id", req.user.organizationId);
     if (error) throw error;
     res.json({ ok: true });
   } catch (error) {
@@ -251,13 +280,15 @@ app.get("/api/buffet/budgets", async (req, res) => {
     const { data, error } = await supabase
       .from("buffet_budgets")
       .select("id, title, client_name, observation, status, total_amount")
+      .eq("organizacion_id", req.user.organizationId)
       .order("created_at", { ascending: false });
     if (error) throw error;
     const budgets = await Promise.all((data || []).map(async (row) => {
       const { count } = await supabase
         .from("buffet_budget_items")
         .select("*", { count: "exact", head: true })
-        .eq("budget_id", row.id);
+        .eq("budget_id", row.id)
+        .eq("organizacion_id", req.user.organizationId);
       return {
         id: row.id,
         title: row.title,
@@ -285,6 +316,7 @@ app.post("/api/buffet/budgets", async (req, res) => {
         observation: payload.observation || null,
         status: payload.status || "borrador",
         total_amount: payload.total_amount ?? 0,
+        organizacion_id: req.user.organizationId,
       })
       .select("id")
       .single();
@@ -308,9 +340,11 @@ app.patch("/api/buffet/budgets/:id", async (req, res) => {
         total_amount: payload.total_amount ?? 0,
       })
       .eq("id", req.params.id)
+      .eq("organizacion_id", req.user.organizationId)
       .select("id")
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Presupuesto no encontrado" });
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -319,7 +353,11 @@ app.patch("/api/buffet/budgets/:id", async (req, res) => {
 
 app.delete("/api/buffet/budgets/:id", async (req, res) => {
   try {
-    const { error } = await supabase.from("buffet_budgets").delete().eq("id", req.params.id);
+    const { error } = await supabase
+      .from("buffet_budgets")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("organizacion_id", req.user.organizationId);
     if (error) throw error;
     res.json({ ok: true });
   } catch (error) {
@@ -327,19 +365,189 @@ app.delete("/api/buffet/budgets/:id", async (req, res) => {
   }
 });
 
-// Every /api route requires a signed-in, allowlisted Google account,
-// except the health check (used for uptime monitoring).
-app.use("/api", (req, res, next) => {
-  if (req.path === "/health") return next();
-  return requireAllowedUser(req, res, next);
+// ─────────────────────────────────────────────────────────
+// VENTAS
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Traduce los ítems de una venta a un descuento (sign = -1) o devolución
+ * (sign = +1) de stock por producto. Los combos se expanden a sus productos.
+ * Se permite stock negativo a propósito: en las ferias del plato los productos
+ * son donaciones y normalmente no tienen stock cargado.
+ */
+async function applyStockDelta(items, sign, organizationId) {
+  const deltas = new Map();
+
+  for (const item of items) {
+    const quantity = Number(item.quantity) || 0;
+    if (!quantity) continue;
+
+    if (item.product_id) {
+      deltas.set(item.product_id, (deltas.get(item.product_id) || 0) + sign * quantity);
+      continue;
+    }
+
+    if (item.combo_id) {
+      const { data, error } = await supabase
+        .from("buffet_combo_items")
+        .select("product_id, quantity")
+        .eq("combo_id", item.combo_id)
+        .eq("organizacion_id", organizationId);
+      if (error) throw error;
+      for (const comboItem of data || []) {
+        const total = sign * quantity * (Number(comboItem.quantity) || 0);
+        deltas.set(comboItem.product_id, (deltas.get(comboItem.product_id) || 0) + total);
+      }
+    }
+  }
+
+  if (!deltas.size) return;
+
+  const { data: products, error: readError } = await supabase
+    .from("buffet_products")
+    .select("id, stock_current")
+    .in("id", [...deltas.keys()])
+    .eq("organizacion_id", organizationId);
+  if (readError) throw readError;
+
+  for (const product of products || []) {
+    const next = Number(product.stock_current || 0) + deltas.get(product.id);
+    const { error } = await supabase
+      .from("buffet_products")
+      .update({ stock_current: next })
+      .eq("id", product.id)
+      .eq("organizacion_id", organizationId);
+    if (error) throw error;
+  }
+}
+
+/** Normaliza los ítems del cliente y recalcula los totales en el servidor. */
+function normalizeSaleItems(rawItems) {
+  const items = (rawItems || [])
+    .map((item) => {
+      const quantity = Number(item.quantity) || 0;
+      const unitPrice = Number(item.unit_price) || 0;
+      return {
+        product_id: item.product_id || null,
+        combo_id: item.combo_id || null,
+        description: item.description || "Sin descripción",
+        quantity,
+        unit_price: unitPrice,
+        line_total: Number((quantity * unitPrice).toFixed(2)),
+      };
+    })
+    .filter((item) => item.quantity > 0 && (item.product_id || item.combo_id));
+
+  const total = Number(items.reduce((acc, item) => acc + item.line_total, 0).toFixed(2));
+  return { items, total };
+}
+
+app.get("/api/buffet/sales", async (req, res) => {
+  try {
+    let query = supabase
+      .from("buffet_sales")
+      .select(`
+        id, sale_date, event_name, payment_method, observation, total_amount,
+        buffet_sale_items(id, product_id, combo_id, description, quantity, unit_price, line_total)
+      `)
+      // Filtrar la cabecera alcanza: el select anidado de ítems ya queda acotado.
+      .eq("organizacion_id", req.user.organizationId)
+      .order("sale_date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (req.query.from) query = query.gte("sale_date", req.query.from);
+    if (req.query.to) query = query.lte("sale_date", req.query.to);
+    if (req.query.event) query = query.ilike("event_name", `%${req.query.event}%`);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const sales = (data || []).map((row) => ({
+      id: row.id,
+      sale_date: row.sale_date,
+      event_name: row.event_name,
+      payment_method: row.payment_method,
+      observation: row.observation,
+      total_amount: row.total_amount,
+      items: row.buffet_sale_items || [],
+      items_count: (row.buffet_sale_items || []).length,
+    }));
+
+    res.json({
+      sales,
+      summary: {
+        sales_count: sales.length,
+        total_amount: Number(sales.reduce((acc, s) => acc + Number(s.total_amount || 0), 0).toFixed(2)),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// ─────────────────────────────────────────────────────────
-// Confirms the caller's token is valid and allowlisted.
-// The frontend calls this right after Google sign-in.
-// ─────────────────────────────────────────────────────────
-app.get("/api/auth/me", (req, res) => {
-  res.json({ email: req.user.email });
+app.post("/api/buffet/sales", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const org = req.user.organizationId;
+    const { items, total } = normalizeSaleItems(payload.items);
+    if (!items.length) return res.status(400).json({ error: "La venta debe tener al menos un ítem." });
+
+    const { data: sale, error } = await supabase
+      .from("buffet_sales")
+      .insert({
+        sale_date: payload.sale_date || new Date().toISOString().slice(0, 10),
+        event_name: payload.event_name || null,
+        payment_method: payload.payment_method || "efectivo",
+        observation: payload.observation || null,
+        total_amount: total,
+        organizacion_id: org,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+
+    // Supabase JS no ofrece transacciones: si algo falla después de crear la
+    // cabecera la borramos a mano para no dejar ventas vacías o a medio aplicar.
+    try {
+      const { error: itemsError } = await supabase
+        .from("buffet_sale_items")
+        .insert(items.map((item) => ({ ...item, sale_id: sale.id, organizacion_id: org })));
+      if (itemsError) throw itemsError;
+
+      await applyStockDelta(items, -1, org);
+    } catch (inner) {
+      await supabase.from("buffet_sales").delete().eq("id", sale.id).eq("organizacion_id", org);
+      throw inner;
+    }
+
+    res.status(201).json({ id: sale.id, total_amount: total });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/buffet/sales/:id", async (req, res) => {
+  try {
+    const org = req.user.organizationId;
+    const { data: items, error: itemsError } = await supabase
+      .from("buffet_sale_items")
+      .select("product_id, combo_id, quantity")
+      .eq("sale_id", req.params.id)
+      .eq("organizacion_id", org);
+    if (itemsError) throw itemsError;
+
+    await applyStockDelta(items || [], 1, org);
+
+    const { error } = await supabase
+      .from("buffet_sales")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("organizacion_id", org);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 
@@ -485,6 +693,11 @@ app.get(
             nombre
           )
           `
+        )
+
+        .eq(
+          "organizacion_id",
+          req.user.organizationId
         );
 
 
@@ -517,6 +730,11 @@ app.get(
                 .eq(
                   "pibe_id",
                   pibe.id
+                )
+
+                .eq(
+                  "organizacion_id",
+                  req.user.organizationId
                 );
 
 
@@ -535,6 +753,11 @@ app.get(
   .eq(
     "pibe_id",
     pibe.id
+  )
+
+  .eq(
+    "organizacion_id",
+    req.user.organizationId
   )
 
   .order(
@@ -651,6 +874,7 @@ app.get("/api/attendance/check", async (req, res) => {
       .from("asistencias")
       .select("id")
       .eq("pibe_id", student_id)
+      .eq("organizacion_id", req.user.organizationId)
       .gte("fecha", inicio.toISOString())
       .lt("fecha", fin.toISOString())
       .limit(1);
@@ -708,6 +932,46 @@ app.post(
 
 
       // ==================================================
+      // EL PIBE TIENE QUE SER DE LA ORGANIZACIÓN ACTIVA.
+      // Si no, se podría marcar asistencia sobre un pibe ajeno.
+      // ==================================================
+
+      const {
+        data: pibeDeLaOrg,
+        error: pibeError,
+      } = await supabase
+
+        .from("pibes")
+
+        .select("id")
+
+        .eq("id", student_id)
+
+        .eq(
+          "organizacion_id",
+          req.user.organizationId
+        )
+
+        .maybeSingle();
+
+
+      if (pibeError) {
+        throw pibeError;
+      }
+
+
+      if (!pibeDeLaOrg) {
+
+        return res
+          .status(404)
+          .json({
+            error:
+              "El pibe no existe en tu organización",
+          });
+      }
+
+
+      // ==================================================
       // COMPROBAR SI YA TIENE PRESENTE ESE DÍA
       // ==================================================
 
@@ -736,6 +1000,11 @@ app.post(
         .eq(
           "pibe_id",
           student_id
+        )
+
+        .eq(
+          "organizacion_id",
+          req.user.organizationId
         )
 
         .gte(
@@ -785,6 +1054,9 @@ app.post(
             student_id,
 
           fecha,
+
+          organizacion_id:
+            req.user.organizationId,
         });
 
 
@@ -893,6 +1165,9 @@ app.post(
             observaciones ||
             null,
 
+          organizacion_id:
+            req.user.organizationId,
+
         })
 
         .select();
@@ -922,6 +1197,9 @@ app.post(
               pibe.id,
 
             fecha,
+
+            organizacion_id:
+              req.user.organizationId,
           });
 
 
@@ -982,9 +1260,11 @@ app.get("/api/students/:id", async (req, res) => {
         )
       `)
       .eq("id", id)
-      .single();
+      .eq("organizacion_id", req.user.organizationId)
+      .maybeSingle();
 
     if (error) throw error;
+    if (!pibe) return res.status(404).json({ error: "Pibe no encontrado" });
 
     const { count, error: visitError } = await supabase
       .from("asistencias")
@@ -992,7 +1272,8 @@ app.get("/api/students/:id", async (req, res) => {
         count: "exact",
         head: true
       })
-      .eq("pibe_id", id);
+      .eq("pibe_id", id)
+      .eq("organizacion_id", req.user.organizationId);
 
     if (visitError) throw visitError;
 
@@ -1003,6 +1284,7 @@ const {
   .from("asistencias")
   .select("fecha")
   .eq("pibe_id", id)
+  .eq("organizacion_id", req.user.organizationId)
   .order("fecha", { ascending: false })
   .limit(1)
   .maybeSingle();
@@ -1089,6 +1371,7 @@ app.patch(
 
 
       const {
+        data,
         error,
       } = await supabase
 
@@ -1099,11 +1382,29 @@ app.patch(
         .eq(
           "id",
           id
-        );
+        )
+
+        .eq(
+          "organizacion_id",
+          req.user.organizationId
+        )
+
+        .select("id");
 
 
       if (error) {
         throw error;
+      }
+
+
+      if (!data || data.length === 0) {
+
+        return res
+          .status(404)
+          .json({
+            error:
+              "Pibe no encontrado",
+          });
       }
 
 
@@ -1162,6 +1463,11 @@ app.get(
 
         .select(
           "fecha, pibe_id"
+        )
+
+        .eq(
+          "organizacion_id",
+          req.user.organizationId
         )
 
         .gte(
@@ -1315,6 +1621,7 @@ app.get("/api/attendance/top", async (req, res) => {
           apellido
         )
       `)
+      .eq("organizacion_id", req.user.organizationId)
       .gte("fecha", desde)
       .lt("fecha", hasta);
 
@@ -1459,6 +1766,11 @@ app.get(
           "id, fecha, pibe_id"
         )
 
+        .eq(
+          "organizacion_id",
+          req.user.organizationId
+        )
+
         .gte(
           "fecha",
           inicio.toISOString()
@@ -1556,6 +1868,11 @@ app.get(
         .in(
           "id",
           pibeIds
+        )
+
+        .eq(
+          "organizacion_id",
+          req.user.organizationId
         )
 
         .order(
