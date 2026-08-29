@@ -50,7 +50,6 @@
 
     </div>
     <div class="header-actions">
-      <a class="btn-sec" href="buffet.html">Buffet</a>
       <button class="btn-logout" id="btn-logout" type="button" hidden>Salir</button>
     </div>
 </header>
@@ -59,7 +58,13 @@
   <div class="auth-card" id="auth-card"></div>
 </div>
 
-<div id="app-shell" hidden>
+<div id="app-shell" hidden class="app-layout">
+  <aside class="side-nav">
+    <a class="side-link active" href="index.html">Registro</a>
+    <a class="side-link" href="buffet.html">Buffet</a>
+  </aside>
+
+  <main class="app-main">
     <div class="search-box">
 
     <div class="search-row">
@@ -121,6 +126,7 @@
   </div>
 
   <div class="content" id="contenido"></div>
+  </main>
 </div>
 
 <div class="modal-overlay" id="modal-overlay">
@@ -204,7 +210,6 @@
     window.API_URL = "";
 
   </script>
-</div>
 
 <!-- API URL / Supabase configuration - set before loading index.js -->
 <script>
