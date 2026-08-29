@@ -667,6 +667,63 @@ app.post("/api/buffet/sales", async (req, res) => {
   }
 });
 
+app.patch("/api/buffet/sales/:id", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const org = req.user.organizationId;
+    const { items, total } = normalizeSaleItems(payload.items);
+    if (!items.length) return res.status(400).json({ error: "La venta debe tener al menos un ítem." });
+
+    const { data: existing, error: existingError } = await supabase
+      .from("buffet_sales")
+      .select("id")
+      .eq("id", req.params.id)
+      .eq("organizacion_id", org)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (!existing) return res.status(404).json({ error: "La venta no existe." });
+
+    // Se devuelve el stock de los ítems viejos antes de aplicar los nuevos:
+    // reemplazar el carrito entero es más simple que calcular la diferencia.
+    const { data: oldItems, error: oldItemsError } = await supabase
+      .from("buffet_sale_items")
+      .select("product_id, combo_id, quantity")
+      .eq("sale_id", req.params.id)
+      .eq("organizacion_id", org);
+    if (oldItemsError) throw oldItemsError;
+    await applyStockDelta(oldItems || [], 1, org);
+
+    const { error: deleteError } = await supabase
+      .from("buffet_sale_items")
+      .delete()
+      .eq("sale_id", req.params.id)
+      .eq("organizacion_id", org);
+    if (deleteError) throw deleteError;
+
+    const { error: itemsError } = await supabase
+      .from("buffet_sale_items")
+      .insert(items.map((item) => ({ ...item, sale_id: req.params.id, organizacion_id: org })));
+    if (itemsError) throw itemsError;
+
+    await applyStockDelta(items, -1, org);
+
+    const { error: updateError } = await supabase
+      .from("buffet_sales")
+      .update({
+        payment_method: payload.payment_method || "efectivo",
+        observation: payload.observation || null,
+        total_amount: total,
+      })
+      .eq("id", req.params.id)
+      .eq("organizacion_id", org);
+    if (updateError) throw updateError;
+
+    res.json({ id: req.params.id, total_amount: total });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.delete("/api/buffet/sales/:id", async (req, res) => {
   try {
     const org = req.user.organizationId;

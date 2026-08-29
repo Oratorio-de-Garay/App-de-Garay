@@ -409,6 +409,7 @@ function renderEventDetail() {
           <div><small>Detalle</small><br><small>${escapeHtml(s.items.map((i) => `${Number(i.quantity)}× ${i.description}`).join(", ")) || "—"}</small></div>
           <div><small>Total</small><br>${formatMoney(s.total_amount)}</div>
           <div class="row-actions">
+            <button class="btn-sec" data-edit-sale="${s.id}" type="button">Editar</button>
             <button class="btn-sec" data-delete-sale="${s.id}" type="button">Eliminar</button>
           </div>
         </div>`).join("") || "<p>Todavía no hay ventas en este evento.</p>"}
@@ -419,6 +420,10 @@ function renderEventDetail() {
   document.getElementById("btn-editar-evento").addEventListener("click", () => openEventForm(evento));
   document.getElementById("btn-nueva-venta").addEventListener("click", () => openSaleForm(evento));
   panel.querySelectorAll("[data-delete-sale]").forEach((btn) => btn.addEventListener("click", () => deleteSale(btn.dataset.deleteSale)));
+  panel.querySelectorAll("[data-edit-sale]").forEach((btn) => btn.addEventListener("click", () => {
+    const venta = buffetState.sales.find((s) => s.id === btn.dataset.editSale);
+    if (venta) openSaleForm(evento, venta);
+  }));
 }
 
 function openEventForm(evento = null) {
@@ -479,8 +484,15 @@ function deleteSale(id) {
   apiSend(`/api/buffet/sales/${id}`, "DELETE", {}).then(loadBuffet).catch((e) => alert(e.message));
 }
 
-function openSaleForm(evento) {
-  const cart = [];
+function openSaleForm(evento, venta = null) {
+  // En edición se parte de una copia de los ítems ya cargados.
+  const cart = (venta?.items || []).map((i) => ({
+    product_id: i.product_id,
+    combo_id: i.combo_id,
+    description: i.description,
+    quantity: Number(i.quantity),
+    unit_price: Number(i.unit_price),
+  }));
 
   const sellableOptions = [
     ...buffetState.products.filter((p) => p.active).map((p) => ({ key: `p:${p.id}`, name: p.name, price: p.sale_price })),
@@ -505,18 +517,15 @@ function openSaleForm(evento) {
   };
 
   openModal({
-    title: "Nueva venta",
-    submitLabel: "Registrar venta",
+    title: venta ? "Editar venta" : "Nueva venta",
+    submitLabel: venta ? "Guardar cambios" : "Registrar venta",
     bodyHtml: `
       <p class="sale-event-line">Evento: <strong>${escapeHtml(evento.nombre)}</strong> · ${formatDate(evento.fecha)}</p>
 
       <div class="form-group">
         <label class="form-label" for="sale-payment">Método de pago</label>
         <select class="form-select" id="sale-payment">
-          <option value="efectivo">Efectivo</option>
-          <option value="transferencia">Transferencia</option>
-          <option value="tarjeta">Tarjeta</option>
-          <option value="otro">Otro</option>
+          ${["efectivo", "transferencia", "tarjeta", "otro"].map((m) => `<option value="${m}"${(venta?.payment_method || "efectivo") === m ? " selected" : ""}>${m[0].toUpperCase()}${m.slice(1)}</option>`).join("")}
         </select>
       </div>
 
@@ -544,7 +553,7 @@ function openSaleForm(evento) {
 
       <div class="form-group">
         <label class="form-label" for="sale-obs">Observación</label>
-        <input class="form-input" id="sale-obs" type="text">
+        <input class="form-input" id="sale-obs" type="text" value="${escapeHtml(venta?.observation || "")}">
       </div>
     `,
     onReady: (modal) => {
@@ -590,12 +599,13 @@ function openSaleForm(evento) {
     },
     onSubmit: async (modal) => {
       if (!cart.length) throw new Error("Agregá al menos un ítem a la venta.");
-      await apiSend("/api/buffet/sales", "POST", {
-        event_id: evento.id,
+      const payload = {
         payment_method: field(modal, "sale-payment").value,
         observation: field(modal, "sale-obs").value.trim() || null,
         items: cart,
-      });
+      };
+      if (venta) await apiSend(`/api/buffet/sales/${venta.id}`, "PATCH", payload);
+      else await apiSend("/api/buffet/sales", "POST", { ...payload, event_id: evento.id });
       await loadBuffet();
     },
   });
