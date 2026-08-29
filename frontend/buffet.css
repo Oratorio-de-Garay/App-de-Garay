@@ -1,49 +1,5 @@
-.buffet-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.buffet-shell {
-  display: grid;
-  grid-template-columns: 180px 1fr;
-  min-height: calc(100vh - 70px);
-}
-
-.side-nav {
-  background: #10261d;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.side-link {
-  color: #d9f2e4;
-  text-decoration: none;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-}
-
-.side-link.active {
-  background: #1f5b3d;
-}
-
-.buffet-main {
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+/* El layout de sidebar (.app-layout, .side-nav, .app-main) vive en base.css:
+   lo usan tanto buffet.html como index.html. */
 
 .hero-card, .panel, .summary-card {
   background: #fff;
@@ -181,8 +137,6 @@
 .sale-total-row { text-align: right; font-size: 16px; }
 
 @media (max-width: 900px) {
-  .buffet-shell { grid-template-columns: 1fr; }
-  .side-nav { flex-direction: row; overflow-x: auto; }
   .hero-card { flex-direction: column; }
   .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
   .row, .row.row-sale { grid-template-columns: 1fr; }

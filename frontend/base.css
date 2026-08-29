@@ -73,6 +73,47 @@ header {
   margin-top: 2px;
 }
 
+/* Layout con sidebar de navegación, compartido por index.html y buffet.html. */
+.app-layout {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  min-height: calc(100vh - 70px);
+}
+
+.side-nav {
+  background: #10261d;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.side-link {
+  color: #d9f2e4;
+  text-decoration: none;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.side-link.active {
+  background: #1f5b3d;
+}
+
+.app-main {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .app-layout { grid-template-columns: 1fr; }
+  .side-nav { flex-direction: row; overflow-x: auto; }
+}
+
 .search-box {
   padding: 14px 16px;
   background: var(--card);
