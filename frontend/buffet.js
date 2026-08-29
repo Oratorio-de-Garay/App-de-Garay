@@ -5,9 +5,12 @@ const buffetState = {
   products: [],
   combos: [],
   budgets: [],
+  events: [],
+  eventsFilter: "",
+  // Evento abierto: cuando está seteado la pestaña Ventas muestra su detalle.
+  currentEvent: null,
   sales: [],
   salesSummary: { sales_count: 0, total_amount: 0 },
-  salesFilters: { from: "", to: "", event: "" },
 };
 
 function initBuffet() {
@@ -27,12 +30,16 @@ function setBuffetTab(tab) {
 }
 
 async function loadBuffet() {
-  const [meta, products, combos, budgets, sales] = await Promise.all([
+  // Las ventas se piden sólo del evento abierto: sin evento no hace falta
+  // traerse todo el histórico.
+  const eventId = buffetState.currentEvent?.id;
+  const [meta, products, combos, budgets, events, sales] = await Promise.all([
     apiGet("/api/buffet/meta"),
     apiGet("/api/buffet/products"),
     apiGet("/api/buffet/combos"),
     apiGet("/api/buffet/budgets"),
-    apiGet(`/api/buffet/sales${salesQueryString()}`),
+    apiGet("/api/buffet/events"),
+    eventId ? apiGet(`/api/buffet/sales?event_id=${encodeURIComponent(eventId)}`) : Promise.resolve({}),
   ]);
   buffetState.categories = meta.categories || [];
   buffetState.units = meta.units || [];
@@ -40,23 +47,17 @@ async function loadBuffet() {
   buffetState.products = products || [];
   buffetState.combos = combos || [];
   buffetState.budgets = budgets || [];
+  buffetState.events = events || [];
   buffetState.sales = sales.sales || [];
   buffetState.salesSummary = sales.summary || { sales_count: 0, total_amount: 0 };
+  // Refrescar el evento abierto para que su total quede al día (o cerrarlo si
+  // lo borraron desde otro lado).
+  if (eventId) buffetState.currentEvent = buffetState.events.find((e) => e.id === eventId) || null;
   renderDashboard();
   renderProducts();
   renderSales();
   renderCombos();
   renderBudgets();
-}
-
-function salesQueryString() {
-  const params = new URLSearchParams();
-  const { from, to, event } = buffetState.salesFilters;
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  if (event) params.set("event", event);
-  const qs = params.toString();
-  return qs ? `?${qs}` : "";
 }
 
 async function apiGet(path, options = {}) {
@@ -128,14 +129,57 @@ function field(root, id) {
   return root.querySelector(`#${id}`);
 }
 
+/** Los importes se manejan en pesos enteros: no hay centavos en la feria. */
+function formatMoney(amount) {
+  return `$${Math.round(Number(amount) || 0).toLocaleString("es-AR")}`;
+}
+
+function formatDate(iso) {
+  const [y, m, d] = String(iso || "").split("-");
+  return d ? `${d}/${m}/${y}` : String(iso || "");
+}
+
+/**
+ * Input numérico con botones de − / +. Se usa para cantidades (paso 1) y para
+ * precios (paso 50), siempre en enteros.
+ */
+function stepperHtml(id, { value, step, min = 0, label = "" }) {
+  return `
+    <div class="stepper" data-stepper="${id}" data-step="${step}" data-min="${min}">
+      <button class="stepper-btn" type="button" data-step-dir="-1" aria-label="Restar ${label}">−</button>
+      <input class="form-input" id="${id}" type="number" inputmode="numeric" step="${step}" min="${min}" value="${value}">
+      <button class="stepper-btn" type="button" data-step-dir="1" aria-label="Sumar ${label}">+</button>
+    </div>
+  `;
+}
+
+/** Engancha los botones y fuerza enteros aunque se escriba a mano. */
+function bindStepper(modal, id) {
+  const wrap = modal.querySelector(`[data-stepper="${id}"]`);
+  if (!wrap) return;
+  const input = field(modal, id);
+  const step = Number(wrap.dataset.step) || 1;
+  const min = Number(wrap.dataset.min) || 0;
+  const normalize = () => {
+    input.value = Math.max(min, Math.round(Number(input.value) || min));
+  };
+  input.addEventListener("blur", normalize);
+  wrap.querySelectorAll("[data-step-dir]").forEach((btn) => btn.addEventListener("click", () => {
+    const current = Math.round(Number(input.value) || min);
+    input.value = Math.max(min, current + step * Number(btn.dataset.stepDir));
+  }));
+}
+
 // ─────────────────────────────────────────────────────────
 // Dashboard
 // ─────────────────────────────────────────────────────────
 
 function renderDashboard() {
+  const recaudado = buffetState.events.reduce((acc, e) => acc + Number(e.total_amount || 0), 0);
   document.getElementById("dashboard-stats").innerHTML = `
     <div class="stat"><strong>${buffetState.products.length}</strong><span>Productos</span></div>
-    <div class="stat"><strong>$${Number(buffetState.salesSummary.total_amount || 0).toFixed(2)}</strong><span>Vendido (período)</span></div>
+    <div class="stat"><strong>${buffetState.events.length}</strong><span>Eventos</span></div>
+    <div class="stat"><strong>${formatMoney(recaudado)}</strong><span>Recaudado</span></div>
     <div class="stat"><strong>${buffetState.combos.length}</strong><span>Combos</span></div>
     <div class="stat"><strong>${buffetState.budgets.length}</strong><span>Presupuestos</span></div>
   `;
@@ -241,76 +285,193 @@ function deleteProduct(id) {
 }
 
 // ─────────────────────────────────────────────────────────
-// Ventas
+// Eventos y ventas
+//
+// La pestaña "Ventas" tiene dos vistas: el listado de eventos y, al entrar a
+// uno, su detalle con las ventas cargadas. currentEvent decide cuál se pinta.
 // ─────────────────────────────────────────────────────────
 
 function renderSales() {
+  if (buffetState.currentEvent) renderEventDetail();
+  else renderEventsList();
+}
+
+function openEvent(evento) {
+  buffetState.currentEvent = evento;
+  loadBuffet().catch((e) => alert(e.message));
+}
+
+function closeEvent() {
+  buffetState.currentEvent = null;
+  buffetState.sales = [];
+  loadBuffet().catch((e) => alert(e.message));
+}
+
+function renderEventsList() {
   const panel = document.getElementById("panel-ventas");
-  const { from, to, event } = buffetState.salesFilters;
+  const filtro = buffetState.eventsFilter.toLowerCase();
+  const eventos = filtro
+    ? buffetState.events.filter((e) => e.nombre.toLowerCase().includes(filtro))
+    : buffetState.events;
+
   panel.innerHTML = `
     <div class="toolbar">
       <div>
         <h2>Ventas</h2>
-        <small>Registrá lo vendido en cada evento y cerrá la caja del período.</small>
+        <small>Creá un evento y cargale las ventas de a una, a medida que se cobran.</small>
       </div>
-      <button class="btn-main" id="btn-nueva-venta" type="button">Nueva venta</button>
+      <button class="btn-main" id="btn-nuevo-evento" type="button">Nuevo evento</button>
     </div>
 
     <div class="filters">
       <div class="form-group">
-        <label class="form-label" for="filter-from">Desde</label>
-        <input class="form-input" id="filter-from" type="date" value="${from}">
+        <label class="form-label" for="filter-eventos">Buscar evento</label>
+        <input class="form-input" id="filter-eventos" type="text" value="${escapeHtml(buffetState.eventsFilter)}" placeholder="Ej: Feria del plato">
       </div>
-      <div class="form-group">
-        <label class="form-label" for="filter-to">Hasta</label>
-        <input class="form-input" id="filter-to" type="date" value="${to}">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="filter-event">Evento</label>
-        <input class="form-input" id="filter-event" type="text" value="${escapeHtml(event)}" placeholder="Ej: Feria del plato">
-      </div>
-      <button class="btn-sec" id="btn-limpiar-filtros" type="button">Limpiar</button>
-    </div>
-
-    <div class="summary-line">
-      <div><strong>${buffetState.salesSummary.sales_count}</strong> ventas</div>
-      <div><strong>$${Number(buffetState.salesSummary.total_amount || 0).toFixed(2)}</strong> recaudado</div>
     </div>
 
     <div class="list">
-      ${buffetState.sales.map((s) => `
-        <div class="row row-sale">
+      ${eventos.map((e) => `
+        <div class="row row-event" data-open-event="${e.id}">
           <div>
-            <strong>${escapeHtml(s.event_name || "Venta sin evento")}</strong><br>
-            <small>${escapeHtml(s.sale_date)} · ${escapeHtml(s.payment_method || "")}</small>
+            <strong>${escapeHtml(e.nombre)}</strong><br>
+            <small>${formatDate(e.fecha)}${e.estado === "cerrado" ? " · cerrado" : ""}</small>
           </div>
-          <div><small>Ítems</small><br>${s.items_count}</div>
-          <div><small>Detalle</small><br><small>${escapeHtml(s.items.map((i) => `${Number(i.quantity)}× ${i.description}`).join(", ")) || "—"}</small></div>
-          <div><small>Total</small><br>$${Number(s.total_amount || 0).toFixed(2)}</div>
+          <div><small>Ventas</small><br>${e.sales_count}</div>
+          <div><small>Recaudado</small><br>${formatMoney(e.total_amount)}</div>
           <div class="row-actions">
-            <button class="btn-sec" data-delete-sale="${s.id}" type="button">Eliminar</button>
+            <button class="btn-sec" type="button" data-open-event-btn="${e.id}">Abrir</button>
+            <button class="btn-sec" type="button" data-delete-event="${e.id}">Eliminar</button>
           </div>
-        </div>`).join("") || "<p>No hay ventas registradas en este período.</p>"}
+        </div>`).join("") || `<p>${filtro ? "Ningún evento coincide con la búsqueda." : "Todavía no creaste ningún evento."}</p>`}
     </div>
   `;
 
-  document.getElementById("btn-nueva-venta").addEventListener("click", () => openSaleForm());
+  document.getElementById("btn-nuevo-evento").addEventListener("click", () => openEventForm());
 
-  const applyFilters = () => {
-    buffetState.salesFilters = {
-      from: field(panel, "filter-from").value,
-      to: field(panel, "filter-to").value,
-      event: field(panel, "filter-event").value.trim(),
-    };
-    loadBuffet().catch((e) => alert(e.message));
-  };
-  ["filter-from", "filter-to", "filter-event"].forEach((id) => field(panel, id).addEventListener("change", applyFilters));
-  document.getElementById("btn-limpiar-filtros").addEventListener("click", () => {
-    buffetState.salesFilters = { from: "", to: "", event: "" };
-    loadBuffet().catch((e) => alert(e.message));
+  const buscador = field(panel, "filter-eventos");
+  buscador.addEventListener("input", () => {
+    buffetState.eventsFilter = buscador.value.trim();
+    renderEventsList();
+    // Re-pintar el panel destruye el input: hay que devolverle el foco.
+    const nuevo = field(panel, "filter-eventos");
+    nuevo.focus();
+    nuevo.setSelectionRange(nuevo.value.length, nuevo.value.length);
   });
 
+  panel.querySelectorAll("[data-open-event]").forEach((row) => row.addEventListener("click", (ev) => {
+    if (ev.target.closest("[data-delete-event]")) return;
+    const evento = buffetState.events.find((e) => e.id === row.dataset.openEvent);
+    if (evento) openEvent(evento);
+  }));
+
+  panel.querySelectorAll("[data-delete-event]").forEach((btn) => btn.addEventListener("click", () => deleteEvent(btn.dataset.deleteEvent)));
+}
+
+function renderEventDetail() {
+  const panel = document.getElementById("panel-ventas");
+  const evento = buffetState.currentEvent;
+
+  panel.innerHTML = `
+    <div class="event-header">
+      <div>
+        <button class="btn-sec" id="btn-volver-eventos" type="button">← Volver</button>
+      </div>
+      <div class="event-header-title">
+        <strong>${escapeHtml(evento.nombre)}</strong>
+        <small>${formatDate(evento.fecha)} · ${buffetState.salesSummary.sales_count} ventas</small>
+      </div>
+      <div class="event-header-total">
+        <small>Recaudado</small><br>
+        <strong>${formatMoney(buffetState.salesSummary.total_amount)}</strong>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div>
+        <h2>Ventas del evento</h2>
+        <small>Cada venta es un cobro: cargá los ítems, aceptá y seguí con la siguiente.</small>
+      </div>
+      <div class="row-actions">
+        <button class="btn-sec" id="btn-editar-evento" type="button">Editar evento</button>
+        <button class="btn-main" id="btn-nueva-venta" type="button">Nueva venta</button>
+      </div>
+    </div>
+
+    <div class="list">
+      ${buffetState.sales.map((s, index) => `
+        <div class="row row-sale">
+          <div>
+            <strong>Venta ${buffetState.sales.length - index}</strong><br>
+            <small>${escapeHtml(s.payment_method || "")}</small>
+          </div>
+          <div><small>Ítems</small><br>${s.items_count}</div>
+          <div><small>Detalle</small><br><small>${escapeHtml(s.items.map((i) => `${Number(i.quantity)}× ${i.description}`).join(", ")) || "—"}</small></div>
+          <div><small>Total</small><br>${formatMoney(s.total_amount)}</div>
+          <div class="row-actions">
+            <button class="btn-sec" data-delete-sale="${s.id}" type="button">Eliminar</button>
+          </div>
+        </div>`).join("") || "<p>Todavía no hay ventas en este evento.</p>"}
+    </div>
+  `;
+
+  document.getElementById("btn-volver-eventos").addEventListener("click", closeEvent);
+  document.getElementById("btn-editar-evento").addEventListener("click", () => openEventForm(evento));
+  document.getElementById("btn-nueva-venta").addEventListener("click", () => openSaleForm(evento));
   panel.querySelectorAll("[data-delete-sale]").forEach((btn) => btn.addEventListener("click", () => deleteSale(btn.dataset.deleteSale)));
+}
+
+function openEventForm(evento = null) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  openModal({
+    title: evento ? "Editar evento" : "Nuevo evento",
+    submitLabel: evento ? "Guardar" : "Crear evento",
+    bodyHtml: `
+      <div class="form-group">
+        <label class="form-label" for="event-name">Nombre *</label>
+        <input class="form-input" id="event-name" type="text" value="${escapeHtml(evento?.nombre || "")}" placeholder="Ej: Feria del Plato">
+      </div>
+      <div class="grid cols-2">
+        <div class="form-group">
+          <label class="form-label" for="event-date">Fecha</label>
+          <input class="form-input" id="event-date" type="date" value="${evento?.fecha || hoy}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="event-status">Estado</label>
+          <select class="form-select" id="event-status">
+            ${["abierto", "cerrado"].map((s) => `<option value="${s}"${(evento?.estado || "abierto") === s ? " selected" : ""}>${s}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="event-obs">Observación</label>
+        <input class="form-input" id="event-obs" type="text" value="${escapeHtml(evento?.observacion || "")}">
+      </div>
+    `,
+    onSubmit: async (modal) => {
+      const nombre = field(modal, "event-name").value.trim();
+      if (!nombre) throw new Error("El nombre del evento es obligatorio.");
+      const payload = {
+        nombre,
+        fecha: field(modal, "event-date").value || hoy,
+        estado: field(modal, "event-status").value,
+        observacion: field(modal, "event-obs").value.trim() || null,
+      };
+      if (evento) {
+        await apiSend(`/api/buffet/events/${evento.id}`, "PATCH", payload);
+      } else {
+        // Se entra directo al evento recién creado para cargar la primera venta.
+        const creado = await apiSend("/api/buffet/events", "POST", payload);
+        buffetState.currentEvent = creado;
+      }
+      await loadBuffet();
+    },
+  });
+}
+
+function deleteEvent(id) {
+  if (!confirm("¿Eliminar este evento?")) return;
+  apiSend(`/api/buffet/events/${id}`, "DELETE", {}).then(loadBuffet).catch((e) => alert(e.message));
 }
 
 function deleteSale(id) {
@@ -318,9 +479,8 @@ function deleteSale(id) {
   apiSend(`/api/buffet/sales/${id}`, "DELETE", {}).then(loadBuffet).catch((e) => alert(e.message));
 }
 
-function openSaleForm() {
+function openSaleForm(evento) {
   const cart = [];
-  const today = new Date().toISOString().slice(0, 10);
 
   const sellableOptions = [
     ...buffetState.products.filter((p) => p.active).map((p) => ({ key: `p:${p.id}`, name: p.name, price: p.sale_price })),
@@ -332,12 +492,12 @@ function openSaleForm() {
     field(modal, "sale-cart").innerHTML = cart.map((item, index) => `
       <div class="sale-item-row">
         <span>${escapeHtml(item.description)}</span>
-        <span>${item.quantity} × $${item.unit_price.toFixed(2)}</span>
-        <strong>$${(item.quantity * item.unit_price).toFixed(2)}</strong>
+        <span>${item.quantity} × ${formatMoney(item.unit_price)}</span>
+        <strong>${formatMoney(item.quantity * item.unit_price)}</strong>
         <button class="btn-sec" type="button" data-remove-item="${index}">Quitar</button>
       </div>
     `).join("") || '<p class="empty-cart">Todavía no agregaste ítems.</p>';
-    field(modal, "sale-total").textContent = `$${total.toFixed(2)}`;
+    field(modal, "sale-total").textContent = formatMoney(total);
     modal.querySelectorAll("[data-remove-item]").forEach((btn) => btn.addEventListener("click", () => {
       cart.splice(Number(btn.dataset.removeItem), 1);
       renderCart(modal);
@@ -348,24 +508,16 @@ function openSaleForm() {
     title: "Nueva venta",
     submitLabel: "Registrar venta",
     bodyHtml: `
-      <div class="grid cols-2">
-        <div class="form-group">
-          <label class="form-label" for="sale-date">Fecha</label>
-          <input class="form-input" id="sale-date" type="date" value="${today}">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="sale-payment">Método de pago</label>
-          <select class="form-select" id="sale-payment">
-            <option value="efectivo">Efectivo</option>
-            <option value="transferencia">Transferencia</option>
-            <option value="tarjeta">Tarjeta</option>
-            <option value="otro">Otro</option>
-          </select>
-        </div>
-      </div>
+      <p class="sale-event-line">Evento: <strong>${escapeHtml(evento.nombre)}</strong> · ${formatDate(evento.fecha)}</p>
+
       <div class="form-group">
-        <label class="form-label" for="sale-event">Evento</label>
-        <input class="form-input" id="sale-event" type="text" placeholder="Ej: Feria del plato de agosto">
+        <label class="form-label" for="sale-payment">Método de pago</label>
+        <select class="form-select" id="sale-payment">
+          <option value="efectivo">Efectivo</option>
+          <option value="transferencia">Transferencia</option>
+          <option value="tarjeta">Tarjeta</option>
+          <option value="otro">Otro</option>
+        </select>
       </div>
 
       <div class="form-group">
@@ -375,14 +527,20 @@ function openSaleForm() {
             <option value="">Elegí un producto o combo</option>
             ${sellableOptions.map((o) => `<option value="${o.key}">${escapeHtml(o.name)}</option>`).join("")}
           </select>
-          <input class="form-input" id="sale-qty" type="number" step="0.01" min="0" value="1" placeholder="Cant.">
-          <input class="form-input" id="sale-price" type="number" step="0.01" min="0" value="0" placeholder="Precio">
+          <div class="picker-field">
+            <span class="picker-label">Cantidad</span>
+            ${stepperHtml("sale-qty", { value: 1, step: 1, min: 1, label: "cantidad" })}
+          </div>
+          <div class="picker-field">
+            <span class="picker-label">Precio</span>
+            ${stepperHtml("sale-price", { value: 0, step: 50, min: 0, label: "precio" })}
+          </div>
           <button class="btn-sec" type="button" id="sale-add">Agregar</button>
         </div>
       </div>
 
       <div id="sale-cart" class="sale-cart"></div>
-      <div class="sale-total-row">Total: <strong id="sale-total">$0.00</strong></div>
+      <div class="sale-total-row">Total: <strong id="sale-total">$0</strong></div>
 
       <div class="form-group">
         <label class="form-label" for="sale-obs">Observación</label>
@@ -391,27 +549,39 @@ function openSaleForm() {
     `,
     onReady: (modal) => {
       renderCart(modal);
+      bindStepper(modal, "sale-qty");
+      bindStepper(modal, "sale-price");
 
       // Autocompleta el precio con el de lista, pero se puede editar a mano.
       field(modal, "sale-pick").addEventListener("change", (e) => {
         const option = sellableOptions.find((o) => o.key === e.target.value);
-        field(modal, "sale-price").value = Number(option?.price ?? 0);
+        field(modal, "sale-price").value = Math.round(Number(option?.price ?? 0));
       });
 
       field(modal, "sale-add").addEventListener("click", () => {
         const key = field(modal, "sale-pick").value;
         const option = sellableOptions.find((o) => o.key === key);
         if (!option) return alert("Elegí un producto o combo.");
-        const quantity = Number(field(modal, "sale-qty").value) || 0;
+        const quantity = Math.round(Number(field(modal, "sale-qty").value) || 0);
         if (quantity <= 0) return alert("La cantidad debe ser mayor a cero.");
+        const unitPrice = Math.max(0, Math.round(Number(field(modal, "sale-price").value) || 0));
         const [kind, id] = key.split(":");
-        cart.push({
+
+        // Mismo producto al mismo precio: se suma la cantidad en vez de repetir
+        // la línea en el carrito.
+        const existente = cart.find((i) =>
+          i.product_id === (kind === "p" ? id : null) &&
+          i.combo_id === (kind === "c" ? id : null) &&
+          i.unit_price === unitPrice);
+        if (existente) existente.quantity += quantity;
+        else cart.push({
           product_id: kind === "p" ? id : null,
           combo_id: kind === "c" ? id : null,
           description: option.name,
           quantity,
-          unit_price: Number(field(modal, "sale-price").value) || 0,
+          unit_price: unitPrice,
         });
+
         field(modal, "sale-pick").value = "";
         field(modal, "sale-qty").value = 1;
         field(modal, "sale-price").value = 0;
@@ -421,8 +591,7 @@ function openSaleForm() {
     onSubmit: async (modal) => {
       if (!cart.length) throw new Error("Agregá al menos un ítem a la venta.");
       await apiSend("/api/buffet/sales", "POST", {
-        sale_date: field(modal, "sale-date").value || today,
-        event_name: field(modal, "sale-event").value.trim() || null,
+        event_id: evento.id,
         payment_method: field(modal, "sale-payment").value,
         observation: field(modal, "sale-obs").value.trim() || null,
         items: cart,
