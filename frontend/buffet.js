@@ -514,6 +514,20 @@ function openSaleForm(evento, venta = null) {
       cart.splice(Number(btn.dataset.removeItem), 1);
       renderCart(modal);
     }));
+    updateChange(modal);
+  };
+
+  // El vuelto es sólo una ayuda visual para quien cobra: no se manda al
+  // servidor, se recalcula en el cliente a partir del total del carrito.
+  const updateChange = (modal) => {
+    const total = cart.reduce((acc, item) => acc + item.quantity * item.unit_price, 0);
+    const given = Number(field(modal, "sale-cash-given").value) || 0;
+    const change = given - total;
+    const el = field(modal, "sale-change");
+    if (given <= 0) el.textContent = "—";
+    else if (change < 0) el.textContent = `Faltan ${formatMoney(-change)}`;
+    else el.textContent = formatMoney(change);
+    el.classList.toggle("sale-change-negative", given > 0 && change < 0);
   };
 
   openModal({
@@ -551,6 +565,17 @@ function openSaleForm(evento, venta = null) {
       <div id="sale-cart" class="sale-cart"></div>
       <div class="sale-total-row">Total: <strong id="sale-total">$0</strong></div>
 
+      <div class="grid cols-2" id="sale-cash-row" hidden>
+        <div class="form-group">
+          <label class="form-label" for="sale-cash-given">Pagó con</label>
+          <input class="form-input" id="sale-cash-given" type="number" inputmode="numeric" step="50" min="0" placeholder="$">
+        </div>
+        <div class="form-group">
+          <span class="form-label">Vuelto</span>
+          <div class="sale-change" id="sale-change">—</div>
+        </div>
+      </div>
+
       <div class="form-group">
         <label class="form-label" for="sale-obs">Observación</label>
         <input class="form-input" id="sale-obs" type="text" value="${escapeHtml(venta?.observation || "")}">
@@ -560,6 +585,17 @@ function openSaleForm(evento, venta = null) {
       renderCart(modal);
       bindStepper(modal, "sale-qty");
       bindStepper(modal, "sale-price");
+
+      // El campo de vuelto sólo tiene sentido cobrando en efectivo.
+      const toggleCashRow = () => {
+        const isCash = field(modal, "sale-payment").value === "efectivo";
+        field(modal, "sale-cash-row").hidden = !isCash;
+        if (!isCash) field(modal, "sale-cash-given").value = "";
+        updateChange(modal);
+      };
+      field(modal, "sale-payment").addEventListener("change", toggleCashRow);
+      field(modal, "sale-cash-given").addEventListener("input", () => updateChange(modal));
+      toggleCashRow();
 
       // Autocompleta el precio con el de lista, pero se puede editar a mano.
       field(modal, "sale-pick").addEventListener("change", (e) => {
