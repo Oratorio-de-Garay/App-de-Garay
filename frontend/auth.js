@@ -1,4 +1,4 @@
-// Google SSO gate. Only accounts listed in the Supabase `allowed_emails`
+// Google SSO gate. Only accounts registered in the Supabase `usuarios`
 // table (checked server-side by the backend) can use the app.
 const API_URL = window.API_URL || "";
 const ORG_STORAGE_KEY = "oratorio.organization_id";
@@ -20,6 +20,12 @@ btnLogout.addEventListener("click", () => supabaseClient.auth.signOut());
 // así que mandar otra acá no da acceso a nada: sólo devuelve 403.
 let organizations = [];
 let currentOrganizationId = readStoredOrganizationId();
+
+// Respuesta de /api/auth/me (roles incluidos). La usan las páginas, por
+// ejemplo admin.js para decidir qué pestañas mostrar.
+window.currentUser = null;
+
+const isAdminPage = document.body.dataset.page === "admin";
 
 function readStoredOrganizationId() {
   try {
@@ -96,10 +102,14 @@ function renderNoOrganization(email) {
   btnLogout.hidden = false;
 }
 
-/** Selector de organización, sólo si el usuario pertenece a más de una. */
+/**
+ * Selector de organización, sólo si el usuario pertenece a más de una. En el
+ * panel de administración no aplica: ahí se trabaja sobre todas las
+ * organizaciones que el usuario administra.
+ */
 function renderOrganizationPicker() {
   document.getElementById("org-select")?.remove();
-  if (organizations.length < 2) return;
+  if (organizations.length < 2 || isAdminPage) return;
 
   const select = document.createElement("select");
   select.id = "org-select";
@@ -118,10 +128,41 @@ function renderOrganizationPicker() {
   btnLogout.parentNode.insertBefore(select, btnLogout);
 }
 
+/**
+ * Links del sidebar según permisos: "Administración" sólo para admins, y sin
+ * organización (superadmin puro) no tiene sentido mostrar Registro ni Buffet.
+ */
+function renderNavPermissions() {
+  const sideNav = document.getElementById("side-nav");
+  if (!sideNav) return;
+
+  if (window.currentUser?.puede_administrar && !sideNav.querySelector('a[href="admin.html"]')) {
+    const link = document.createElement("a");
+    link.className = "side-link side-link-admin";
+    link.href = "admin.html";
+    link.textContent = "Administración";
+    sideNav.appendChild(link);
+  }
+
+  if (!organizations.length) {
+    sideNav.querySelectorAll(".side-link").forEach((link) => {
+      if (link.getAttribute("href") !== "admin.html") link.hidden = true;
+    });
+  }
+}
+
 function renderApp() {
+  // Un superadmin sin organizaciones sólo puede usar el panel: el resto de las
+  // páginas no tendría datos que mostrarle.
+  if (!organizations.length && !isAdminPage) {
+    location.replace("admin.html");
+    return;
+  }
+
   authScreen.hidden = true;
   appShell.hidden = false;
   btnLogout.hidden = false;
+  renderNavPermissions();
   renderOrganizationPicker();
   if (typeof window.onAuthenticated === "function") {
     window.onAuthenticated();
@@ -144,6 +185,7 @@ async function evaluateSession(session) {
     const res = await apiFetch("/api/auth/me");
     if (res.ok) {
       const me = await res.json();
+      window.currentUser = me;
       organizations = me.organizations || [];
       // Si la organización guardada ya no corresponde (le sacaron el acceso, o
       // quedó de otro usuario en el mismo navegador) usamos la que resolvió el

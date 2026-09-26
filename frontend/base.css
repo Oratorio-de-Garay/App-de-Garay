@@ -101,6 +101,20 @@ header {
   background: #1f5b3d;
 }
 
+/* Link al panel de administración: lo inyecta auth.js sólo para admins. */
+.side-link-admin::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--verde-mid);
+  vertical-align: middle;
+}
+
+.side-link[hidden] { display: none; }
+
 .app-main {
   padding: 18px;
   display: flex;
