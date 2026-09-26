@@ -5,7 +5,8 @@ import ws from "ws";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import { requireAllowedUser } from "./auth.js";
+import { requireAllowedUser, requireOrganization, puedeAdministrar } from "./auth.js";
+import adminRouter from "./admin.js";
 
 dotenv.config();
 
@@ -45,6 +46,17 @@ app.use("/api", (req, res, next) => {
   return requireAllowedUser(req, res, next);
 });
 
+// Las rutas de datos operan sobre la organización activa. /auth/me y /admin no:
+// un superadmin sin membresías tiene que poder entrar al panel.
+app.use("/api", (req, res, next) => {
+  if (req.path === "/health" || req.path === "/auth/me" || req.path.startsWith("/admin/")) {
+    return next();
+  }
+  return requireOrganization(req, res, next);
+});
+
+app.use("/api/admin", adminRouter);
+
 // ─────────────────────────────────────────────────────────
 // Confirms the caller's token is valid and allowlisted.
 // The frontend calls this right after Google sign-in.
@@ -54,6 +66,10 @@ app.get("/api/auth/me", (req, res) => {
     email: req.user.email,
     organizacion_id: req.user.organizationId,
     organizations: req.user.organizations,
+    roles: req.user.roles,
+    es_superadmin: req.user.esSuperadmin,
+    organizaciones_admin: req.user.organizacionesAdministradas,
+    puede_administrar: puedeAdministrar(req.user),
   });
 });
 
