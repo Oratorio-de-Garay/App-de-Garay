@@ -137,3 +137,23 @@ do $$ begin
   execute 'create policy "allow authenticated buffet budget items" on public.buffet_budget_items for all to authenticated using (true) with check (true)';
 exception when duplicate_object then null;
 end $$;
+
+-- Sin el GRANT el acceso falla con "permission denied" antes de evaluar RLS.
+-- Antes esto vivía sólo en 20260811000000_buffet_grants.sql, que por su
+-- timestamp corre ANTES de que existan estas tablas: sobre una base limpia
+-- fallaba. Ver el comentario en ese archivo.
+grant usage on schema public to anon, authenticated, service_role;
+
+grant select, insert, update, delete on
+  public.buffet_categories,
+  public.buffet_units,
+  public.buffet_suppliers,
+  public.buffet_products,
+  public.buffet_product_costs,
+  public.buffet_combos,
+  public.buffet_combo_items,
+  public.buffet_budgets,
+  public.buffet_budget_items
+to anon, authenticated, service_role;
+
+grant usage, select on all sequences in schema public to anon, authenticated, service_role;
