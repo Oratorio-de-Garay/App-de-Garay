@@ -12,14 +12,18 @@ No hay framework de frontend, no hay ORM, no hay TypeScript, no hay tests automa
 backend/
   api/
     index.js   ← app Express: todas las rutas /api/* + sirve frontend/ como estático
-    auth.js    ← middleware: valida sesión Supabase + allowlist de emails
+    auth.js    ← middleware: valida sesión Supabase, resuelve usuario/organización/roles + guards
+    admin.js   ← router /api/admin/* (panel de administración)
   package.json
   vercel.json  ← única config de deploy (todas las rutas → api/index.js)
 frontend/
-  index.html   ← único punto de entrada (SPA de una sola pantalla)
-  auth.js      ← login con Google vía Supabase Auth; expone window.apiFetch()
-  index.js     ← toda la lógica de UI (búsqueda, alta, historial, edición)
-  base.css
+  index.html   ← Registro (asistencias)
+  buffet.html  ← Buffet
+  admin.html   ← panel de administración (sólo admins/superadmins)
+  auth.js      ← login con Google vía Supabase Auth; expone window.apiFetch() y window.currentUser
+  nav.js       ← sidebar desplegable en mobile
+  index.js / buffet.js / admin.js ← lógica de UI de cada página
+  base.css (+ buffet.css, admin.css)
 supabase/
   migrations/  ← migraciones versionadas — PARCIALES, ver DATABASE.md
 docs/          ← esta documentación
@@ -39,9 +43,13 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 
 - **Login**: Google OAuth manejado enteramente por Supabase Auth (`supabaseClient.auth.signInWithOAuth`). No hay backend propio de sesión ni cookies — el estado de sesión vive en el cliente Supabase del browser.
 - `frontend/auth.js` guarda la sesión y expone `window.apiFetch(path, options)`, un wrapper de `fetch` que agrega `Authorization: Bearer <access_token>` a cada llamada a `/api/*`. **Todo el código nuevo debe usar `apiFetch`, no `fetch` directo**, para no romper la autenticación.
-- `backend/api/auth.js` valida ese token con `supabaseAdmin.auth.getUser(token)`, usando el **service role key** (bypassea RLS, nunca se expone al frontend). Además exige que el email esté en la tabla `allowed_emails`.
-- **Autorización = allowlist plana de emails**, no hay roles. Cualquier usuario logueado y permitido tiene los mismos permisos. La tabla `allowed_emails` se administra a mano por SQL (no hay UI de admin) — ver [DATABASE.md](DATABASE.md).
-- `/api/health` es la única ruta pública (uptime monitoring). Todo lo demás bajo `/api/*` exige sesión válida + allowlist (middleware global en `backend/api/index.js`).
+- `backend/api/auth.js` valida ese token con `supabaseAdmin.auth.getUser(token)`, usando el **service role key** (bypassea RLS, nunca se expone al frontend). Después llama a `contexto_usuario(email)`, que devuelve si el email está en `usuarios`, sus organizaciones y sus roles, y deja todo en `req.user`.
+- **Autorización:** hay tres niveles, miembro (tener la organización), `admin` (por organización) y `superadmin` (global). El modelo completo, la matriz de permisos y dónde se aplica cada regla están en **[ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md)**. Los usuarios se dan de alta desde el panel `admin.html`, ya no por SQL.
+- **Middlewares globales** en `backend/api/index.js`:
+  - `/api/health` es la única ruta pública (uptime monitoring).
+  - Todo lo demás bajo `/api/*` exige sesión válida y usuario registrado.
+  - Las rutas de datos exigen además una organización activa (`requireOrganization`). `/api/auth/me` y `/api/admin/*` no la exigen, para que un superadmin sin organizaciones pueda entrar al panel.
+- **Lógica del panel:** el router `/api/admin` (`backend/api/admin.js`) sólo aplica los guards `requireAdmin` / `requireSuperadmin`. Las reglas de scope viven en funciones SQL que reciben al actor y hacen cada operación en una transacción con su auditoría.
 - El flujo de OAuth con múltiples URLs de Vercel (producción + previews) requiere configuración específica en Supabase (Site URL vs. Redirect URLs con wildcard). Ver [SETUP.md](SETUP.md#autenticación-google--supabase).
 
 ## Patrones usados en el frontend
@@ -57,6 +65,7 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 
 ## Convenciones de código
 
+- Registrar los cambios relevantes en [CHANGELOG.md](../CHANGELOG.md) (sección *Sin publicar*).
 - Comentarios y nombres de variables/funciones en **español** (dominio: "pibes", "ficha", "presente", "asistencias"). Mantener esa convención al extender el código.
 - Cada handler de Express sigue el mismo esqueleto: `try { ... } catch (error) { console.error("<Contexto> error:", error); res.status(500).json({ error: error.message }); }`.
 - El frontend usa nombres de función en español (`buscar`, `agregarNuevo`, `mostrarResultado`, etc.) — seguir la misma convención.
@@ -68,11 +77,16 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 3. No hay tests automatizados. Verificar cambios corriendo el backend local (`npm run dev`) y probando a mano.
 4. No hay control de concurrencia más allá de un chequeo puntual ("¿ya tiene presente hoy?") en `/api/attendance/mark`.
 5. No hay paginación en `/api/students/search` — aceptable al tamaño actual del padrón, pero a tener en cuenta si crece mucho.
-6. No hay UI de administración: agregar un email a `allowed_emails`, o editar `grados_pibes`/`edades`, requiere entrar a Supabase y correr SQL a mano.
+6. Los lookups (`grados_pibes`, `edades`) siguen sin UI: se editan por SQL. Usuarios, roles y organizaciones ya se administran desde `admin.html`.
+7. `admin.js` copia los helpers de modal y API de `buffet.js` (`openModal`, `apiGet`, `apiSend`, `escapeHtml`). Si aparece una tercera página que los necesite, conviene moverlos a un `frontend/ui.js` compartido.
+8. Vista temporal `public.allowed_emails` (ver DATABASE.md): borrarla en una migración nueva cuando el backend con `usuarios` esté desplegado en producción.
+9. El historial de migraciones remoto (`supabase_migrations.schema_migrations`) no registraba las migraciones de agosto (se aplicaron a mano). Antes de un `supabase db push` correr `supabase migration list --linked` y, si hay migraciones aplicadas a mano, marcarlas con `supabase migration repair --status applied <versión>`.
 
 ## Ver también
 
 - [DATABASE.md](DATABASE.md) — schema, relaciones, RLS.
+- [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md) — roles, scope de organizaciones, auditoría.
+- [CHANGELOG.md](../CHANGELOG.md) — registro de cambios.
 - [API.md](API.md) — referencia de endpoints.
 - [SETUP.md](SETUP.md) — variables de entorno, desarrollo local, deploy, configuración de auth.
 - [legacy/](legacy/) — documentación de la versión anterior (Google Apps Script + Sheets), sólo como contexto histórico.

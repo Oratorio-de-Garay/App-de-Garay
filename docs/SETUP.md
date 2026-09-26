@@ -30,12 +30,20 @@ Ver [DATABASE.md](DATABASE.md) para el schema completo y las políticas RLS. Res
 
 1. Crear las tablas (`organizaciones`, `niveles_grados_pibes`, `grados_pibes`, `edades`, `pibes`, `asistencias`) — no hay migración que las cree, hacerlo a mano en el SQL Editor siguiendo el schema documentado en DATABASE.md.
 2. Habilitar RLS y otorgar los `GRANT`/policies al rol `anon` como se detalla en DATABASE.md.
-3. Correr las migraciones versionadas para `allowed_emails`:
+3. Correr las migraciones versionadas:
    ```bash
-   supabase db push   # o pegar el contenido de supabase/migrations/*.sql a mano
+   supabase migration list --linked   # ver qué falta aplicar
+   supabase db push                   # o pegar el contenido de supabase/migrations/*.sql a mano
    ```
-4. Cargar el seed mínimo de lookups (ver DATABASE.md) — sin esto no se puede crear ningún pibe.
-5. Agregar al menos un email propio a `allowed_emails` para poder loguearte.
+   Si alguna migración ya se había aplicado a mano, marcala antes con `supabase migration repair --status applied <versión>`. Si no, `db push` la vuelve a correr.
+4. Cargar el seed mínimo de lookups (ver DATABASE.md). Sin esto no se puede crear ningún pibe.
+5. La migración `20260926000000_roles_y_admin.sql` carga como **superadmin** a `oratoriogarayy@gmail.com`. Con esa cuenta:
+   - Entrás a `admin.html`.
+   - Creás o revisás las organizaciones.
+   - Asignás admins.
+   - Das de alta usuarios.
+
+   Para sumar otro superadmin, ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#agregar-otro-superadmin).
 
 ## Autenticación: Google + Supabase
 
@@ -72,8 +80,8 @@ Ver [DATABASE.md](DATABASE.md) para el schema completo y las políticas RLS. Res
 
 ## Checklist rápido para un agente nuevo
 
-1. Leer [ARCHITECTURE.md](ARCHITECTURE.md) completo.
+1. Leer [ARCHITECTURE.md](ARCHITECTURE.md) completo, y [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md) si vas a tocar autenticación o permisos.
 2. Leer [DATABASE.md](DATABASE.md) — especialmente la sección de deuda técnica sobre el schema no versionado.
-3. `cd backend && npm install && npm run dev`, abrir `http://localhost:3000`, loguearse con un email que esté en `allowed_emails`.
+3. `cd backend && npm install && npm run dev`, abrir `http://localhost:3000` y loguearse con un email registrado en `usuarios` (se dan de alta desde `admin.html`).
 4. Antes de tocar el schema de Supabase: confirmar el estado real con `supabase db pull` o revisando el SQL Editor, no asumir que `supabase/migrations/` está completo.
 5. Antes de agregar un endpoint nuevo: revisar [API.md](API.md) para mantener las convenciones de forma de respuesta y manejo de errores.
