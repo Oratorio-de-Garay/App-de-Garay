@@ -45,6 +45,14 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 - **Superadmin sin organizaciones:** Registro y Buffet lo redirigen a `admin.html` y el menú oculta esos links.
 - El nombre de una organización ahora es único sin importar mayúsculas ni espacios.
 
+### Corregido
+
+- **Registro (`frontend/index.js`):** `init()` se ejecutaba dos veces, una al cargar la página (antes del login) y otra al confirmarse la sesión. Por eso cada listener quedaba registrado dos veces (Enter disparaba dos búsquedas) y se pedía `/api/lookups` sin sesión. Ahora sólo lo llama `auth.js`; la fecha del header se pinta aparte, al cargar.
+- **Migración `20260811000000_buffet_grants.sql`:** por su timestamp corría antes de `20260812000000_buffet.sql`, que crea las tablas, y sobre una base limpia fallaba.
+  - Los grants se movieron al final de `20260812000000_buffet.sql`.
+  - `20260811` ahora sólo otorga sobre las tablas que ya existan.
+  - No se renombró el archivo porque su versión ya figura como aplicada en el historial remoto. En producción no cambia nada.
+
 ### Eliminado
 
 - Columna `organizacion_miembros.rol`. Nunca se leía; los roles viven en `usuario_roles`.
