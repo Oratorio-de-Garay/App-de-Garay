@@ -82,8 +82,7 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 5. No hay paginación en `/api/students/search` — aceptable al tamaño actual del padrón, pero a tener en cuenta si crece mucho.
 6. Los lookups (`grados_pibes`, `edades`) siguen sin UI: se editan por SQL. Usuarios, roles y organizaciones ya se administran desde `admin.html`.
 7. `admin.js` copia los helpers de modal y API de `buffet.js` (`openModal`, `apiGet`, `apiSend`, `escapeHtml`). Si aparece una tercera página que los necesite, conviene moverlos a un `frontend/ui.js` compartido.
-8. Vista temporal `public.allowed_emails` (ver DATABASE.md): borrarla en una migración nueva cuando el backend con `usuarios` esté desplegado en producción.
-9. Antes de un `supabase db push`, correr `supabase migration list --linked` y `supabase db push --linked --dry-run` para ver exactamente qué se va a aplicar. El historial remoto ya está sincronizado; se reparó en septiembre de 2026, cuando las migraciones de agosto figuraban como no aplicadas.
+8. Antes de un `supabase db push`, correr `supabase migration list --linked` y `supabase db push --linked --dry-run` para ver exactamente qué se va a aplicar. El historial remoto ya está sincronizado; se reparó en septiembre de 2026, cuando las migraciones de agosto figuraban como no aplicadas.
 
 ## Ver también
 
