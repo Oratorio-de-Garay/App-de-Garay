@@ -41,7 +41,18 @@ npx supabase stop              # apaga la base local
 
 > ⚠️ **Usá siempre `--local` con `db reset`.** `supabase db reset --linked` **borra y recrea la base de producción**.
 
-La base local escucha en `postgresql://postgres:postgres@127.0.0.1:54322/postgres`. El backend sigue apuntando a producción salvo que cambies `backend/.env`; ver el punto 2 de deuda en ARCHITECTURE.md sobre el login local.
+La base local escucha en `postgresql://postgres:postgres@127.0.0.1:54322/postgres`.
+
+### App completa en local (sin tocar producción)
+
+1. `npx supabase start`: levanta base, auth, API y Mailpit. Aplica las migraciones y `seed.sql` la primera vez; después usá `db reset --local` para volver a sembrar.
+2. Copiá `backend/.env.local.example` a `backend/.env.local` y completalo con la *Publishable key* y la *Secret key* de `npx supabase status`. `.env.local` está en `.gitignore`.
+3. `cd backend && npm run dev:local`, y abrí `http://localhost:3000`.
+4. **Login:** como el backend apunta a una base local, la pantalla de login suma **"Desarrollo local"**.
+   - Escribís un email registrado y te llega un magic link a **Mailpit** (`http://127.0.0.1:54324`).
+   - Usuarios del seed: `oratoriogarayy@gmail.com` (superadmin), `admin@local.test` (admin de Oratorio) y `miembro@local.test` (miembro de las dos organizaciones).
+
+**Cómo decide la app a qué base apuntar:** el frontend no tiene la configuración hardcodeada; la pide a `GET /config.js`, que el backend arma con `SUPABASE_URL`/`SUPABASE_KEY`. Si no están, usa los valores de producción. El login por magic link sólo se habilita cuando `SUPABASE_URL` es `localhost`/`127.0.0.1`, así que en producción no existe. El botón de Google en local no funciona salvo que cargues credenciales en `[auth.external.google]` de `supabase/config.toml`.
 
 ### Aplicar migraciones a producción
 

@@ -36,6 +36,11 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
   - `supabase/config.toml`, con Postgres 17 como producción.
   - `supabase/seed.sql`, con lookups y un pibe de prueba por organización.
 - **Tests de la base** (pgTAP, `supabase/tests/`): 32 pruebas de roles, scope, constraints, auditoría y acceso directo. Se corren con `supabase test db`.
+- **App completa en local:**
+  - `npm run dev:local` con `backend/.env.local` apunta a Supabase local.
+  - El frontend toma la configuración de `GET /config.js` en lugar de tenerla hardcodeada en cada HTML.
+  - Con base local, el login suma un magic link que llega a Mailpit.
+  - El seed trae usuarios de prueba (admin y miembro).
 - **CI** (`.github/workflows/base-de-datos.yml`): en cada PR que toca `supabase/`, aplica las migraciones sobre una base vacía y corre los tests.
 
 ### Cambiado

@@ -76,9 +76,7 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
    - La base sí tiene tests (pgTAP en `supabase/tests/`, corren en CI).
    - El backend y el frontend se verifican corriendo `npm run dev` y probando a mano.
    - El paso siguiente natural es testear el router `/api/admin` con la base local.
-2. **El login con Google no está configurado en el stack local.**
-   - La base local sirve para migraciones, tests y SQL.
-   - Correr la app completa en local requiere cargar credenciales de Google en `[auth.external.google]` de `supabase/config.toml`, con redirect `http://127.0.0.1:54321/auth/v1/callback`.
+2. **Google no funciona en local:** en local se entra por magic link (ver [SETUP.md](SETUP.md#app-completa-en-local-sin-tocar-producción)). Para probar el flujo real de Google en local hay que cargar credenciales en `[auth.external.google]` de `supabase/config.toml`.
 3. **Cambios de schema:** siempre con una migración nueva. Nunca a mano en el SQL Editor de Supabase, porque así se había desincronizado el repo (ver el historial en el CHANGELOG).
 4. No hay control de concurrencia más allá de un chequeo puntual ("¿ya tiene presente hoy?") en `/api/attendance/mark`.
 5. No hay paginación en `/api/students/search` — aceptable al tamaño actual del padrón, pero a tener en cuenta si crece mucho.

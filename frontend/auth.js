@@ -73,9 +73,39 @@ function renderLogin() {
       options: { redirectTo: window.location.origin + window.location.pathname },
     });
   });
+  if (window.AUTH_DEV_LOGIN) renderDevLogin();
   authScreen.hidden = false;
   appShell.hidden = true;
   btnLogout.hidden = true;
+}
+
+/**
+ * Sólo con Supabase local (config.js pone AUTH_DEV_LOGIN): login por magic
+ * link, para no necesitar credenciales de Google en desarrollo. El mail llega
+ * a Mailpit (http://127.0.0.1:54324). El acceso lo sigue decidiendo el backend
+ * con public.usuarios, igual que con Google.
+ */
+function renderDevLogin() {
+  const box = document.createElement("form");
+  box.className = "dev-login";
+  box.innerHTML = `
+    <div class="dev-login-title">Desarrollo local</div>
+    <input class="form-input" type="email" id="dev-email" placeholder="email registrado en usuarios" required>
+    <button class="btn-sec" type="submit">Enviar magic link</button>
+    <div class="dev-login-msg" id="dev-login-msg"></div>
+  `;
+  box.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById("dev-login-msg");
+    const { error } = await supabaseClient.auth.signInWithOtp({
+      email: document.getElementById("dev-email").value.trim(),
+      options: { emailRedirectTo: window.location.origin + window.location.pathname },
+    });
+    msg.innerHTML = error
+      ? escapeHtmlAuth(error.message)
+      : 'Listo: abrí el mail en <a href="http://127.0.0.1:54324" target="_blank" rel="noopener">Mailpit</a>.';
+  });
+  authCard.appendChild(box);
 }
 
 function renderUnauthorized(email) {

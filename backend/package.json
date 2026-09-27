@@ -6,7 +6,8 @@
   "main": "api/index.js",
   "scripts": {
     "dev": "node --watch api/index.js",
-    "start": "node api/index.js"
+    "start": "node api/index.js",
+    "dev:local": "node --env-file=.env.local --watch api/index.js"
   },
   "keywords": [
     "attendance",

@@ -17,6 +17,25 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Configuración pública del frontend, según el entorno. Sin variables de
+// entorno cae en el proyecto de producción (la publishable key es pública por
+// diseño). Con SUPABASE_URL local se habilita el login por email para
+// desarrollo, que en producción no existe.
+const SUPABASE_PROD_URL = "https://tcrrxgqwuxlykwyeymsp.supabase.co";
+const SUPABASE_PROD_PUBLISHABLE_KEY = "sb_publishable_86o3bgdc_aHgXPhTW7AzRQ_PH4yHoNT";
+
+app.get("/config.js", (req, res) => {
+  const url = process.env.SUPABASE_URL || SUPABASE_PROD_URL;
+  const key = process.env.SUPABASE_KEY || SUPABASE_PROD_PUBLISHABLE_KEY;
+  const esLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url);
+  res.type("application/javascript").set("Cache-Control", "no-store").send(
+    `window.API_URL = "";\n` +
+    `window.SUPABASE_URL = ${JSON.stringify(url)};\n` +
+    `window.SUPABASE_ANON_KEY = ${JSON.stringify(key)};\n` +
+    `window.AUTH_DEV_LOGIN = ${esLocal};\n`
+  );
+});
+
 // Servir archivos del frontend
 app.use(
   express.static(

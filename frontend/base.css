@@ -1236,3 +1236,16 @@ input[type=checkbox] {
     display: none;
   }
 }
+/* Login por magic link: sólo aparece con Supabase local (ver auth.js). */
+.dev-login {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1.5px dashed var(--amarillo-borde);
+  border-radius: 12px;
+  background: var(--amarillo-bg);
+}
+.dev-login-title { font-size: 12px; font-weight: 700; color: var(--amarillo-txt); text-transform: uppercase; letter-spacing: 0.5px; }
+.dev-login-msg { font-size: 13px; color: var(--amarillo-txt); }

@@ -24,3 +24,12 @@ select 'Pibe', 'De Prueba ' || o.nombre,
   (select id from public.edades where organizacion_id = o.id and nombre = 'Medianos' limit 1),
   true, o.id
 from public.organizaciones o;
+
+-- Usuarios de desarrollo (entran por magic link; los mails llegan a Mailpit,
+-- http://127.0.0.1:54324). El superadmin oratoriogarayy@gmail.com lo crea la
+-- migración y también puede entrar así.
+select public.superadmin_asignar_rol('oratoriogarayy@gmail.com', 'admin@local.test', 'Admin local', 'admin',
+  array[(select id from public.organizaciones where nombre = 'Oratorio de Garay')]);
+select public.admin_alta_usuario('oratoriogarayy@gmail.com', 'miembro@local.test', 'Miembro local',
+  array[(select id from public.organizaciones where nombre = 'Oratorio de Garay'),
+        (select id from public.organizaciones where nombre = 'Escuadra 3')]);
