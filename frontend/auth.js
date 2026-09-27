@@ -344,6 +344,12 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
   if (event === "SIGNED_OUT") {
     try { localStorage.removeItem(ORG_STORAGE_KEY); } catch {}
     currentOrganizationId = null;
+    // Recargar descarta todo lo que la página ya tenía cargado (datos del
+    // usuario anterior, appStarted) y arranca limpia en el login.
+    if (appStarted) {
+      location.reload();
+      return;
+    }
   }
   // Un refresh del token no cambia el acceso: no hace falta volver a verificar.
   if (event === "TOKEN_REFRESHED" && appStarted) return;

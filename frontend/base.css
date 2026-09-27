@@ -102,6 +102,8 @@ header {
 }
 
 .side-link[hidden] { display: none; }
+/* .app-layout { display: grid } le gana al [hidden] del navegador. */
+.app-layout[hidden] { display: none; }
 
 .app-main {
   padding: 18px;
