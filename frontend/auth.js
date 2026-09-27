@@ -234,7 +234,7 @@ function renderNavPermissions() {
 
   if (window.currentUser?.puede_administrar && !sideNav.querySelector('a[href="admin.html"]')) {
     const link = document.createElement("a");
-    link.className = "side-link side-link-admin";
+    link.className = "side-link";
     link.href = "admin.html";
     link.textContent = "Administración";
     sideNav.appendChild(link);
