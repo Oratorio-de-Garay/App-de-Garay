@@ -1250,6 +1250,66 @@ input[type=checkbox] {
 .dev-login-title { font-size: 12px; font-weight: 700; color: var(--amarillo-txt); text-transform: uppercase; letter-spacing: 0.5px; }
 .dev-login-msg { font-size: 13px; color: var(--amarillo-txt); }
 
+/* ─── Toasts ─── */
+
+.toast-stack {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 240px;
+  max-width: min(380px, calc(100vw - 36px));
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #fff;
+  background: #10261d;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  animation: toast-in 0.2s ease-out;
+  pointer-events: auto;
+}
+
+.toast::before {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--verde-mid);
+}
+
+.toast-err { background: #7a271a; }
+.toast-err::before { content: "!"; background: #f04438; }
+
+.toast.saliendo { opacity: 0; transform: translateY(6px); transition: all 0.2s; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+
+@media (max-width: 640px) {
+  .toast-stack { left: 18px; }
+  .toast { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
+
 /* Mientras se verifica el acceso (auth.js) no se muestra nada de la app. */
 body.auth-pending header .header-top > div:last-child,
 body.auth-pending header .header-actions { visibility: hidden; }
