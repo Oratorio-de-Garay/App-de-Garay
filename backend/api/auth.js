@@ -69,7 +69,11 @@ export async function requireAllowedUser(req, res, next) {
     // La organización activa la elige el cliente, pero se valida contra sus
     // membresías: sin esto bastaría con mandar otro id para ver datos ajenos.
     // Ser superadmin no da acceso a los datos de una organización.
-    const requested = req.headers["x-organization-id"];
+    // En /auth/me se ignora: es la ruta con la que el frontend averigua cuáles
+    // son válidas, y un header viejo (de otro usuario del mismo navegador) no
+    // puede dejar afuera a alguien habilitado.
+    const esAuthMe = req.originalUrl.split("?")[0] === "/api/auth/me";
+    const requested = esAuthMe ? undefined : req.headers["x-organization-id"];
     if (requested && !organizations.some((org) => org.id === requested)) {
       return res.status(403).json({ error: "No pertenecés a esa organización" });
     }

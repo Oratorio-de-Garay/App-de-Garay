@@ -1309,3 +1309,7 @@ input[type=checkbox] {
 @media (prefers-reduced-motion: reduce) {
   .toast { animation: none; }
 }
+
+/* Mientras se verifica el acceso (auth.js) no se muestra nada de la app. */
+body.auth-pending header .header-top > div:last-child,
+body.auth-pending header .header-actions { visibility: hidden; }

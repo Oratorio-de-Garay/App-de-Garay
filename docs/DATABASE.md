@@ -86,8 +86,6 @@ Emails de Google habilitados para loguearse. Se renombró en `20260926000000_rol
 
 **Se administra desde el panel** (`admin.html`). Invariante: un usuario sin organizaciones y sin rol global se borra solo.
 
-> Existe una **vista temporal `public.allowed_emails`** (`security_invoker`, sólo `service_role`) sobre `usuarios`, para que el backend desplegado antes del cambio siga funcionando. Borrarla con `drop view public.allowed_emails;` en una migración nueva una vez desplegado el backend nuevo.
-
 ### `organizacion_miembros`
 Membresía: el usuario puede ver y operar los datos de esa organización.
 | Columna | Tipo | Notas |
