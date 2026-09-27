@@ -16,6 +16,11 @@ const btnLogout = document.getElementById("btn-logout");
 
 btnLogout.addEventListener("click", () => supabaseClient.auth.signOut());
 
+// Hasta que el backend confirme el acceso no se muestra nada de la app: ni el
+// contenido ni el encabezado (base.css oculta el header con .auth-pending).
+document.body.classList.add("auth-pending");
+renderVerifying();
+
 // Organización activa. El backend la valida contra las membresías del usuario,
 // así que mandar otra acá no da acceso a nada: sólo devuelve 403.
 let organizations = [];
@@ -53,11 +58,26 @@ async function apiFetch(path, options = {}) {
 
   const headers = { ...(options.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (currentOrganizationId) headers["X-Organization-Id"] = currentOrganizationId;
+  // /api/auth/me no lleva organización: es justamente la que dice cuáles son
+  // válidas. Mandar la guardada (que puede ser de otro usuario que usó este
+  // navegador) hacía que el backend respondiera 403 a un usuario habilitado.
+  if (currentOrganizationId && path !== "/api/auth/me") {
+    headers["X-Organization-Id"] = currentOrganizationId;
+  }
 
   return fetch(`${API_URL}${path}`, { ...options, headers });
 }
 window.apiFetch = apiFetch;
+
+function renderVerifying() {
+  authCard.innerHTML = `
+    <div class="auth-title">Verificando tu acceso…</div>
+    <div class="auth-sub"><span class="spinner spinner-verde"></span></div>
+  `;
+  authScreen.hidden = false;
+  appShell.hidden = true;
+  btnLogout.hidden = true;
+}
 
 function renderLogin() {
   authCard.innerHTML = `
@@ -189,6 +209,7 @@ function renderApp() {
     return;
   }
 
+  document.body.classList.remove("auth-pending");
   authScreen.hidden = true;
   appShell.hidden = false;
   btnLogout.hidden = false;
@@ -204,12 +225,18 @@ function escapeHtmlAuth(text) {
 }
 
 let appStarted = false;
+// Al cargar se disparan a la vez getSession() y los eventos de auth: sin esto
+// se pedía /api/auth/me tres veces. Una sola evaluación por token.
+let evaluatedToken = null;
 
 async function evaluateSession(session) {
   if (!session) {
+    evaluatedToken = null;
     renderLogin();
     return;
   }
+  if (session.access_token === evaluatedToken) return;
+  evaluatedToken = session.access_token;
 
   try {
     const res = await apiFetch("/api/auth/me");
@@ -255,7 +282,14 @@ async function evaluateSession(session) {
   }
 }
 
-supabaseClient.auth.onAuthStateChange((_event, session) => {
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  // La organización guardada es de quien cerró sesión: no se hereda.
+  if (event === "SIGNED_OUT") {
+    try { localStorage.removeItem(ORG_STORAGE_KEY); } catch {}
+    currentOrganizationId = null;
+  }
+  // Un refresh del token no cambia el acceso: no hace falta volver a verificar.
+  if (event === "TOKEN_REFRESHED" && appStarted) return;
   evaluateSession(session);
 });
 
