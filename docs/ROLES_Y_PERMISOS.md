@@ -77,6 +77,8 @@ Cómo se decide quién entra a la app, qué datos ve y quién puede administrar 
    - No hay políticas de escritura en ninguna.
 5. **Frontend:** oculta botones y pestañas según `currentUser`. **Es sólo UX, no control de acceso.**
 
+Estas reglas están cubiertas por los tests pgTAP de [`supabase/tests/roles_y_permisos.test.sql`](../supabase/tests/roles_y_permisos.test.sql) (`supabase test db`). Si cambiás una regla, actualizá el test.
+
 ### Errores de las funciones
 
 Las funciones levantan SQLSTATE específicos y el backend los traduce a HTTP (`responderRpc` en `admin.js`). El mensaje llega tal cual al usuario:

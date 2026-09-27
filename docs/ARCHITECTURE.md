@@ -72,15 +72,20 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 
 ## Deuda técnica / cosas a tener en cuenta antes de tocar el proyecto
 
-1. **El schema base de la base de datos no está versionado.** Las tablas `organizaciones`, `niveles_grados_pibes`, `grados_pibes`, `edades`, `pibes`, `asistencias`, sus políticas RLS y la función `buscar_pibes` (RPC usada por la búsqueda) se crearon a mano desde el SQL Editor de Supabase. La migración `supabase/migrations/20260730210820_remote_schema.sql` está **vacía**. Sólo `allowed_emails` tiene migraciones reales y actualizadas. Antes de modificar el schema: correr `supabase db pull` para traer el estado real, o como mínimo documentar el cambio en una migración nueva. Ver [DATABASE.md](DATABASE.md).
-2. No hay `supabase/config.toml` — no hay stack local de Supabase configurado (`supabase start`); todo el desarrollo apunta directo al proyecto remoto.
-3. No hay tests automatizados. Verificar cambios corriendo el backend local (`npm run dev`) y probando a mano.
+1. **Backend y frontend sin tests automatizados.**
+   - La base sí tiene tests (pgTAP en `supabase/tests/`, corren en CI).
+   - El backend y el frontend se verifican corriendo `npm run dev` y probando a mano.
+   - El paso siguiente natural es testear el router `/api/admin` con la base local.
+2. **El login con Google no está configurado en el stack local.**
+   - La base local sirve para migraciones, tests y SQL.
+   - Correr la app completa en local requiere cargar credenciales de Google en `[auth.external.google]` de `supabase/config.toml`, con redirect `http://127.0.0.1:54321/auth/v1/callback`.
+3. **Cambios de schema:** siempre con una migración nueva. Nunca a mano en el SQL Editor de Supabase, porque así se había desincronizado el repo (ver el historial en el CHANGELOG).
 4. No hay control de concurrencia más allá de un chequeo puntual ("¿ya tiene presente hoy?") en `/api/attendance/mark`.
 5. No hay paginación en `/api/students/search` — aceptable al tamaño actual del padrón, pero a tener en cuenta si crece mucho.
 6. Los lookups (`grados_pibes`, `edades`) siguen sin UI: se editan por SQL. Usuarios, roles y organizaciones ya se administran desde `admin.html`.
 7. `admin.js` copia los helpers de modal y API de `buffet.js` (`openModal`, `apiGet`, `apiSend`, `escapeHtml`). Si aparece una tercera página que los necesite, conviene moverlos a un `frontend/ui.js` compartido.
 8. Vista temporal `public.allowed_emails` (ver DATABASE.md): borrarla en una migración nueva cuando el backend con `usuarios` esté desplegado en producción.
-9. El historial de migraciones remoto (`supabase_migrations.schema_migrations`) no registraba las migraciones de agosto (se aplicaron a mano). Antes de un `supabase db push` correr `supabase migration list --linked` y, si hay migraciones aplicadas a mano, marcarlas con `supabase migration repair --status applied <versión>`.
+9. Antes de un `supabase db push`, correr `supabase migration list --linked` y `supabase db push --linked --dry-run` para ver exactamente qué se va a aplicar. El historial remoto ya está sincronizado; se reparó en septiembre de 2026, cuando las migraciones de agosto figuraban como no aplicadas.
 
 ## Ver también
 

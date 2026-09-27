@@ -26,18 +26,39 @@ No hay servidor de frontend separado: `backend/api/index.js` sirve `frontend/` c
 
 ## Base de datos
 
-Ver [DATABASE.md](DATABASE.md) para el schema completo y las políticas RLS. Resumen del setup inicial en un proyecto Supabase nuevo:
+Ver [DATABASE.md](DATABASE.md) para el schema completo y las políticas RLS. Las migraciones de `supabase/migrations/` reconstruyen toda la base desde cero.
 
-1. Crear las tablas (`organizaciones`, `niveles_grados_pibes`, `grados_pibes`, `edades`, `pibes`, `asistencias`) — no hay migración que las cree, hacerlo a mano en el SQL Editor siguiendo el schema documentado en DATABASE.md.
-2. Habilitar RLS y otorgar los `GRANT`/policies al rol `anon` como se detalla en DATABASE.md.
-3. Correr las migraciones versionadas:
+### Base local (Docker)
+
+**Requisitos:** Docker Desktop corriendo. En Windows necesita WSL2: `wsl --install --no-distribution` y reiniciar. Si Docker Desktop dice "Resource saver mode" está bien: se despierta solo al usarlo.
+
+```bash
+npx supabase db start          # levanta Postgres local y aplica migraciones + seed.sql
+npx supabase db reset --local  # vuelve a crear la base local desde cero
+npx supabase test db           # corre los tests pgTAP de supabase/tests/
+npx supabase db stop           # apaga la base local
+```
+
+> ⚠️ **Usá siempre `--local` con `db reset`.** `supabase db reset --linked` **borra y recrea la base de producción**.
+
+La base local escucha en `postgresql://postgres:postgres@127.0.0.1:54322/postgres`. El backend sigue apuntando a producción salvo que cambies `backend/.env`; ver el punto 2 de deuda en ARCHITECTURE.md sobre el login local.
+
+### Aplicar migraciones a producción
+
+1. **Probar en local:** `db reset --local` y `test db`, para confirmar que la migración aplica desde cero y no rompe reglas.
+2. **Ver qué se va a aplicar:**
    ```bash
-   supabase migration list --linked   # ver qué falta aplicar
-   supabase db push                   # o pegar el contenido de supabase/migrations/*.sql a mano
+   npx supabase migration list --linked
+   npx supabase db push --linked --dry-run
    ```
-   Si alguna migración ya se había aplicado a mano, marcala antes con `supabase migration repair --status applied <versión>`. Si no, `db push` la vuelve a correr.
-4. Cargar el seed mínimo de lookups (ver DATABASE.md). Sin esto no se puede crear ningún pibe.
-5. La migración `20260926000000_roles_y_admin.sql` carga como **superadmin** a `oratoriogarayy@gmail.com`. Con esa cuenta:
+3. **Aplicar:** `npx supabase db push --linked`.
+4. **Chequear que no haya diferencias:** comparar `npx supabase db dump --linked` contra `npx supabase db dump --local`.
+
+### Proyecto Supabase nuevo
+
+1. `npx supabase link --project-ref <ref>` y `npx supabase db push`. Esto crea todo el schema, incluidas las tablas base.
+2. Cargar los lookups: niveles, grados y edades (ver `supabase/seed.sql` como referencia).
+3. La migración `20260926000000_roles_y_admin.sql` carga como **superadmin** a `oratoriogarayy@gmail.com`. Con esa cuenta:
    - Entrás a `admin.html`.
    - Creás o revisás las organizaciones.
    - Asignás admins.

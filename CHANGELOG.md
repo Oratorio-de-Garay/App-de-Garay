@@ -31,6 +31,12 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 - **`GET /api/auth/me`** ahora devuelve `roles`, `es_superadmin`, `organizaciones_admin` y `puede_administrar`.
 - Link "Administración" en el menú lateral, sólo para quien puede administrar.
 - Documentación nueva: [docs/ROLES_Y_PERMISOS.md](docs/ROLES_Y_PERMISOS.md) y este CHANGELOG.
+- **Schema base versionado:** `20260730210820_remote_schema.sql`, que estaba vacía, ahora contiene las tablas que se habían creado a mano (`organizaciones`, `niveles_grados_pibes`, `grados_pibes`, `edades`, `pibes`, `asistencias`), `buscar_pibes`, el event trigger `ensure_rls` y los privilegios por defecto del proyecto. Las migraciones del repo reconstruyen la base de producción **sin diferencias**, verificado con `supabase db dump`.
+- **Stack local de Supabase:**
+  - `supabase/config.toml`, con Postgres 17 como producción.
+  - `supabase/seed.sql`, con lookups y un pibe de prueba por organización.
+- **Tests de la base** (pgTAP, `supabase/tests/`): 32 pruebas de roles, scope, constraints, auditoría y acceso directo. Se corren con `supabase test db`.
+- **CI** (`.github/workflows/base-de-datos.yml`): en cada PR que toca `supabase/`, aplica las migraciones sobre una base vacía y corre los tests.
 
 ### Cambiado
 
@@ -58,6 +64,15 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 - Columna `organizacion_miembros.rol`. Nunca se leía; los roles viven en `usuario_roles`.
 
 ### Seguridad
+
+- **Exposición de datos cerrada** (`20260927000000_cerrar_acceso_publico.sql`, **aplicada en producción el 2026-09-27**).
+  - **Qué pasaba:** el schema original tenía políticas `public read/insert/update` con `USING (true)` y sin `TO`, más `GRANT ALL` a `anon` sobre `pibes` y `asistencias`.
+  - **Impacto:** cualquiera con la publishable key (visible en el HTML) podía leer, crear y modificar los datos de los chicos (55 pibes, 336 asistencias), incluidos teléfonos de emergencia, directo por la API de Supabase. También cualquier cuenta de Google logueada aunque no estuviera registrada.
+  - **Arreglo:**
+    - Se eliminaron esas políticas.
+    - Se revocó todo a `anon`, incluida `buscar_pibes`.
+    - Los catálogos quedaron legibles sólo para `authenticated`.
+  - **Efecto en la app:** ninguno, porque el backend usa `service_role`.
 
 - **Funciones del panel:** sólo `service_role` puede ejecutarlas (se revocó `EXECUTE` a `anon` y `authenticated`).
 - **Escritura desde el cliente:** se revocaron `INSERT`/`UPDATE`/`DELETE` de `anon` y `authenticated` sobre `organizaciones` y `organizacion_miembros`. RLS ya lo bloqueaba; esto agrega una capa más.
