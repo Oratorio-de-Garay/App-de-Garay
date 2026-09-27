@@ -27,6 +27,52 @@ window.currentUser = null;
 
 const isAdminPage = document.body.dataset.page === "admin";
 
+// Mensaje para mostrar como toast en la página siguiente, después de un redirect.
+const FLASH_STORAGE_KEY = "oratorio.flash";
+
+/** Toast efímero abajo a la derecha. tipo: "ok" | "err". */
+function toast(mensaje, tipo = "ok") {
+  let stack = document.getElementById("toast-stack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.className = "toast-stack";
+    stack.id = "toast-stack";
+    stack.setAttribute("aria-live", "polite");
+    document.body.appendChild(stack);
+  }
+  const el = document.createElement("div");
+  el.className = `toast${tipo === "err" ? " toast-err" : ""}`;
+  el.setAttribute("role", tipo === "err" ? "alert" : "status");
+  el.textContent = mensaje;
+  stack.appendChild(el);
+  setTimeout(() => {
+    el.classList.add("saliendo");
+    setTimeout(() => el.remove(), 250);
+  }, 3800);
+}
+window.toast = toast;
+
+function redirectWithToast(url, mensaje, tipo = "ok") {
+  try {
+    sessionStorage.setItem(FLASH_STORAGE_KEY, JSON.stringify({ mensaje, tipo }));
+  } catch {
+    // Sin storage el redirect igual funciona; sólo se pierde el aviso.
+  }
+  location.replace(url);
+}
+
+function showPendingFlash() {
+  try {
+    const raw = sessionStorage.getItem(FLASH_STORAGE_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(FLASH_STORAGE_KEY);
+    const { mensaje, tipo } = JSON.parse(raw);
+    if (mensaje) toast(mensaje, tipo);
+  } catch {
+    // Storage bloqueado o valor corrupto: no hay aviso que mostrar.
+  }
+}
+
 function readStoredOrganizationId() {
   try {
     return localStorage.getItem(ORG_STORAGE_KEY) || null;
@@ -181,11 +227,21 @@ function renderNavPermissions() {
   }
 }
 
-function renderApp() {
-  // Un superadmin sin organizaciones sólo puede usar el panel: el resto de las
-  // páginas no tendría datos que mostrarle.
+function renderApp(email) {
+  const puedeAdministrar = Boolean(window.currentUser?.puede_administrar);
+
+  // El panel es sólo para admins: al resto lo mandamos al inicio con un aviso.
+  // (Es una ayuda de navegación; el backend igual rechaza /api/admin/*.)
+  if (isAdminPage && !puedeAdministrar) {
+    redirectWithToast("index.html", "No tenés permisos de administración.", "err");
+    return;
+  }
+
+  // Sin organizaciones no hay datos que mostrar. Un superadmin igual puede usar
+  // el panel; cualquier otro usuario todavía no tiene nada que hacer acá.
   if (!organizations.length && !isAdminPage) {
-    location.replace("admin.html");
+    if (puedeAdministrar) location.replace("admin.html");
+    else renderNoOrganization(email);
     return;
   }
 
@@ -194,6 +250,7 @@ function renderApp() {
   btnLogout.hidden = false;
   renderNavPermissions();
   renderOrganizationPicker();
+  showPendingFlash();
   if (typeof window.onAuthenticated === "function") {
     window.onAuthenticated();
   }
@@ -228,7 +285,7 @@ async function evaluateSession(session) {
 
       if (!appStarted) {
         appStarted = true;
-        renderApp();
+        renderApp(session.user?.email || "");
       }
       return;
     }

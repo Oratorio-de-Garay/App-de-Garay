@@ -31,10 +31,8 @@ const ICONOS = {
 function initAdmin() {
   adminState.me = window.currentUser;
 
-  if (!adminState.me?.puede_administrar) {
-    renderSinPermisos();
-    return;
-  }
+  // auth.js ya redirige al inicio a quien no puede administrar.
+  if (!adminState.me?.puede_administrar) return;
 
   document.querySelectorAll(".admin-tab").forEach((btn) => {
     if (btn.hasAttribute("data-solo-superadmin")) btn.hidden = !adminState.me.es_superadmin;
@@ -51,17 +49,6 @@ function initAdmin() {
 
   renderSkeleton(document.getElementById("panel-usuarios"));
   cargarDatos();
-}
-
-function renderSinPermisos() {
-  document.getElementById("admin-main").innerHTML = `
-    <div class="admin-card admin-denied">
-      <div class="admin-empty" style="padding:0">${ICONOS.escudo}</div>
-      <h2>No tenés permisos de administración</h2>
-      <p>Esta sección es sólo para administradores. Si necesitás dar de alta a alguien, pedíselo a un admin de tu organización.</p>
-      <a class="admin-btn admin-btn-primary" href="index.html">Volver al inicio</a>
-    </div>
-  `;
 }
 
 function setAdminTab(tab) {
@@ -714,19 +701,6 @@ function renderErrorCarga(panel, error, reintentar) {
     </div>
   `;
   panel.querySelector("button").addEventListener("click", reintentar);
-}
-
-function toast(mensaje, tipo = "ok") {
-  const stack = document.getElementById("toast-stack");
-  const el = document.createElement("div");
-  el.className = `toast${tipo === "err" ? " toast-err" : ""}`;
-  el.setAttribute("role", tipo === "err" ? "alert" : "status");
-  el.textContent = mensaje;
-  stack.appendChild(el);
-  setTimeout(() => {
-    el.classList.add("saliendo");
-    setTimeout(() => el.remove(), 250);
-  }, 3800);
 }
 
 function formatearFecha(iso) {
