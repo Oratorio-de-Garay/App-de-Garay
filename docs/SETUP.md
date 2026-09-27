@@ -36,7 +36,7 @@ Ver [DATABASE.md](DATABASE.md) para el schema completo y las políticas RLS. Las
 npx supabase db start          # levanta Postgres local y aplica migraciones + seed.sql
 npx supabase db reset --local  # vuelve a crear la base local desde cero
 npx supabase test db           # corre los tests pgTAP de supabase/tests/
-npx supabase db stop           # apaga la base local
+npx supabase stop              # apaga la base local
 ```
 
 > ⚠️ **Usá siempre `--local` con `db reset`.** `supabase db reset --linked` **borra y recrea la base de producción**.
