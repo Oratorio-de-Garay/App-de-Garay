@@ -49,7 +49,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
   - `note` pasa a ser `nombre`.
   - Se agregan `id`, `created_by` y `updated_at`.
   - `organizacion_miembros.email` ahora es FK a `usuarios` (`on delete cascade`).
-  - Queda una **vista temporal `allowed_emails`** (sólo `service_role`) para que el backend anterior siga funcionando hasta que se despliegue este cambio. Hay que borrarla en una migración posterior al deploy.
+  - Hubo una vista temporal `allowed_emails` de compatibilidad durante el deploy; se borró en `20260927010000_borrar_vista_allowed_emails.sql`.
 - **Middleware `requireAllowedUser`:**
   - Resuelve usuario, membresías y roles con una sola consulta (`contexto_usuario`) en lugar de dos.
   - Un superadmin sin organizaciones puede entrar, pero sólo al panel.
@@ -57,6 +57,15 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 - El nombre de una organización ahora es único sin importar mayúsculas ni espacios.
 
 ### Corregido
+
+- **Login de usuarios habilitados en un navegador compartido:**
+  - **Qué pasaba:** la organización activa guardada en el navegador (de otro usuario que había usado la misma computadora) se mandaba también en `/api/auth/me`. El backend respondía 403 y un usuario recién dado de alta veía "Acceso no autorizado".
+  - **Arreglo:**
+    - `/me` ya no manda la organización, y el backend la ignora en esa ruta.
+    - Al cerrar sesión se borra la organización guardada.
+- **La app parpadeaba antes de "Acceso no autorizado":**
+  - **Qué pasaba:** mientras se verificaba el acceso se veía la página vacía con su encabezado, y `/me` se pedía tres veces por login.
+  - **Arreglo:** ahora se muestra "Verificando tu acceso…" desde el primer instante, sin encabezado, y `/me` se pide una sola vez por sesión.
 
 - **Registro (`frontend/index.js`):** `init()` se ejecutaba dos veces, una al cargar la página (antes del login) y otra al confirmarse la sesión. Por eso cada listener quedaba registrado dos veces (Enter disparaba dos búsquedas) y se pedía `/api/lookups` sin sesión. Ahora sólo lo llama `auth.js`; la fecha del header se pinta aparte, al cargar.
 - **Migración `20260811000000_buffet_grants.sql`:** por su timestamp corría antes de `20260812000000_buffet.sql`, que crea las tablas, y sobre una base limpia fallaba.

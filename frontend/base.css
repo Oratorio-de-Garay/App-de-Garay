@@ -1249,3 +1249,7 @@ input[type=checkbox] {
 }
 .dev-login-title { font-size: 12px; font-weight: 700; color: var(--amarillo-txt); text-transform: uppercase; letter-spacing: 0.5px; }
 .dev-login-msg { font-size: 13px; color: var(--amarillo-txt); }
+
+/* Mientras se verifica el acceso (auth.js) no se muestra nada de la app. */
+body.auth-pending header .header-top > div:last-child,
+body.auth-pending header .header-actions { visibility: hidden; }
