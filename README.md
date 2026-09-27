@@ -2,7 +2,7 @@
 
 App para registrar el ingreso/asistencia de los chicos del oratorio desde el celular: buscar, marcar presente, dar de alta, editar ficha y ver historial de asistencias.
 
-Stack: **Express (Node.js)** + **Supabase (Postgres + Auth)**, desplegado como un único proyecto en **Vercel**. Frontend en HTML/CSS/JS vanilla, sin build step. Login con Google restringido a una allowlist de emails.
+Stack: **Express (Node.js)** + **Supabase (Postgres + Auth)**, desplegado como un único proyecto en **Vercel**. Frontend en HTML/CSS/JS vanilla, sin build step. Login con Google restringido a los emails que dan de alta los administradores desde el panel de administración (roles `admin` por organización y `superadmin`).
 
 ## Documentación
 
@@ -10,8 +10,10 @@ Para entender el proyecto en profundidad (arquitectura, base de datos, API, cóm
 
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — cómo está armado, patrones usados, deuda técnica a tener en cuenta.
 - **[docs/DATABASE.md](docs/DATABASE.md)** — schema, relaciones, RLS.
+- **[docs/ROLES_Y_PERMISOS.md](docs/ROLES_Y_PERMISOS.md)** — roles, permisos por organización, auditoría.
 - **[docs/API.md](docs/API.md)** — referencia de endpoints.
 - **[docs/SETUP.md](docs/SETUP.md)** — variables de entorno, desarrollo local, deploy, configuración de auth.
+- **[CHANGELOG.md](CHANGELOG.md)** — registro de cambios.
 - [docs/legacy/](docs/legacy/) — documentación de la versión anterior en Google Apps Script + Sheets (histórica).
 
 ## Quick start

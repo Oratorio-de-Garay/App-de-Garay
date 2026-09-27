@@ -1,4 +1,4 @@
-// Google SSO gate. Only accounts listed in the Supabase `allowed_emails`
+// Google SSO gate. Only accounts registered in the Supabase `usuarios`
 // table (checked server-side by the backend) can use the app.
 const API_URL = window.API_URL || "";
 const ORG_STORAGE_KEY = "oratorio.organization_id";
@@ -20,6 +20,12 @@ btnLogout.addEventListener("click", () => supabaseClient.auth.signOut());
 // así que mandar otra acá no da acceso a nada: sólo devuelve 403.
 let organizations = [];
 let currentOrganizationId = readStoredOrganizationId();
+
+// Respuesta de /api/auth/me (roles incluidos). La usan las páginas, por
+// ejemplo admin.js para decidir qué pestañas mostrar.
+window.currentUser = null;
+
+const isAdminPage = document.body.dataset.page === "admin";
 
 function readStoredOrganizationId() {
   try {
@@ -67,9 +73,39 @@ function renderLogin() {
       options: { redirectTo: window.location.origin + window.location.pathname },
     });
   });
+  if (window.AUTH_DEV_LOGIN) renderDevLogin();
   authScreen.hidden = false;
   appShell.hidden = true;
   btnLogout.hidden = true;
+}
+
+/**
+ * Sólo con Supabase local (config.js pone AUTH_DEV_LOGIN): login por magic
+ * link, para no necesitar credenciales de Google en desarrollo. El mail llega
+ * a Mailpit (http://127.0.0.1:54324). El acceso lo sigue decidiendo el backend
+ * con public.usuarios, igual que con Google.
+ */
+function renderDevLogin() {
+  const box = document.createElement("form");
+  box.className = "dev-login";
+  box.innerHTML = `
+    <div class="dev-login-title">Desarrollo local</div>
+    <input class="form-input" type="email" id="dev-email" placeholder="email registrado en usuarios" required>
+    <button class="btn-sec" type="submit">Enviar magic link</button>
+    <div class="dev-login-msg" id="dev-login-msg"></div>
+  `;
+  box.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById("dev-login-msg");
+    const { error } = await supabaseClient.auth.signInWithOtp({
+      email: document.getElementById("dev-email").value.trim(),
+      options: { emailRedirectTo: window.location.origin + window.location.pathname },
+    });
+    msg.innerHTML = error
+      ? escapeHtmlAuth(error.message)
+      : 'Listo: abrí el mail en <a href="http://127.0.0.1:54324" target="_blank" rel="noopener">Mailpit</a>.';
+  });
+  authCard.appendChild(box);
 }
 
 function renderUnauthorized(email) {
@@ -96,10 +132,14 @@ function renderNoOrganization(email) {
   btnLogout.hidden = false;
 }
 
-/** Selector de organización, sólo si el usuario pertenece a más de una. */
+/**
+ * Selector de organización, sólo si el usuario pertenece a más de una. En el
+ * panel de administración no aplica: ahí se trabaja sobre todas las
+ * organizaciones que el usuario administra.
+ */
 function renderOrganizationPicker() {
   document.getElementById("org-select")?.remove();
-  if (organizations.length < 2) return;
+  if (organizations.length < 2 || isAdminPage) return;
 
   const select = document.createElement("select");
   select.id = "org-select";
@@ -118,10 +158,41 @@ function renderOrganizationPicker() {
   btnLogout.parentNode.insertBefore(select, btnLogout);
 }
 
+/**
+ * Links del sidebar según permisos: "Administración" sólo para admins, y sin
+ * organización (superadmin puro) no tiene sentido mostrar Registro ni Buffet.
+ */
+function renderNavPermissions() {
+  const sideNav = document.getElementById("side-nav");
+  if (!sideNav) return;
+
+  if (window.currentUser?.puede_administrar && !sideNav.querySelector('a[href="admin.html"]')) {
+    const link = document.createElement("a");
+    link.className = "side-link side-link-admin";
+    link.href = "admin.html";
+    link.textContent = "Administración";
+    sideNav.appendChild(link);
+  }
+
+  if (!organizations.length) {
+    sideNav.querySelectorAll(".side-link").forEach((link) => {
+      if (link.getAttribute("href") !== "admin.html") link.hidden = true;
+    });
+  }
+}
+
 function renderApp() {
+  // Un superadmin sin organizaciones sólo puede usar el panel: el resto de las
+  // páginas no tendría datos que mostrarle.
+  if (!organizations.length && !isAdminPage) {
+    location.replace("admin.html");
+    return;
+  }
+
   authScreen.hidden = true;
   appShell.hidden = false;
   btnLogout.hidden = false;
+  renderNavPermissions();
   renderOrganizationPicker();
   if (typeof window.onAuthenticated === "function") {
     window.onAuthenticated();
@@ -144,6 +215,7 @@ async function evaluateSession(session) {
     const res = await apiFetch("/api/auth/me");
     if (res.ok) {
       const me = await res.json();
+      window.currentUser = me;
       organizations = me.organizations || [];
       // Si la organización guardada ya no corresponde (le sacaron el acceso, o
       // quedó de otro usuario en el mismo navegador) usamos la que resolvió el

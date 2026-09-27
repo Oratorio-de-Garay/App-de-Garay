@@ -9,7 +9,9 @@ let renderRequestId = 0;
 // Búsqueda asistida
 let searchDebounceTimer = null;
 
-function init() {
+// La fecha del header no depende de la sesión: se pinta apenas carga la página,
+// también en la pantalla de login.
+function mostrarFechaHoy() {
   const hoy = new Date();
 
   const dias = [
@@ -39,7 +41,9 @@ function init() {
 
   document.getElementById("fecha-hoy").textContent =
     `${dias[hoy.getDay()]} ${hoy.getDate()} ${meses[hoy.getMonth()]}`;
+}
 
+function init() {
   const inputApellido = document.getElementById("input-apellido");
 
   // Buscar con Enter
@@ -2783,7 +2787,9 @@ function unescapeHtml(text) {
   return textarea.value;
 }
 
-// Started by auth.js once Google sign-in succeeds and the email is allowlisted.
+// init() lo llama sólo auth.js, una vez confirmada la sesión: antes también se
+// llamaba acá al cargar, lo que duplicaba los listeners (Enter buscaba dos
+// veces) y pedía /api/lookups sin sesión.
 window.onAuthenticated = init;
 
-init();
+mostrarFechaHoy();

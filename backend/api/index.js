@@ -5,7 +5,8 @@ import ws from "ws";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import { requireAllowedUser } from "./auth.js";
+import { requireAllowedUser, requireOrganization, puedeAdministrar } from "./auth.js";
+import adminRouter from "./admin.js";
 
 dotenv.config();
 
@@ -15,6 +16,25 @@ const app = express();
 
 app.use(express.json());
 app.use(cors());
+
+// Configuración pública del frontend, según el entorno. Sin variables de
+// entorno cae en el proyecto de producción (la publishable key es pública por
+// diseño). Con SUPABASE_URL local se habilita el login por email para
+// desarrollo, que en producción no existe.
+const SUPABASE_PROD_URL = "https://tcrrxgqwuxlykwyeymsp.supabase.co";
+const SUPABASE_PROD_PUBLISHABLE_KEY = "sb_publishable_86o3bgdc_aHgXPhTW7AzRQ_PH4yHoNT";
+
+app.get("/config.js", (req, res) => {
+  const url = process.env.SUPABASE_URL || SUPABASE_PROD_URL;
+  const key = process.env.SUPABASE_KEY || SUPABASE_PROD_PUBLISHABLE_KEY;
+  const esLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url);
+  res.type("application/javascript").set("Cache-Control", "no-store").send(
+    `window.API_URL = "";\n` +
+    `window.SUPABASE_URL = ${JSON.stringify(url)};\n` +
+    `window.SUPABASE_ANON_KEY = ${JSON.stringify(key)};\n` +
+    `window.AUTH_DEV_LOGIN = ${esLocal};\n`
+  );
+});
 
 // Servir archivos del frontend
 app.use(
@@ -45,6 +65,17 @@ app.use("/api", (req, res, next) => {
   return requireAllowedUser(req, res, next);
 });
 
+// Las rutas de datos operan sobre la organización activa. /auth/me y /admin no:
+// un superadmin sin membresías tiene que poder entrar al panel.
+app.use("/api", (req, res, next) => {
+  if (req.path === "/health" || req.path === "/auth/me" || req.path.startsWith("/admin/")) {
+    return next();
+  }
+  return requireOrganization(req, res, next);
+});
+
+app.use("/api/admin", adminRouter);
+
 // ─────────────────────────────────────────────────────────
 // Confirms the caller's token is valid and allowlisted.
 // The frontend calls this right after Google sign-in.
@@ -54,6 +85,10 @@ app.get("/api/auth/me", (req, res) => {
     email: req.user.email,
     organizacion_id: req.user.organizationId,
     organizations: req.user.organizations,
+    roles: req.user.roles,
+    es_superadmin: req.user.esSuperadmin,
+    organizaciones_admin: req.user.organizacionesAdministradas,
+    puede_administrar: puedeAdministrar(req.user),
   });
 });
 

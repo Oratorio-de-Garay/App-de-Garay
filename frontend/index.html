@@ -218,29 +218,8 @@
   </div>
 
 
-  <!--
-    API URL configuration
-    Se deja vacío porque el backend
-    sirve también el frontend.
-  -->
-
-  <script>
-
-    window.API_URL = "";
-
-  </script>
-
-<!-- API URL / Supabase configuration - set before loading index.js -->
-<script>
-  // Configure API URL - override with your backend URL
-  // Leave empty to use the same origin (default, works when backend serves the frontend)
-  window.API_URL = "";
-
-  // Supabase project config (safe to expose publicly - this is the anon key,
-  // access is enforced server-side via the allowed_emails table).
-  window.SUPABASE_URL = "https://tcrrxgqwuxlykwyeymsp.supabase.co";
-  window.SUPABASE_ANON_KEY = "sb_publishable_86o3bgdc_aHgXPhTW7AzRQ_PH4yHoNT";
-</script>
+<!-- Configuración de Supabase según el entorno (la sirve el backend). -->
+  <script src="config.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="auth.js" defer></script>

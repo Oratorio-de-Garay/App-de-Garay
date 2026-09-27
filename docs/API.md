@@ -10,11 +10,13 @@ Todas las rutas bajo `/api/*` **excepto `/api/health`** requieren:
 Authorization: Bearer <supabase_access_token>
 ```
 
-El token es el `access_token` de la sesión de Supabase Auth del usuario logueado (Google SSO), y además el email de esa sesión debe estar en la tabla `allowed_emails`. Usar siempre `window.apiFetch()` desde el frontend (definido en `frontend/auth.js`) — arma este header automáticamente.
+El token es el `access_token` de la sesión de Supabase Auth del usuario logueado (Google SSO), y además el email de esa sesión debe estar en la tabla `usuarios`. Usar siempre `window.apiFetch()` desde el frontend (definido en `frontend/auth.js`): arma este header y además `X-Organization-Id` con la organización activa.
 
 Respuestas de error de auth:
-- `401` — no autenticado o token inválido/expirado.
-- `403` — autenticado pero el email no está en `allowed_emails`.
+- `401`: no autenticado, o token inválido o expirado.
+- `403`: autenticado pero el email no está en `usuarios`.
+- `403` con `code: "SIN_ORGANIZACION"`: está registrado pero no tiene organizaciones. Un superadmin sin organizaciones recibe este error sólo en las rutas de datos; `/api/auth/me` y `/api/admin/*` le funcionan.
+- `403` "No pertenecés a esa organización": `X-Organization-Id` apunta a una organización de la que no es miembro.
 
 ## Forma común de un "pibe"
 
@@ -189,9 +191,40 @@ Devuelve el stock descontado y borra la venta (los ítems caen por cascada). **R
 
 ## `GET /api/auth/me`
 
-Devuelve el email de la sesión actual si el token es válido y está en la allowlist. Usado por el frontend justo después del login para decidir si mostrar la app o la pantalla de "no autorizado".
+Devuelve la sesión actual si el token es válido y el email está registrado. El frontend lo usa justo después del login para decidir si mostrar la app, la pantalla de "no autorizado" o el link al panel. `auth.js` lo guarda en `window.currentUser`.
 
-**Respuesta 200:** `{ "email": "persona@gmail.com" }`
+**Respuesta 200:**
+```json
+{
+  "email": "persona@gmail.com",
+  "organizacion_id": "uuid | null",
+  "organizations": [{ "id": "uuid", "name": "Oratorio de Garay" }],
+  "roles": [{ "rol": "admin", "organizacion_id": "uuid" }],
+  "es_superadmin": false,
+  "organizaciones_admin": ["uuid"],
+  "puede_administrar": true
+}
+```
+
+## Administración (`/api/admin/*`)
+
+Router en `backend/api/admin.js`. Todas las rutas exigen ser **admin de al menos una organización o superadmin** (`requireAdmin`); las marcadas con 🔒 exigen **superadmin**. Las reglas finas (scope, a quién se puede modificar) las aplica la base: ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md).
+
+Los errores esperables devuelven `{ "error": "<mensaje en español>" }` con 400 (dato inválido), 403 (sin permiso), 404 (no encontrado o fuera de scope) o 409 (duplicado).
+
+| Método y ruta | Body | Respuesta |
+|---|---|---|
+| `GET /api/admin/usuarios` | — | Usuarios con alguna membresía en el scope (el superadmin ve todos): `[{ id, email, nombre, created_at, organizaciones: [{id, nombre}], roles: [{rol, nombre, alcance, organizacion_id, organizacion_nombre}], editable }]`. Sólo se incluyen las organizaciones del scope. La búsqueda se hace en el cliente. |
+| `POST /api/admin/usuarios` | `{ email, nombre?, organizaciones: [uuid] }` (≥1) | **201** `{ id, email, creado, organizaciones_agregadas }`. Si el email ya existía se le agrega el acceso. |
+| `PATCH /api/admin/usuarios/:id` | `{ nombre?, organizaciones: [uuid] }` | `{ id, email, eliminado }`. Reemplaza las membresías **dentro del scope**. Con `[]` le quita el acceso; si no le queda ninguna, `eliminado: true`. |
+| `DELETE /api/admin/usuarios/:id` | — | `{ id, email, eliminado }`. Le quita todas las membresías del scope. |
+| `GET /api/admin/organizaciones` | — | Organizaciones del scope: `[{ id, nombre, created_at, miembros, admins }]`. |
+| `GET /api/admin/roles` | — | Catálogo: `[{ codigo, nombre, descripcion, alcance, asignable_desde_panel }]`. |
+| `GET /api/admin/auditoria?limit=` | — | Últimas N filas (default 100, máx. 500) dentro del scope, más las propias. |
+| 🔒 `POST /api/admin/roles/asignaciones` | `{ email, nombre?, rol, organizaciones: [uuid] }` | `{ id, email }`. Deja el rol **exactamente** en esas organizaciones (reemplazo). Crea el usuario y las membresías que falten. Si el rol es por organización exige ≥1 organización; si es global, ninguna. |
+| 🔒 `DELETE /api/admin/usuarios/:id/roles/:rol` | — | `{ id, email, eliminado }`. |
+| 🔒 `POST /api/admin/organizaciones` | `{ nombre }` | **201** `{ id, nombre }` |
+| 🔒 `PATCH /api/admin/organizaciones/:id` | `{ nombre }` | `{ id, nombre }` |
 
 ## `GET /api/health`
 

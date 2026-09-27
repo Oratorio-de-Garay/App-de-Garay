@@ -1,20 +1,24 @@
 # Base de datos
 
-Postgres gestionado por Supabase. Acceso desde el backend vía `@supabase/supabase-js`, con dos clientes distintos (ver [ARCHITECTURE.md](ARCHITECTURE.md#autenticación-y-autorización)):
+Postgres gestionado por Supabase. Acceso desde el backend vía `@supabase/supabase-js`, con la **service role key** en los dos clientes (`backend/api/index.js` y `backend/api/auth.js`). La service role bypassea RLS, así que:
 
-- Cliente con **anon/publishable key** (`backend/api/index.js`) — sujeto a RLS, usado para todas las rutas de datos (`pibes`, `asistencias`, lookups).
-- Cliente con **service role key** (`backend/api/auth.js`) — bypassea RLS, usado únicamente para validar sesión y chequear `allowed_emails`.
+- **Aislamiento entre organizaciones:** se aplica a mano en cada query con `.eq("organizacion_id", req.user.organizationId)`.
+- **Administración (usuarios, roles, organizaciones):** se aplica dentro de las funciones SQL del panel. Ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md).
+- **RLS:** queda como defensa en profundidad.
 
-> ⚠️ **El schema descripto acá no está completamente versionado en `supabase/migrations/`** (ver el punto 1 de deuda técnica en [ARCHITECTURE.md](ARCHITECTURE.md)). Esta es la fuente de verdad más confiable hoy — si hacés un cambio de schema, además de aplicarlo en Supabase, agregá una migración nueva para no perder más terreno.
+**La fuente de verdad del schema son las migraciones de `supabase/migrations/`.** Aplicadas en orden sobre una base vacía reconstruyen exactamente el schema de producción: se verificó con `supabase db dump` de las dos bases y la diferencia fue cero. Lo verifica también CI en cada PR (ver [SETUP.md](SETUP.md#base-de-datos)).
+
+- **Schema base:** la migración `20260730210820_remote_schema.sql` contiene `organizaciones`, `niveles_grados_pibes`, `grados_pibes`, `edades`, `pibes`, `asistencias` y `buscar_pibes`, que se habían creado a mano.
+- **Cambios de schema:** **siempre** van con una migración nueva, nunca a mano en el SQL Editor.
 
 ## Tablas
 
 ### `organizaciones`
-Catálogo de organizaciones (para este proyecto, una sola fila — "el oratorio").
+Catálogo de organizaciones (hoy: "Oratorio de Garay" y "Escuadra 3"). Cada tabla de datos tiene `organizacion_id`. El superadmin las crea y renombra desde el panel; no se borran, porque las tablas de datos las referencian sin cascade.
 | Columna | Tipo | Notas |
 |---|---|---|
-| id | int8 identity | PK |
-| nombre | varchar | único, not null |
+| id | uuid | PK, `gen_random_uuid()` |
+| nombre | varchar | not null. Único exacto (`organizaciones_nombre_key`) y único sin importar mayúsculas ni espacios (`organizaciones_nombre_ci_key`). |
 | created_at | timestamptz | |
 
 ### `niveles_grados_pibes`
@@ -40,7 +44,7 @@ Categoría etaria (ej: "Chiquitos", "Medianos", "Grandes", "Gigantes"). **Es un 
 |---|---|---|
 | id | int8 identity | PK |
 | nombre | varchar | not null |
-| organizacion | varchar | FK → `organizaciones.nombre` (ON DELETE CASCADE), not null |
+| organizacion_id | uuid | FK → `organizaciones.id` (ON DELETE CASCADE), not null |
 | created_at | timestamptz | |
 
 ### `pibes`
@@ -55,6 +59,7 @@ Entidad principal: cada chico/a registrado.
 | entrego_ficha | bool | not null — si presentó la ficha médica/de inscripción |
 | telefono_emergencia | int8 | nullable |
 | observaciones | text | nullable |
+| organizacion_id | uuid | FK → `organizaciones.id` (ON DELETE RESTRICT), not null |
 | created_at | timestamptz | |
 
 ### `asistencias`
@@ -64,19 +69,59 @@ Una fila = una visita. No hay columna de estado ("marked"): la existencia de la 
 | id | uuid | PK, `gen_random_uuid()` |
 | pibe_id | uuid | FK → `pibes.id` (ON DELETE RESTRICT), not null |
 | fecha | timestamptz | not null |
+| organizacion_id | uuid | FK → `organizaciones.id`, not null |
 | created_at | timestamptz | |
 
 El backend evita duplicar asistencias del mismo día para el mismo pibe chequeando el rango `[00:00Z, 24:00Z)` de la fecha antes de insertar (`POST /api/attendance/mark`).
 
-### `allowed_emails`
-Allowlist de logins de Google permitidos. Versionada en `supabase/migrations/20260807000000_allowed_emails.sql` y `20260807010000_grant_allowed_emails.sql`.
+### `usuarios` (ex `allowed_emails`)
+Emails de Google habilitados para loguearse. Se renombró en `20260926000000_roles_y_admin.sql`; antes estaba en `20260807000000_allowed_emails.sql`.
 | Columna | Tipo | Notas |
 |---|---|---|
 | email | text | PK, normalizado a lowercase/trim por trigger (`normalize_allowed_email`) |
-| note | text | nullable — para anotar de quién es el email |
-| created_at | timestamptz | |
+| id | uuid | único, `gen_random_uuid()`. Se usa en las URLs de la API para no exponer emails. |
+| nombre | text | nullable (ex `note`) |
+| created_at / updated_at | timestamptz | `updated_at` por trigger |
+| created_by | text | email de quien lo dio de alta (`'migracion'` / `'sql'` si no fue desde el panel) |
 
-Para agregar a alguien: `insert into public.allowed_emails (email, note) values ('persona@gmail.com', 'Motivo/rol');` en el SQL Editor de Supabase. **No hay UI para esto.**
+**Se administra desde el panel** (`admin.html`). Invariante: un usuario sin organizaciones y sin rol global se borra solo.
+
+> Existe una **vista temporal `public.allowed_emails`** (`security_invoker`, sólo `service_role`) sobre `usuarios`, para que el backend desplegado antes del cambio siga funcionando. Borrarla con `drop view public.allowed_emails;` en una migración nueva una vez desplegado el backend nuevo.
+
+### `organizacion_miembros`
+Membresía: el usuario puede ver y operar los datos de esa organización.
+| Columna | Tipo | Notas |
+|---|---|---|
+| email | text | FK → `usuarios.email` (ON DELETE CASCADE) |
+| organizacion_id | uuid | FK → `organizaciones.id` (ON DELETE CASCADE) |
+| created_at | timestamptz | |
+| created_by | text | |
+
+PK `(email, organizacion_id)`. La columna `rol` que existía se eliminó en `20260926000000`: nunca se leyó, y los roles viven en `usuario_roles`.
+
+### `roles`
+Catálogo de roles. Agregar un rol es un `insert` acá (ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#agregar-un-rol-nuevo)).
+| Columna | Tipo | Notas |
+|---|---|---|
+| codigo | text | PK (`superadmin`, `admin`) |
+| nombre / descripcion | text | se muestran en el panel |
+| alcance | text | `global` \| `organizacion` |
+| asignable_desde_panel | bool | `superadmin` es `false`: sólo se asigna por SQL |
+
+### `usuario_roles`
+Roles asignados. Una fila por (usuario, rol, organización).
+| Columna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK |
+| email | text | FK → `usuarios.email` (ON DELETE CASCADE) |
+| rol, alcance | text | FK compuesto → `roles(codigo, alcance)` |
+| organizacion_id | uuid | nullable. Check: obligatorio si `alcance = 'organizacion'`, nulo si es `global`. |
+| created_at / created_by | | |
+
+Además, el FK `(email, organizacion_id) → organizacion_miembros` hace que un rol por organización exija la membresía y caiga solo si se la quita. Unicidad con dos índices parciales (global / por organización).
+
+### `auditoria_admin`
+Una fila por cambio de administración: altas, membresías, roles y organizaciones. Columnas: `actor_email`, `accion`, `objetivo_email`, `organizacion_id` (FK, ON DELETE SET NULL), `detalle jsonb` y `created_at`. El detalle de cada `accion` está en [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#auditoría). Sin RLS pública: sólo la lee el backend.
 
 ### `buffet_eventos`
 Una jornada de venta ("Feria del Plato 29/08/2026"). Se crea una vez y agrupa todas sus ventas. Versionada en `supabase/migrations/20260830000000_buffet_eventos.sql`.
@@ -102,6 +147,8 @@ Los totales los recalcula siempre el servidor (`normalizeSaleItems` en `backend/
 ## Relaciones
 
 ```
+usuarios ──< organizacion_miembros >── organizaciones
+usuarios ──< usuario_roles >── roles          (usuario_roles >── organizacion_miembros para roles por organización)
 organizaciones ──< edades
 niveles_grados_pibes ──< grados_pibes ──< pibes >── edades
 pibes ──< asistencias
@@ -110,29 +157,57 @@ organizaciones ──< buffet_eventos ──< buffet_sales ──< buffet_sale_i
 
 ## Row Level Security (RLS)
 
-RLS está **habilitado en todas las tablas**. Estado real de acceso (configurado a mano vía SQL Editor, no versionado):
+RLS está **habilitado en todas las tablas**, y toda tabla nueva de `public` nace con RLS (event trigger `ensure_rls`). Como el backend usa la service role, las políticas son defensa en profundidad para el día que se consulte desde el cliente.
 
-- `organizaciones`, `niveles_grados_pibes`, `grados_pibes`, `edades`: `SELECT` público para el rol `anon` (necesario para poblar los dropdowns de "nuevo chico" vía `GET /api/lookups`).
-- `pibes`: `SELECT`, `INSERT`, `UPDATE` para `anon`.
-- `asistencias`: `SELECT`, `INSERT` para `anon`.
-- `allowed_emails`: **sin políticas públicas**. Sólo `service_role` tiene `GRANT SELECT`. Sólo se lee server-side con la service role key — intencional, así ningún cliente puede leer/alterar la allowlist directamente.
+**`anon` no tiene acceso a ninguna tabla ni a `buscar_pibes`.** Hasta `20260927000000_cerrar_acceso_publico.sql`, el schema original tenía políticas `public read/insert/update ... USING (true)` sin `TO`, que junto con `GRANT ALL` a `anon` dejaban leer y modificar pibes y asistencias con la publishable key del frontend. No volver a crear políticas sin `TO authenticated` (o más restrictivo).
 
-Recordatorio importante (ya mordió una vez): **RLS habilitado no implica el `GRANT` a nivel de tabla** — hacen falta ambos. Si una tabla nueva da `permission denied for table X` (código `42501`) aunque tenga políticas RLS correctas, probablemente falte el `GRANT SELECT/INSERT/... ON <tabla> TO anon;` (o `TO service_role`, según el cliente).
+- **Tablas de datos** (`pibes`, `asistencias`, `buffet_*`): política "org scope" para `authenticated`, filtrada por `organizaciones_del_usuario()` (ver `20260829000000_organizaciones.sql`).
+- **Catálogos:** `edades` es "org scope" para `authenticated`; `grados_pibes` y `niveles_grados_pibes` se pueden leer siendo `authenticated`.
+- **`organizaciones` / `organizacion_miembros`:** sólo `SELECT` de lo propio. Desde `20260926000000` además se les revocó `INSERT`/`UPDATE`/`DELETE` a `anon` y `authenticated`.
+- **`usuarios` / `usuario_roles`:** cada uno lee sólo su propia fila (`email = auth.jwt()->>'email'`). Sin escritura.
+- **`roles`:** lectura para `authenticated`.
+- **`auditoria_admin`:** sin políticas. Sólo la service role.
+
+Recordatorio importante (ya mordió una vez): **RLS habilitado no implica el `GRANT` a nivel de tabla**, hacen falta ambos. El proyecto tiene los privilegios por defecto restringidos: una tabla, secuencia o función nueva **no** recibe `SELECT`/`INSERT`/`EXECUTE` automáticos, ni siquiera para `service_role`.
+
+- **Síntoma:** si una tabla nueva da `permission denied for table X` (código `42501`), falta el `GRANT ... TO service_role` en la migración.
+- **Local igual que producción:** la migración base replica esos privilegios por defecto, así el error aparece también en local.
+
+## Funciones del panel de administración
+
+Definidas en `20260926000000_roles_y_admin.sql`. **Sólo `service_role` tiene `EXECUTE`.** Todas reciben al actor (`p_actor`, el email de la sesión), recalculan su scope y auditan en la misma transacción.
+
+| Función | Uso |
+|---|---|
+| `contexto_usuario(email)` | Middleware: registrado, organizaciones, roles, `es_superadmin`, `organizaciones_admin`. |
+| `es_superadmin(email)`, `organizaciones_administradas(email)` | Helpers de permisos. Son `security definer` y reutilizables desde RLS. |
+| `admin_alta_usuario`, `admin_editar_usuario`, `admin_quitar_acceso` | Usuarios, dentro del scope del admin. |
+| `superadmin_asignar_rol`, `superadmin_quitar_rol` | Roles (sólo superadmin). |
+| `superadmin_guardar_organizacion` | Crear o renombrar organización (sólo superadmin). |
+| `admin_listar_usuarios`, `admin_listar_organizaciones`, `admin_listar_auditoria` | Listados filtrados por scope. |
+
+Los SQLSTATE que levantan (y cómo se traducen a HTTP) están en [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#errores-de-las-funciones).
 
 ## Función RPC: `buscar_pibes`
 
-`GET /api/students/search` llama a `supabase.rpc("buscar_pibes", { termino })` y encadena `.select(...)` para traer los datos embebidos de `grados_pibes` y `edades`. **El cuerpo SQL de esta función no está en el repo** — vive únicamente en la base remota. Por su uso se infiere que busca por coincidencia parcial en `nombre` y/o `apellido` y devuelve filas de `pibes`. Si necesitás tocar el comportamiento de búsqueda, primero traé la definición real desde Supabase (SQL Editor → Database → Functions, o `supabase db pull`) antes de asumir su lógica.
+`GET /api/students/search` llama a `supabase.rpc("buscar_pibes", { termino })` y encadena `.select(...)` para traer los datos embebidos de `grados_pibes` y `edades`.
+
+- **Qué busca:** coincidencia parcial en `nombre` o `apellido`, sin distinguir mayúsculas ni tildes (`extensions.unaccent`). Devuelve filas de `pibes`.
+- **Organización:** la función no filtra por organización; ese filtro lo agrega el backend.
+- **Permisos:** es `SECURITY INVOKER`, así que respeta la RLS de `pibes`.
+- **Definición:** en `20260730210820_remote_schema.sql`.
 
 ## Seed de datos mínimos
 
-Antes de poder crear un pibe hace falta que existan filas en las tablas de lookup (por las FK `NOT NULL`):
+Antes de poder crear un pibe hace falta que existan filas en las tablas de lookup, por las FK `NOT NULL`.
 
-```sql
-insert into organizaciones (nombre) values ('Oratorio');
-insert into niveles_grados_pibes (nivel) values ('Jardín'), ('Primario'), ('Secundario');
-insert into grados_pibes (nivel, grado) values ('Primario', 1), ('Primario', 2), ('Primario', 3); -- etc.
-insert into edades (nombre, organizacion) values ('Chiquitos', 'Oratorio'), ('Medianos', 'Oratorio'), ('Grandes', 'Oratorio'), ('Gigantes', 'Oratorio');
-```
+- **En local:** [`supabase/seed.sql`](../supabase/seed.sql) carga niveles, grados, edades por organización y un pibe de prueba por organización. `supabase db reset --local` lo aplica solo.
+- **Organizaciones y superadmin:** los crean las migraciones.
+- **En producción:** los lookups ya existen; si hiciera falta agregar alguno, va con una migración.
+
+## Tests
+
+[`supabase/tests/`](../supabase/tests/) tiene tests pgTAP: reglas de roles y scope, constraints, auditoría y que `anon` o una cuenta no registrada no vean datos. Se corren contra la base local con `supabase test db`, y en CI en cada PR que toque `supabase/`.
 
 ## Credenciales
 

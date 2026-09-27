@@ -101,6 +101,20 @@ header {
   background: #1f5b3d;
 }
 
+/* Link al panel de administración: lo inyecta auth.js sólo para admins. */
+.side-link-admin::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--verde-mid);
+  vertical-align: middle;
+}
+
+.side-link[hidden] { display: none; }
+
 .app-main {
   padding: 18px;
   display: flex;
@@ -1222,3 +1236,16 @@ input[type=checkbox] {
     display: none;
   }
 }
+/* Login por magic link: sólo aparece con Supabase local (ver auth.js). */
+.dev-login {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1.5px dashed var(--amarillo-borde);
+  border-radius: 12px;
+  background: var(--amarillo-bg);
+}
+.dev-login-title { font-size: 12px; font-weight: 700; color: var(--amarillo-txt); text-transform: uppercase; letter-spacing: 0.5px; }
+.dev-login-msg { font-size: 13px; color: var(--amarillo-txt); }

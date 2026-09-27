@@ -1,0 +1,33 @@
+# Verifica que las migraciones reconstruyan la base desde cero y que las
+# reglas de permisos se cumplan (supabase/tests). Corre en una base local
+# efímera dentro del runner: no toca producción.
+name: Base de datos
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/base-de-datos.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+
+jobs:
+  migraciones-y-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+
+      # Levanta Postgres y aplica todas las migraciones + seed.sql. Si alguna
+      # migración falla sobre una base vacía, el job falla acá.
+      - name: Aplicar migraciones desde cero
+        run: supabase db start
+
+      - name: Tests de la base (pgTAP)
+        run: supabase test db
