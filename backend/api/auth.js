@@ -17,16 +17,14 @@ const supabaseAdmin = createClient(
 );
 
 /**
- * Express middleware: requires a valid Supabase session (Google SSO)
- * whose email is registered in public.usuarios, and resolves the
- * organization the request operates on plus the user's roles.
+ * Valida la sesión de Supabase (Google o código por mail) sin exigir que el
+ * email esté registrado. Deja en req.auth: email y nombreSugerido (el nombre
+ * que trae la cuenta de Google, si hay).
  *
- * Leaves on req.user:
- *   email, organizationId (the active one, null for a superadmin without
- *   memberships), organizations (all memberships), roles,
- *   esSuperadmin, organizacionesAdministradas (ids; all orgs for a superadmin)
+ * Sola la usan las rutas de /api/registro: las de quien todavía no tiene
+ * acceso y está pidiéndolo.
  */
-export async function requireAllowedUser(req, res, next) {
+export async function requireSession(req, res, next) {
   try {
     const authHeader = req.headers.authorization || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -40,7 +38,35 @@ export async function requireAllowedUser(req, res, next) {
       return res.status(401).json({ error: "Sesión inválida o expirada" });
     }
 
-    const email = userData.user.email.toLowerCase().trim();
+    const metadata = userData.user.user_metadata || {};
+    req.auth = {
+      email: userData.user.email.toLowerCase().trim(),
+      nombreSugerido: metadata.full_name || metadata.name || null,
+    };
+    next();
+  } catch (error) {
+    console.error("Auth check error:", error);
+    res.status(500).json({ error: "Error verificando autenticación" });
+  }
+}
+
+/**
+ * Express middleware: requires a valid Supabase session whose email is
+ * registered in public.usuarios, and resolves the organization the request
+ * operates on plus the user's roles.
+ *
+ * Leaves on req.user:
+ *   email, organizationId (the active one, null for a superadmin without
+ *   memberships), organizations (all memberships), roles,
+ *   esSuperadmin, organizacionesAdministradas (ids; all orgs for a superadmin)
+ */
+export function requireAllowedUser(req, res, next) {
+  return requireSession(req, res, () => resolverUsuario(req, res, next));
+}
+
+async function resolverUsuario(req, res, next) {
+  try {
+    const { email } = req.auth;
 
     // Usuario, membresías y roles en una sola consulta (ver contexto_usuario
     // en supabase/migrations/20260926000000_roles_y_admin.sql).
@@ -49,8 +75,13 @@ export async function requireAllowedUser(req, res, next) {
 
     if (contextoError) throw contextoError;
 
+    // El code le dice al frontend que muestre la pantalla de registro
+    // (solicitar sumarse a un espacio) en vez de un error.
     if (!contexto?.registrado) {
-      return res.status(403).json({ error: "No tenés acceso a esta aplicación" });
+      return res.status(403).json({
+        error: "Tu cuenta todavía no tiene acceso a esta aplicación",
+        code: "SIN_REGISTRO",
+      });
     }
 
     const organizations = contexto.organizaciones || [];
