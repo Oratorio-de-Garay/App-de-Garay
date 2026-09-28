@@ -125,77 +125,171 @@ function renderVerifying() {
   btnLogout.hidden = true;
 }
 
+// Segundos de espera antes de poder pedir otro código.
+const REENVIO_SEGUNDOS = 60;
+
+/**
+ * Login: Google, o mail + código de 6 dígitos (Supabase OTP, sin contraseña).
+ * Es el mismo flujo para registrarse y para entrar: si la cuenta no existe,
+ * Supabase la crea. El acceso lo decide después el backend: quien no está en
+ * public.usuarios ve la pantalla de registro (registro.js).
+ */
 function renderLogin() {
+  authCard.classList.remove("auth-card-wide");
   authCard.innerHTML = `
     <div class="auth-title">Registro de ingreso</div>
-    <div class="auth-sub">Iniciá sesión con tu cuenta de Google del Classroom para acceder.</div>
+    <div class="auth-sub">Entrá o creá tu cuenta con Google o con tu mail.</div>
     <button class="btn-google" id="btn-google" type="button">
       <span class="btn-google-icon">G</span> Continuar con Google
     </button>
+    <div class="auth-divider"><span>o con tu mail</span></div>
+    <div id="login-mail"></div>
   `;
   document.getElementById("btn-google").addEventListener("click", async () => {
     await supabaseClient.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin + window.location.pathname },
+      // Con la query: el link de un mail (ej: admin.html?tab=solicitudes&...)
+      // tiene que llegar entero después del login.
+      options: { redirectTo: window.location.origin + window.location.pathname + window.location.search },
     });
   });
-  if (window.AUTH_DEV_LOGIN) renderDevLogin();
+  renderPasoMail();
   authScreen.hidden = false;
   appShell.hidden = true;
   btnLogout.hidden = true;
 }
 
-/**
- * Sólo con Supabase local (config.js pone AUTH_DEV_LOGIN): login por magic
- * link, para no necesitar credenciales de Google en desarrollo. El mail llega
- * a Mailpit (http://127.0.0.1:54324). El acceso lo sigue decidiendo el backend
- * con public.usuarios, igual que con Google.
- */
-function renderDevLogin() {
-  const box = document.createElement("form");
-  box.className = "dev-login";
+function renderPasoMail(emailInicial = "") {
+  const box = document.getElementById("login-mail");
   box.innerHTML = `
-    <div class="dev-login-title">Desarrollo local</div>
-    <input class="form-input" type="email" id="dev-email" placeholder="email registrado en usuarios" required>
-    <button class="btn-sec" type="submit">Enviar magic link</button>
-    <div class="dev-login-msg" id="dev-login-msg"></div>
+    <form class="login-form" id="form-mail" novalidate>
+      <input class="form-input" type="email" id="login-email" inputmode="email" autocomplete="email"
+        placeholder="tu@mail.com" value="${escapeHtmlAuth(emailInicial)}" aria-label="Tu mail" required>
+      <button class="btn-main" type="submit" id="btn-enviar-codigo">Enviar código</button>
+      <div class="login-msg" id="login-msg" role="alert"></div>
+    </form>
   `;
-  box.addEventListener("submit", async (e) => {
+  const form = document.getElementById("form-mail");
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const msg = document.getElementById("dev-login-msg");
-    const { error } = await supabaseClient.auth.signInWithOtp({
-      email: document.getElementById("dev-email").value.trim(),
-      options: { emailRedirectTo: window.location.origin + window.location.pathname },
-    });
-    msg.innerHTML = error
-      ? escapeHtmlAuth(error.message)
-      : 'Listo: abrí el mail en <a href="http://127.0.0.1:54324" target="_blank" rel="noopener">Mailpit</a>.';
+    const email = document.getElementById("login-email").value.trim().toLowerCase();
+    const msg = document.getElementById("login-msg");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      msg.textContent = "Ingresá un mail válido.";
+      return;
+    }
+    const btn = document.getElementById("btn-enviar-codigo");
+    btn.disabled = true;
+    msg.textContent = "";
+    const error = await enviarCodigo(email);
+    btn.disabled = false;
+    if (error) {
+      msg.textContent = error;
+      return;
+    }
+    renderPasoCodigo(email);
   });
-  authCard.appendChild(box);
 }
 
-function renderUnauthorized(email) {
-  authCard.innerHTML = `
-    <div class="auth-title">Acceso no autorizado</div>
-    <div class="auth-sub">La cuenta <strong>${escapeHtmlAuth(email)}</strong> no está habilitada para esta aplicación. Pedile a un administrador que agregue tu email a la lista de acceso.</div>
-    <button class="btn-sec" id="btn-otra-cuenta" type="button">Probar con otra cuenta</button>
+function renderPasoCodigo(email) {
+  const box = document.getElementById("login-mail");
+  box.innerHTML = `
+    <form class="login-form" id="form-codigo" novalidate>
+      <div class="auth-sub">Te mandamos un código a <strong>${escapeHtmlAuth(email)}</strong>.${
+        window.AUTH_DEV_LOGIN ? ' En local llega a <a href="http://127.0.0.1:54324" target="_blank" rel="noopener">Mailpit</a>.' : ""
+      }</div>
+      <input class="form-input login-codigo" type="text" id="login-codigo" inputmode="numeric" autocomplete="one-time-code"
+        maxlength="6" pattern="[0-9]*" placeholder="000000" aria-label="Código de 6 dígitos" required>
+      <button class="btn-main" type="submit" id="btn-verificar">Entrar</button>
+      <div class="login-msg" id="login-msg" role="alert"></div>
+      <div class="login-links">
+        <button class="link-btn" type="button" id="btn-reenviar" disabled></button>
+        <button class="link-btn" type="button" id="btn-cambiar-mail">Cambiar mail</button>
+      </div>
+    </form>
   `;
-  document.getElementById("btn-otra-cuenta").addEventListener("click", () => supabaseClient.auth.signOut());
-  authScreen.hidden = false;
-  appShell.hidden = true;
-  btnLogout.hidden = false;
+  const input = document.getElementById("login-codigo");
+  const msg = document.getElementById("login-msg");
+  input.focus();
+  // Pegar "123 456" o un código con espacios también sirve.
+  input.addEventListener("input", () => {
+    input.value = input.value.replace(/\D/g, "").slice(0, 6);
+  });
+
+  document.getElementById("form-codigo").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const token = input.value.trim();
+    if (token.length !== 6) {
+      msg.textContent = "El código tiene 6 dígitos.";
+      return;
+    }
+    const btn = document.getElementById("btn-verificar");
+    btn.disabled = true;
+    msg.textContent = "";
+    // Si sale bien, onAuthStateChange (SIGNED_IN) sigue con evaluateSession.
+    const { error } = await supabaseClient.auth.verifyOtp({ email, token, type: "email" });
+    if (error) {
+      btn.disabled = false;
+      msg.textContent = mensajeErrorAuth(error);
+      input.select();
+    }
+  });
+
+  document.getElementById("btn-cambiar-mail").addEventListener("click", () => renderPasoMail(email));
+
+  const reenviar = document.getElementById("btn-reenviar");
+  let restantes = REENVIO_SEGUNDOS;
+  const tick = () => {
+    if (!document.body.contains(reenviar)) return clearInterval(timer);
+    restantes -= 1;
+    reenviar.disabled = restantes > 0;
+    reenviar.textContent = restantes > 0 ? `Reenviar código (${restantes}s)` : "Reenviar código";
+    if (restantes <= 0) clearInterval(timer);
+  };
+  const timer = setInterval(tick, 1000);
+  reenviar.textContent = `Reenviar código (${restantes}s)`;
+  reenviar.addEventListener("click", async () => {
+    reenviar.disabled = true;
+    const error = await enviarCodigo(email);
+    msg.textContent = error || "";
+    if (!error) {
+      toast("Te mandamos un código nuevo.");
+      renderPasoCodigo(email);
+    } else {
+      reenviar.disabled = false;
+    }
+  });
 }
 
-function renderNoOrganization(email) {
-  authCard.innerHTML = `
-    <div class="auth-title">Falta asignarte una organización</div>
-    <div class="auth-sub">La cuenta <strong>${escapeHtmlAuth(email)}</strong> está habilitada, pero todavía no pertenece a ninguna organización, así que no hay datos para mostrarte. Pedile a un administrador que te agregue a una.</div>
-    <button class="btn-sec" id="btn-otra-cuenta" type="button">Probar con otra cuenta</button>
-  `;
-  document.getElementById("btn-otra-cuenta").addEventListener("click", () => supabaseClient.auth.signOut());
+/** Devuelve el mensaje de error, o null si se mandó. */
+async function enviarCodigo(email) {
+  const { error } = await supabaseClient.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: true },
+  });
+  return error ? mensajeErrorAuth(error) : null;
+}
+
+function mensajeErrorAuth(error) {
+  const texto = `${error?.code || ""} ${error?.message || ""}`.toLowerCase();
+  if (error?.status === 429 || texto.includes("rate") || texto.includes("security purposes")) {
+    return "Pediste demasiados códigos seguidos. Esperá un minuto y probá de nuevo.";
+  }
+  if (texto.includes("expired") || texto.includes("invalid") || texto.includes("otp")) {
+    return "El código no es válido o ya venció. Revisalo o pedí uno nuevo.";
+  }
+  if (texto.includes("signup") || texto.includes("not allowed")) {
+    return "No se pueden crear cuentas nuevas en este momento.";
+  }
+  return "No se pudo completar. Revisá tu conexión e intentá de nuevo.";
+}
+
+/** Sesión válida sin acceso a la app: pantalla para pedirlo (registro.js). */
+function renderAccessRequest() {
   authScreen.hidden = false;
   appShell.hidden = true;
-  btnLogout.hidden = false;
+  btnLogout.hidden = true;
+  window.renderRegistro(authCard);
 }
 
 /**
@@ -247,7 +341,7 @@ function renderNavPermissions() {
   }
 }
 
-function renderApp(email) {
+function renderApp() {
   const puedeAdministrar = Boolean(window.currentUser?.puede_administrar);
 
   // El panel es sólo para admins: al resto lo mandamos al inicio con un aviso.
@@ -261,7 +355,7 @@ function renderApp(email) {
   // el panel; cualquier otro usuario todavía no tiene nada que hacer acá.
   if (!organizations.length && !isAdminPage) {
     if (puedeAdministrar) location.replace("admin.html");
-    else renderNoOrganization(email);
+    else renderAccessRequest();
     return;
   }
 
@@ -312,17 +406,18 @@ async function evaluateSession(session) {
 
       if (!appStarted) {
         appStarted = true;
-        renderApp(session.user?.email || "");
+        renderApp();
       }
       return;
     }
-    if (res.status === 401 || res.status === 403) {
-      const body = await res.json().catch(() => ({}));
-      if (body.code === "SIN_ORGANIZACION") {
-        renderNoOrganization(session.user?.email || "");
-      } else {
-        renderUnauthorized(session.user?.email || "");
-      }
+    if (res.status === 401) {
+      // Token rechazado por el backend: se vuelve a loguear.
+      await supabaseClient.auth.signOut();
+      return;
+    }
+    if (res.status === 403) {
+      // Sesión válida pero sin acceso: pantalla para pedirlo (registro.js).
+      renderAccessRequest();
       return;
     }
     throw new Error("Server error");

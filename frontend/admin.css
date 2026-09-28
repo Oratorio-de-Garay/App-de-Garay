@@ -587,3 +587,82 @@
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }
 }
+
+/* ─── Solicitudes ─── */
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: var(--admin-rojo);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.tab-badge[hidden] { display: none; }
+
+.estado-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.estado-pendiente { background: var(--amarillo-bg); color: var(--amarillo-txt); border: 1px solid var(--amarillo-borde); }
+.estado-aceptada { background: #e6f4ea; color: #0f5c2e; border: 1px solid #a8d5b0; }
+.estado-rechazada { background: var(--admin-rojo-bg); color: var(--admin-rojo); border: 1px solid var(--admin-rojo-borde); }
+.estado-cancelada { background: #f2f4f3; color: var(--texto-sec); border: 1px solid var(--borde); }
+
+.solicitud-pedido {
+  font-size: 14px;
+  line-height: 1.6;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.solicitud-pedido .org-chip,
+.solicitud-pedido .scope-tag { vertical-align: 1px; }
+
+.solicitud-comentario {
+  margin-top: 4px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--texto);
+  overflow-wrap: anywhere;
+}
+
+.solicitud-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--borde);
+}
+.solicitud-persona { display: flex; align-items: center; gap: 12px; }
+.solicitud-persona .row-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.solicitud-opcion {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.solicitud-opcion input { accent-color: var(--verde); margin-top: 3px; }
+.solicitud-opcion span { display: flex; flex-direction: column; gap: 2px; }
+.solicitud-opcion small { font-size: 12px; color: var(--texto-sec); }
+.solicitud-opcion + .form-input,
+.solicitud-opcion + .admin-select { margin-left: 26px; width: calc(100% - 26px); }
+
+.admin-modal textarea.form-input { resize: vertical; font-family: inherit; }
+
+.activity-solicitud .activity-dot { background: #f0a500; box-shadow: 0 0 0 4px var(--amarillo-bg); }
