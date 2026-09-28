@@ -10,11 +10,11 @@ Todas las rutas bajo `/api/*` **excepto `/api/health`** requieren:
 Authorization: Bearer <supabase_access_token>
 ```
 
-El token es el `access_token` de la sesión de Supabase Auth del usuario logueado (Google SSO), y además el email de esa sesión debe estar en la tabla `usuarios`. Usar siempre `window.apiFetch()` desde el frontend (definido en `frontend/auth.js`): arma este header y además `X-Organization-Id` con la organización activa.
+El token es el `access_token` de la sesión de Supabase Auth del usuario logueado (Google o código por mail), y además el email de esa sesión debe estar en la tabla `usuarios` (salvo en `/api/registro/*`, que es justamente para quien todavía no está). Usar siempre `window.apiFetch()` desde el frontend (definido en `frontend/auth.js`): arma este header y además `X-Organization-Id` con la organización activa.
 
 Respuestas de error de auth:
 - `401`: no autenticado, o token inválido o expirado.
-- `403`: autenticado pero el email no está en `usuarios`.
+- `403` con `code: "SIN_REGISTRO"`: autenticado pero el email no está en `usuarios`. El frontend muestra la pantalla de registro (`/api/registro`).
 - `403` con `code: "SIN_ORGANIZACION"`: está registrado pero no tiene organizaciones. Un superadmin sin organizaciones recibe este error sólo en las rutas de datos; `/api/auth/me` y `/api/admin/*` le funcionan.
 - `403` "No pertenecés a esa organización": `X-Organization-Id` apunta a una organización de la que no es miembro.
 
@@ -226,6 +226,39 @@ Los errores esperables devuelven `{ "error": "<mensaje en español>" }` con 400 
 | 🔒 `POST /api/admin/organizaciones` | `{ nombre }` | **201** `{ id, nombre }` |
 | 🔒 `PATCH /api/admin/organizaciones/:id` | `{ nombre }` | `{ id, nombre }` |
 
+### Solicitudes
+
+Las listan y resuelven los admins (las de sus organizaciones) y los superadmins (todas, incluidos los pedidos de espacio nuevo). Forma de una solicitud:
+
+```json
+{
+  "id": "uuid", "numero": 12, "tipo": "registro_usuario", "tipo_nombre": "Registro de usuario",
+  "estado": "pendiente | aceptada | rechazada | cancelada",
+  "solicitante_email": "x@gmail.com", "solicitante_nombre": "María Pérez",
+  "organizacion_id": "uuid | null", "organizacion_nombre": "Oratorio de Garay | null",
+  "datos": { "espacio_nuevo": true, "nombre_espacio": "Escuadra 4", "organizacion_creada": true, "rol_asignado": "admin" },
+  "aprobador_id": "uuid | null", "aprobador_email": "...", "aprobador_nombre": "...",
+  "comentario_aprobador": "texto | null",
+  "created_at": "...", "tomada_at": "...", "resuelta_at": "..."
+}
+```
+
+| Endpoint | Body | Respuesta |
+|---|---|---|
+| `GET /api/admin/solicitudes?estado=` | — | `[solicitud]` del scope, pendientes primero. `estado` opcional. |
+| `POST /api/admin/solicitudes/:id/tomar` | — | `solicitud`. El actor queda como aprobador; sigue pendiente. Reasigna si ya la tenía otro. |
+| `POST /api/admin/solicitudes/:id/resolver` | `{ decision: "aceptar" \| "rechazar", comentario?, organizacion_id?, nombre_espacio? }` | `solicitud` + `notificados` (mails enviados). Para un espacio nuevo (sólo superadmin): `organizacion_id` lo asigna a uno existente (miembro, sin rol); si no, se crea con `nombre_espacio` (o el pedido) y queda admin. `409` si ya estaba resuelta. |
+
+## Registro (`/api/registro/*`)
+
+Router en `backend/api/registro.js`. Sólo exige una sesión válida (`requireSession`), no estar registrado: lo usa quien inició sesión pero todavía no tiene acceso. Todo se hace sobre el email de la sesión.
+
+| Endpoint | Body | Respuesta |
+|---|---|---|
+| `GET /api/registro` | — | `{ email, nombre_sugerido, registrado, solicitud, espacios: [{id, nombre}] }`. `solicitud` es la última (en cualquier estado) o `null`. |
+| `POST /api/registro/solicitudes` | `{ nombre, organizacion_id }` o `{ nombre, nombre_espacio }` | **201** `solicitud` + `notificados`. Avisa por mail a los superadmins y a los admins del espacio. `409` si ya tiene una pendiente, si el espacio nuevo ya existe o si ya tiene acceso. |
+| `POST /api/registro/solicitudes/:id/cancelar` | — | `solicitud` cancelada. Sólo la propia, pendiente y sin tomar (`409` si ya la tomaron). |
+
 ## `GET /api/health`
 
 Única ruta sin autenticación. Usada por monitoreo de uptime.
@@ -236,4 +269,4 @@ Los errores esperables devuelven `{ "error": "<mensaje en español>" }` con 400 
 
 ## Errores
 
-Formato uniforme: `{ "error": "mensaje" }`, siempre logueado en el server con `console.error("<Contexto> error:", error)` antes de responder. Casi todos los errores no-auth devuelven `500` (no hay diferenciación fina de status codes salvo `400` en validaciones de input explícitas).
+Formato uniforme: `{ "error": "mensaje" }`, siempre logueado en el server con `console.error("<Contexto> error:", error)` antes de responder. Casi todos los errores no-auth devuelven `500` (no hay diferenciación fina de status codes salvo `400` en validaciones de input explícitas). Las rutas de `/api/admin` y `/api/registro` traducen los errores de la base a `400`/`403`/`404`/`409` (ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#errores-de-las-funciones)).

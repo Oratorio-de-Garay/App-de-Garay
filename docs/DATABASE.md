@@ -121,6 +121,27 @@ Además, el FK `(email, organizacion_id) → organizacion_miembros` hace que un 
 ### `auditoria_admin`
 Una fila por cambio de administración: altas, membresías, roles y organizaciones. Columnas: `actor_email`, `accion`, `objetivo_email`, `organizacion_id` (FK, ON DELETE SET NULL), `detalle jsonb` y `created_at`. El detalle de cada `accion` está en [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#auditoría). Sin RLS pública: sólo la lee el backend.
 
+### `solicitud_tipos`
+Catálogo de tipos de solicitud (como `roles`). Hoy: `registro_usuario`. Versionada en `20260928000000_solicitudes.sql`.
+
+### `solicitudes`
+Pedidos que aprueba un admin o superadmin, como tickets. Ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#registro-y-solicitudes).
+| Columna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK |
+| numero | int8 identity | único; el "#12" del panel y los mails |
+| tipo | text | FK → `solicitud_tipos.codigo` |
+| estado | text | `pendiente` \| `aceptada` \| `rechazada` \| `cancelada`. Check: `resuelta_at` es nulo si y sólo si está pendiente. |
+| solicitante_email | text | normalizado. No es FK: todavía no está en `usuarios`. |
+| solicitante_nombre | text | not null, hasta 120 |
+| organizacion_id | uuid | FK → `organizaciones.id`, nullable. Define quién la ve. Nula = espacio nuevo pendiente; al aceptarla se completa con la organización final. |
+| datos | jsonb | lo propio de cada tipo. `registro_usuario`: `{ espacio_nuevo, nombre_espacio, organizacion_creada, rol_asignado }` |
+| aprobador_id | uuid | FK → `usuarios.id` (ON DELETE SET NULL). Quien la tomó o la resolvió. |
+| comentario_aprobador | text | hasta 1000 |
+| created_at / updated_at / tomada_at / resuelta_at | timestamptz | `updated_at` por trigger |
+
+Índice único parcial `(solicitante_email, tipo) where estado = 'pendiente'`: una sola pendiente por persona. Sin RLS pública: sólo la lee el backend.
+
 ### `buffet_eventos`
 Una jornada de venta ("Feria del Plato 29/08/2026"). Se crea una vez y agrupa todas sus ventas. Versionada en `supabase/migrations/20260830000000_buffet_eventos.sql`.
 | Columna | Tipo | Notas |
@@ -151,6 +172,7 @@ organizaciones ──< edades
 niveles_grados_pibes ──< grados_pibes ──< pibes >── edades
 pibes ──< asistencias
 organizaciones ──< buffet_eventos ──< buffet_sales ──< buffet_sale_items
+solicitud_tipos ──< solicitudes >── organizaciones   (solicitudes.aprobador_id >── usuarios)
 ```
 
 ## Row Level Security (RLS)
@@ -164,7 +186,7 @@ RLS está **habilitado en todas las tablas**, y toda tabla nueva de `public` nac
 - **`organizaciones` / `organizacion_miembros`:** sólo `SELECT` de lo propio. Desde `20260926000000` además se les revocó `INSERT`/`UPDATE`/`DELETE` a `anon` y `authenticated`.
 - **`usuarios` / `usuario_roles`:** cada uno lee sólo su propia fila (`email = auth.jwt()->>'email'`). Sin escritura.
 - **`roles`:** lectura para `authenticated`.
-- **`auditoria_admin`:** sin políticas. Sólo la service role.
+- **`auditoria_admin`, `solicitudes`, `solicitud_tipos`:** sin políticas. Sólo la service role.
 
 Recordatorio importante (ya mordió una vez): **RLS habilitado no implica el `GRANT` a nivel de tabla**, hacen falta ambos. El proyecto tiene los privilegios por defecto restringidos: una tabla, secuencia o función nueva **no** recibe `SELECT`/`INSERT`/`EXECUTE` automáticos, ni siquiera para `service_role`.
 
@@ -183,6 +205,15 @@ Definidas en `20260926000000_roles_y_admin.sql`. **Sólo `service_role` tiene `E
 | `superadmin_asignar_rol`, `superadmin_quitar_rol` | Roles (sólo superadmin). |
 | `superadmin_guardar_organizacion` | Crear o renombrar organización (sólo superadmin). |
 | `admin_listar_usuarios`, `admin_listar_organizaciones`, `admin_listar_auditoria` | Listados filtrados por scope. |
+
+Las de solicitudes están en `20260928000000_solicitudes.sql`, con las mismas reglas (sólo `service_role`, actor explícito, auditoría en la misma transacción):
+
+| Función | Uso |
+|---|---|
+| `registro_estado(email)` | Pantalla de registro: si ya tiene acceso, su última solicitud y los espacios. |
+| `registro_crear_solicitud`, `registro_cancelar_solicitud` | Las usa el solicitante (el email lo pone el backend desde la sesión). `registro_crear_solicitud` devuelve además a quién avisar. |
+| `admin_listar_solicitudes`, `admin_tomar_solicitud`, `admin_resolver_solicitud` | Panel, dentro del scope del actor. |
+| `solicitud_json`, `solicitud_visible_para`, `solicitud_aprobadores` | Helpers: forma única de una solicitud, scope y destinatarios de los avisos. |
 
 Los SQLSTATE que levantan (y cómo se traducen a HTTP) están en [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#errores-de-las-funciones).
 
