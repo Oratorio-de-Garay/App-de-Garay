@@ -1,0 +1,19 @@
+<!doctype html>
+<!--
+  Mail con el código de login (Supabase Auth). Se usa para "Confirm signup"
+  (cuenta nueva) y "Magic Link" (cuenta existente).
+  Local: supabase/config.toml. Producción: pegar este HTML en Supabase →
+  Authentication → Email Templates, en las dos plantillas (ver docs/SETUP.md).
+-->
+<html>
+  <body style="margin:0;background:#f4f5f2;font-family:Arial,Helvetica,sans-serif;color:#1f2a22">
+    <div style="max-width:520px;margin:0 auto;padding:28px 16px">
+      <div style="background:#fff;border-radius:12px;padding:26px 24px;border:1px solid #e3e6df;text-align:center">
+        <h1 style="font-size:19px;margin:0 0 12px">Tu código para entrar</h1>
+        <p style="margin:0 0 18px;line-height:1.5">Escribí este código en la app de Oratorio de Garay:</p>
+        <p style="font-size:32px;letter-spacing:8px;font-weight:700;margin:0 0 18px;font-family:'Courier New',monospace">{{ .Token }}</p>
+        <p style="margin:0;font-size:13px;color:#7a847c;line-height:1.5">Vence en 10 minutos. Si no lo pediste, ignorá este mail.</p>
+      </div>
+    </div>
+  </body>
+</html>

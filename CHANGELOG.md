@@ -8,6 +8,26 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Agregado
 
+- **Registro abierto con aprobación.** Cualquiera puede crear una cuenta, pero no tiene acceso a nada hasta que lo aprueben:
+  - **Login con el mail**, además de Google: se escribe el mail y se ingresa un código de 6 dígitos, sin contraseña. Es el mismo flujo para registrarse y para entrar.
+  - **Pantalla de registro** (`frontend/registro.js`):
+    - Quien no tiene acceso pone su nombre y elige un espacio de la lista "Espacios", o "Nuevo".
+    - La solicitud queda pendiente, y se puede cancelar mientras nadie la tome.
+  - **Pestaña Solicitudes** en el panel:
+    - Contador de pendientes.
+    - Tomar, aceptar o rechazar con comentario.
+    - Para un espacio nuevo, el superadmin puede corregir el nombre o asignarlo a uno que ya existía.
+  - **Mails** (Gmail por SMTP, `backend/api/mail.js`):
+    - A los superadmins y admins del espacio cuando hay una solicitud nueva, con un link directo a ella.
+    - Al solicitante cuando se resuelve.
+- **Solicitudes genéricas** (migración `20260928000000_solicitudes.sql`):
+  - Tablas `solicitud_tipos` y `solicitudes`: estado, aprobador, comentario y datos por tipo.
+  - Funciones `registro_*` y `admin_*_solicitud*`.
+  - Cuatro acciones nuevas de auditoría.
+  - Tests pgTAP en `supabase/tests/solicitudes.test.sql`.
+- **Endpoints** `/api/registro/*` y `/api/admin/solicitudes*`.
+- **Volver al link después del login:** si alguien abre un link sin sesión (ej: el de un mail), después de iniciar sesión, con Google o con código, vuelve a ese link y no al inicio.
+
 - **Panel de administración** (`frontend/admin.html`). Lo ven sólo admins y superadmins, y tiene cuatro pestañas:
   - **Usuarios**:
     - Alta de un email de Google con una o más organizaciones (ambos requeridos) y nombre opcional.
@@ -45,6 +65,10 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Cambiado
 
+- **Cuenta sin acceso:**
+  - Ya no ve "Acceso no autorizado", sino la pantalla de registro.
+  - `/api/auth/me` responde `403` con `code: "SIN_REGISTRO"`.
+- **Login en local:** se entra con el código por mail, que llega a Mailpit. Se eliminó el magic link de desarrollo.
 - **`allowed_emails` pasa a llamarse `usuarios`:**
   - `note` pasa a ser `nombre`.
   - Se agregan `id`, `created_by` y `updated_at`.

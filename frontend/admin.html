@@ -18,7 +18,7 @@
       <div class="dot"></div>
       <div>
         <div class="header-title">Administración</div>
-        <div class="header-sub">Usuarios, roles y organizaciones</div>
+        <div class="header-sub">Usuarios, solicitudes, roles y organizaciones</div>
       </div>
     </div>
     <div class="header-actions">
@@ -52,12 +52,14 @@
 
       <nav class="admin-tabs" id="admin-tabs" role="tablist" aria-label="Secciones del panel">
         <button class="admin-tab active" type="button" role="tab" data-tab="usuarios" aria-selected="true">Usuarios</button>
+        <button class="admin-tab" type="button" role="tab" data-tab="solicitudes">Solicitudes <span class="tab-badge" id="solicitudes-badge" hidden></span></button>
         <button class="admin-tab" type="button" role="tab" data-tab="roles" data-solo-superadmin hidden>Roles</button>
         <button class="admin-tab" type="button" role="tab" data-tab="organizaciones" data-solo-superadmin hidden>Organizaciones</button>
         <button class="admin-tab" type="button" role="tab" data-tab="actividad">Actividad</button>
       </nav>
 
       <section class="admin-panel active" id="panel-usuarios" role="tabpanel"></section>
+      <section class="admin-panel" id="panel-solicitudes" role="tabpanel"></section>
       <section class="admin-panel" id="panel-roles" role="tabpanel"></section>
       <section class="admin-panel" id="panel-organizaciones" role="tabpanel"></section>
       <section class="admin-panel" id="panel-actividad" role="tabpanel"></section>
@@ -73,6 +75,7 @@
   <!-- Configuración de Supabase según el entorno (la sirve el backend). -->
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="registro.js" defer></script>
   <script src="auth.js" defer></script>
   <script src="nav.js" defer></script>
   <script src="admin.js" defer></script>

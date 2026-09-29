@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { requireAllowedUser, requireOrganization, puedeAdministrar } from "./auth.js";
 import adminRouter from "./admin.js";
+import registroRouter from "./registro.js";
 
 dotenv.config();
 
@@ -58,22 +59,27 @@ const supabase = createClient(
   }
 );
 
-// Every /api route requires a signed-in, allowlisted Google account,
-// except the health check (used for uptime monitoring).
+// /api/registro es para quien inició sesión pero todavía no tiene acceso: sólo
+// exige la sesión (lo aplica su propio router).
+const esRegistro = (path) => path === "/registro" || path.startsWith("/registro/");
+
+// Every /api route requires a signed-in, registered account, except the
+// health check (used for uptime monitoring) and the registration flow.
 app.use("/api", (req, res, next) => {
-  if (req.path === "/health") return next();
+  if (req.path === "/health" || esRegistro(req.path)) return next();
   return requireAllowedUser(req, res, next);
 });
 
 // Las rutas de datos operan sobre la organización activa. /auth/me y /admin no:
 // un superadmin sin membresías tiene que poder entrar al panel.
 app.use("/api", (req, res, next) => {
-  if (req.path === "/health" || req.path === "/auth/me" || req.path.startsWith("/admin/")) {
+  if (req.path === "/health" || req.path === "/auth/me" || req.path.startsWith("/admin/") || esRegistro(req.path)) {
     return next();
   }
   return requireOrganization(req, res, next);
 });
 
+app.use("/api/registro", registroRouter);
 app.use("/api/admin", adminRouter);
 
 // ─────────────────────────────────────────────────────────

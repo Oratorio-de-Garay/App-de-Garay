@@ -1,49 +1,24 @@
 import express from "express";
 import { supabaseAdmin, requireAdmin, requireSuperadmin } from "./auth.js";
+import { llamarRpc, responderError, responderRpc } from "./rpc.js";
+import { mailSolicitudResuelta, urlDeLaApp } from "./mail.js";
 
 // ========================================================
-// ADMINISTRACIÓN: usuarios, roles y organizaciones
+// ADMINISTRACIÓN: usuarios, roles, organizaciones y solicitudes
 //
 // Este router sólo decide quién entra a cada endpoint (admin o superadmin).
 // Las reglas finas —scope de organizaciones, a quién puede modificar cada
 // uno, auditoría— viven en las funciones SQL de
-// supabase/migrations/20260926000000_roles_y_admin.sql, que reciben al actor
-// (req.user.email) y rechazan cualquier cosa fuera de su alcance.
+// supabase/migrations/20260926000000_roles_y_admin.sql y
+// 20260928000000_solicitudes.sql, que reciben al actor (req.user.email) y
+// rechazan cualquier cosa fuera de su alcance.
 // ========================================================
 
 const router = express.Router();
 
 router.use(requireAdmin);
 
-// SQLSTATE que levantan las funciones del panel → status HTTP.
-const HTTP_POR_SQLSTATE = {
-  42501: 403, // sin permiso
-  22023: 400, // dato inválido
-  P0002: 404, // no encontrado
-  23505: 409, // duplicado
-  "22P02": 400, // id con formato inválido (ej: uuid mal armado en la URL)
-};
-
-/**
- * Llama a una función del panel y responde. Los errores esperables (permiso,
- * validación, etc.) salen con su mensaje en español tal cual lo arma la base.
- */
-async function responderRpc(res, contexto, funcion, params, status = 200) {
-  try {
-    const { data, error } = await supabaseAdmin.rpc(funcion, params);
-    if (error) throw error;
-    res.status(status).json(data);
-  } catch (error) {
-    const httpStatus = HTTP_POR_SQLSTATE[error.code];
-    if (httpStatus) {
-      // 22P02 lo levanta Postgres (no nuestras funciones): su mensaje es técnico.
-      const mensaje = error.code === "22P02" ? "Identificador inválido" : error.message;
-      return res.status(httpStatus).json({ error: mensaje });
-    }
-    console.error(`${contexto} error:`, error);
-    res.status(500).json({ error: error.message });
-  }
-}
+const ESTADOS_SOLICITUD = ["pendiente", "aceptada", "rechazada", "cancelada"];
 
 function listaDeIds(value) {
   return Array.isArray(value) ? value.filter((id) => typeof id === "string" && id) : [];
@@ -157,5 +132,42 @@ router.patch("/organizaciones/:id", requireSuperadmin, (req, res) =>
     p_nombre: String(req.body?.nombre || ""),
   })
 );
+
+// ─────────────────────────────────────────────────────────
+// Solicitudes (admin y superadmin, filtradas por scope)
+// ─────────────────────────────────────────────────────────
+
+router.get("/solicitudes", (req, res) =>
+  responderRpc(res, "Admin solicitudes", "admin_listar_solicitudes", {
+    p_actor: req.user.email,
+    p_estado: ESTADOS_SOLICITUD.includes(req.query.estado) ? req.query.estado : null,
+  })
+);
+
+router.post("/solicitudes/:id/tomar", (req, res) =>
+  responderRpc(res, "Admin tomar solicitud", "admin_tomar_solicitud", {
+    p_actor: req.user.email,
+    p_id: req.params.id,
+  })
+);
+
+// Acepta o rechaza, y le avisa por mail al solicitante.
+router.post("/solicitudes/:id/resolver", async (req, res) => {
+  try {
+    const solicitud = await llamarRpc("admin_resolver_solicitud", {
+      p_actor: req.user.email,
+      p_id: req.params.id,
+      p_decision: String(req.body?.decision || ""),
+      p_comentario: req.body?.comentario ?? null,
+      p_organizacion_id: req.body?.organizacion_id || null,
+      p_nombre_espacio: req.body?.nombre_espacio ?? null,
+    });
+    // aviso_error: por qué no salió el mail, para que el admin lo vea en el toast.
+    const { notificados, motivo } = await mailSolicitudResuelta(solicitud, urlDeLaApp(req));
+    res.json({ ...solicitud, notificados, aviso_error: motivo || null });
+  } catch (error) {
+    responderError(res, "Admin resolver solicitud", error);
+  }
+});
 
 export default router;

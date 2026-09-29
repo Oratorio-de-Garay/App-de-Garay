@@ -25,11 +25,16 @@ select 'Pibe', 'De Prueba ' || o.nombre,
   true, o.id
 from public.organizaciones o;
 
--- Usuarios de desarrollo (entran por magic link; los mails llegan a Mailpit,
--- http://127.0.0.1:54324). El superadmin oratoriogarayy@gmail.com lo crea la
--- migración y también puede entrar así.
+-- Usuarios de desarrollo (entran con el código por mail; los mails llegan a
+-- Mailpit, http://127.0.0.1:54324). El superadmin oratoriogarayy@gmail.com lo
+-- crea la migración y también puede entrar así.
 select public.superadmin_asignar_rol('oratoriogarayy@gmail.com', 'admin@local.test', 'Admin local', 'admin',
   array[(select id from public.organizaciones where nombre = 'Oratorio de Garay')]);
 select public.admin_alta_usuario('oratoriogarayy@gmail.com', 'miembro@local.test', 'Miembro local',
   array[(select id from public.organizaciones where nombre = 'Oratorio de Garay'),
         (select id from public.organizaciones where nombre = 'Escuadra 3')]);
+
+-- Una solicitud pendiente para probar la pestaña Solicitudes. Entrando como
+-- nuevo@local.test se ve la pantalla de registro con esta solicitud.
+select public.registro_crear_solicitud('nuevo@local.test', 'Nuevo local',
+  (select id from public.organizaciones where nombre = 'Oratorio de Garay'), null);

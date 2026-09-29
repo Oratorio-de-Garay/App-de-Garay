@@ -1,4 +1,4 @@
-// Panel de administración: usuarios, roles, organizaciones y actividad.
+// Panel de administración: usuarios, solicitudes, roles, organizaciones y actividad.
 //
 // El frontend sólo muestra lo que el backend devuelve: los listados ya vienen
 // filtrados por el scope del usuario, y cada acción la vuelve a validar la
@@ -10,10 +10,15 @@ const adminState = {
   usuarios: [],
   organizaciones: [],
   roles: [],
+  solicitudes: [],
   // null = todavía no se pidió; se carga al abrir la pestaña Actividad.
   auditoria: null,
   filtro: { q: "", org: "" },
+  filtroSolicitudes: "pendiente",
   tab: "usuarios",
+  // Link de un mail: admin.html?tab=solicitudes&solicitud=<id>. Se aplica una
+  // sola vez, cuando llegan los datos.
+  deepLink: null,
 };
 
 const ICONOS = {
@@ -21,6 +26,7 @@ const ICONOS = {
   candado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
   usuarios: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6-.3 4.8 1.2 5.5 4.4"/></svg>',
   escudo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>',
+  bandeja: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3.5 13.5 6 5h12l2.5 8.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19v-5.5Z"/><path d="M3.5 13.5H8l1.5 2.5h5l1.5-2.5h4.5"/></svg>',
   reloj: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
 };
 
@@ -47,8 +53,39 @@ function initAdmin() {
     if (e.key === "Escape" && overlay.classList.contains("open")) closeModal();
   });
 
+  const params = new URLSearchParams(location.search);
+  if (params.get("tab")) {
+    adminState.deepLink = { tab: params.get("tab"), solicitud: params.get("solicitud") };
+    // Sin la query, recargar la página no vuelve a abrir el mismo modal.
+    history.replaceState(null, "", location.pathname);
+  }
+
   renderSkeleton(document.getElementById("panel-usuarios"));
   cargarDatos();
+}
+
+/** Abre la pestaña (y la solicitud) del link de un mail, una sola vez. */
+function aplicarDeepLink() {
+  const link = adminState.deepLink;
+  if (!link) return;
+  adminState.deepLink = null;
+
+  const tab = document.querySelector(`.admin-tab[data-tab="${CSS.escape(link.tab)}"]`);
+  if (!tab || tab.hidden) return;
+  setAdminTab(link.tab);
+  if (link.tab !== "solicitudes" || !link.solicitud) return;
+
+  const solicitud = solicitudPorId(link.solicitud);
+  if (!solicitud) {
+    toast("No se encontró la solicitud, o no tenés permiso para verla.", "err");
+    return;
+  }
+  // Si ya no está pendiente, que se vea en la lista aunque el filtro sea otro.
+  if (solicitud.estado !== "pendiente") {
+    adminState.filtroSolicitudes = "";
+    renderSolicitudes();
+  }
+  abrirSolicitud(solicitud);
 }
 
 function setAdminTab(tab) {
@@ -66,17 +103,20 @@ function setAdminTab(tab) {
 
 async function cargarDatos() {
   try {
-    const [usuarios, organizaciones, roles] = await Promise.all([
+    const [usuarios, organizaciones, roles, solicitudes] = await Promise.all([
       apiGet("/api/admin/usuarios"),
       apiGet("/api/admin/organizaciones"),
       apiGet("/api/admin/roles"),
+      apiGet("/api/admin/solicitudes"),
     ]);
     adminState.usuarios = usuarios || [];
     adminState.organizaciones = organizaciones || [];
     adminState.roles = roles || [];
+    adminState.solicitudes = solicitudes || [];
     // Si el filtro apuntaba a una organización que ya no está en el scope.
     if (!adminState.organizaciones.some((o) => o.id === adminState.filtro.org)) adminState.filtro.org = "";
     renderTodo();
+    aplicarDeepLink();
   } catch (error) {
     renderErrorCarga(document.getElementById("panel-usuarios"), error, cargarDatos);
   }
@@ -92,6 +132,7 @@ async function refrescar() {
 function renderTodo() {
   renderHero();
   renderUsuarios();
+  renderSolicitudes();
   if (adminState.me.es_superadmin) {
     renderRoles();
     renderOrganizaciones();
@@ -305,6 +346,248 @@ function confirmarQuitarAcceso(usuario) {
       await refrescar();
     },
   });
+}
+
+// ─────────────────────────────────────────────────────────
+// Pestaña Solicitudes
+//
+// Cada uno ve sólo las que puede resolver: las de las organizaciones que
+// administra (y todas, si es superadmin). Los pedidos de espacio nuevo son
+// sólo del superadmin.
+// ─────────────────────────────────────────────────────────
+
+const ESTADOS_SOLICITUD = {
+  pendiente: { nombre: "Pendiente", plural: "Pendientes" },
+  aceptada: { nombre: "Aceptada", plural: "Aceptadas" },
+  rechazada: { nombre: "Rechazada", plural: "Rechazadas" },
+  cancelada: { nombre: "Cancelada", plural: "Canceladas" },
+};
+
+function renderSolicitudes() {
+  const panel = document.getElementById("panel-solicitudes");
+  const pendientes = adminState.solicitudes.filter((s) => s.estado === "pendiente").length;
+
+  const badge = document.getElementById("solicitudes-badge");
+  badge.hidden = pendientes === 0;
+  badge.textContent = pendientes;
+
+  const cuenta = (estado) => adminState.solicitudes.filter((s) => !estado || s.estado === estado).length;
+  panel.innerHTML = `
+    <div class="admin-toolbar">
+      <div class="admin-toolbar-title">
+        <h2>Solicitudes</h2>
+        <p>${adminState.me.es_superadmin
+          ? "Pedidos de acceso a cualquier espacio y de espacios nuevos."
+          : "Pedidos de acceso a los espacios que administrás."}</p>
+      </div>
+      <select class="form-select admin-select" id="solicitudes-estado" aria-label="Filtrar por estado">
+        ${Object.entries(ESTADOS_SOLICITUD).map(([codigo, e]) =>
+          `<option value="${codigo}"${adminState.filtroSolicitudes === codigo ? " selected" : ""}>${e.plural} (${cuenta(codigo)})</option>`).join("")}
+        <option value=""${adminState.filtroSolicitudes === "" ? " selected" : ""}>Todas (${cuenta("")})</option>
+      </select>
+    </div>
+    <div class="admin-list" id="solicitudes-list"></div>
+  `;
+
+  panel.querySelector("#solicitudes-estado").addEventListener("change", (e) => {
+    adminState.filtroSolicitudes = e.target.value;
+    renderSolicitudes();
+  });
+  renderListaSolicitudes();
+}
+
+function renderListaSolicitudes() {
+  const lista = document.getElementById("solicitudes-list");
+  const filtro = adminState.filtroSolicitudes;
+  const solicitudes = adminState.solicitudes.filter((s) => !filtro || s.estado === filtro);
+
+  if (!solicitudes.length) {
+    lista.innerHTML = filtro === "pendiente"
+      ? estadoVacio(ICONOS.bandeja, "No hay solicitudes pendientes", "Cuando alguien se registre y pida sumarse, te llega un mail y aparece acá.")
+      : estadoVacio(ICONOS.bandeja, "Sin solicitudes", "No hay solicitudes en este estado.");
+    return;
+  }
+
+  lista.innerHTML = solicitudes.map((s) => {
+    const pendiente = s.estado === "pendiente";
+    const mia = s.aprobador_email === adminState.me.email;
+    return `
+      <article class="admin-card admin-row solicitud-row">
+        ${avatarHtml(s.solicitante_nombre, s.solicitante_email)}
+        <div class="row-main">
+          <div class="row-title">
+            <span>${escapeHtml(s.solicitante_nombre)}</span>
+            ${estadoSolicitudHtml(s.estado)}
+          </div>
+          <div class="row-sub">${escapeHtml(s.solicitante_email)} · #${escapeHtml(s.numero)} · ${escapeHtml(formatearFecha(s.created_at))}</div>
+          <div class="solicitud-pedido">${pedidoSolicitudHtml(s)}</div>
+          ${aprobadorSolicitudHtml(s)}
+        </div>
+        <div class="row-actions">
+          ${pendiente && !mia ? `<button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-tomar="${s.id}">${s.aprobador_id ? "Reasignarme" : "Tomar"}</button>` : ""}
+          <button class="admin-btn ${pendiente ? "admin-btn-primary" : "admin-btn-ghost"} admin-btn-sm" type="button" data-revisar="${s.id}">${pendiente ? "Revisar" : "Ver"}</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  lista.querySelectorAll("[data-tomar]").forEach((btn) => {
+    btn.addEventListener("click", () => tomarSolicitud(solicitudPorId(btn.dataset.tomar), btn));
+  });
+  lista.querySelectorAll("[data-revisar]").forEach((btn) => {
+    btn.addEventListener("click", () => abrirSolicitud(solicitudPorId(btn.dataset.revisar)));
+  });
+}
+
+function estadoSolicitudHtml(estado) {
+  return `<span class="estado-badge estado-${escapeHtml(estado)}">${escapeHtml(ESTADOS_SOLICITUD[estado]?.nombre || estado)}</span>`;
+}
+
+/** "Quiere sumarse a X" / "Quiere crear el espacio Y" (o lo que resultó). */
+function pedidoSolicitudHtml(s) {
+  const datos = s.datos || {};
+  if (!datos.espacio_nuevo) {
+    return `Quiere sumarse a <span class="org-chip">${escapeHtml(s.organizacion_nombre)}</span>`;
+  }
+  const pedido = `Quiere crear el espacio <strong>${escapeHtml(datos.nombre_espacio)}</strong>`;
+  if (s.estado !== "aceptada") return `${pedido} <span class="scope-tag">Espacio nuevo</span>`;
+  return datos.organizacion_creada
+    ? `${pedido}: se creó <span class="org-chip">${escapeHtml(s.organizacion_nombre)}</span> y quedó como admin`
+    : `${pedido}: se sumó a <span class="org-chip">${escapeHtml(s.organizacion_nombre)}</span>, que ya existía`;
+}
+
+function aprobadorSolicitudHtml(s) {
+  const quien = escapeHtml(s.aprobador_nombre || s.aprobador_email || "un administrador");
+  const comentario = s.comentario_aprobador
+    ? `<div class="solicitud-comentario">“${escapeHtml(s.comentario_aprobador)}”</div>` : "";
+  if (s.estado === "pendiente") {
+    return s.aprobador_id ? `<div class="field-hint">Tomada por ${quien}</div>` : "";
+  }
+  if (s.estado === "cancelada") {
+    return `<div class="field-hint">La canceló el solicitante · ${escapeHtml(formatearFecha(s.resuelta_at))}</div>`;
+  }
+  return `<div class="field-hint">${ESTADOS_SOLICITUD[s.estado].nombre} por ${quien} · ${escapeHtml(formatearFecha(s.resuelta_at))}</div>${comentario}`;
+}
+
+async function tomarSolicitud(solicitud, btn) {
+  btn.disabled = true;
+  try {
+    await apiSend(`/api/admin/solicitudes/${encodeURIComponent(solicitud.id)}/tomar`, "POST");
+    toast(`Tomaste la solicitud #${solicitud.numero}.`);
+    await refrescar();
+  } catch (error) {
+    toast(error.message, "err");
+    btn.disabled = false;
+  }
+}
+
+/** Detalle de una solicitud: si está pendiente, para aceptarla o rechazarla. */
+function abrirSolicitud(solicitud) {
+  if (!solicitud) return;
+  const datos = solicitud.datos || {};
+  const pendiente = solicitud.estado === "pendiente";
+  const detalle = `
+    <div class="solicitud-detalle">
+      <div class="solicitud-persona">
+        ${avatarHtml(solicitud.solicitante_nombre, solicitud.solicitante_email)}
+        <div>
+          <div class="row-title"><span>${escapeHtml(solicitud.solicitante_nombre)}</span>${estadoSolicitudHtml(solicitud.estado)}</div>
+          <div class="row-sub">${escapeHtml(solicitud.solicitante_email)}</div>
+        </div>
+      </div>
+      <div class="solicitud-pedido">${pedidoSolicitudHtml(solicitud)}</div>
+      <div class="field-hint">Pedida el ${escapeHtml(formatearFecha(solicitud.created_at))}</div>
+      ${aprobadorSolicitudHtml(solicitud)}
+    </div>
+  `;
+
+  if (!pendiente) {
+    openModal({
+      title: `Solicitud #${solicitud.numero}`,
+      bodyHtml: detalle,
+      submitLabel: "Cerrar",
+      cancelLabel: null,
+      async onSubmit() {},
+    });
+    return;
+  }
+
+  // Espacio nuevo: el superadmin puede corregir el nombre o, si ya existía,
+  // asignarlo a uno existente (ahí queda miembro, sin rol admin).
+  const orgs = adminState.organizaciones;
+  const opcionesEspacio = datos.espacio_nuevo ? `
+    <div class="form-group">
+      <span class="form-label">Al aceptar</span>
+      <label class="solicitud-opcion">
+        <input type="radio" name="s-destino" value="crear" checked>
+        <span><strong>Crear el espacio</strong><small>Queda como admin del espacio nuevo.</small></span>
+      </label>
+      <input class="form-input" id="s-nombre-espacio" type="text" maxlength="80" autocomplete="off"
+        value="${escapeHtml(datos.nombre_espacio || "")}" aria-label="Nombre del espacio nuevo">
+      <label class="solicitud-opcion">
+        <input type="radio" name="s-destino" value="existente"${orgs.length ? "" : " disabled"}>
+        <span><strong>Asignarlo a un espacio que ya existe</strong><small>Queda como miembro, sin rol admin.</small></span>
+      </label>
+      <select class="form-select admin-select" id="s-org-existente" aria-label="Espacio existente" hidden>
+        ${orgs.map((o) => `<option value="${o.id}">${escapeHtml(o.nombre)}</option>`).join("")}
+      </select>
+    </div>` : "";
+
+  openModal({
+    title: `Solicitud #${solicitud.numero}`,
+    bodyHtml: `
+      ${detalle}
+      ${opcionesEspacio}
+      <div class="form-group">
+        <label class="form-label" for="s-comentario">Comentario <span class="field-hint">(opcional, se lo mandamos por mail)</span></label>
+        <textarea class="form-input" id="s-comentario" rows="3" maxlength="1000" placeholder="Ej: ¡Bienvenido!"></textarea>
+      </div>
+    `,
+    submitLabel: "Aceptar",
+    secondaryAction: {
+      label: "Rechazar",
+      danger: true,
+      onClick: (modal) => resolverSolicitud(solicitud, "rechazar", modal),
+    },
+    onReady(modal) {
+      const nombre = modal.querySelector("#s-nombre-espacio");
+      const select = modal.querySelector("#s-org-existente");
+      modal.querySelectorAll('input[name="s-destino"]').forEach((radio) => {
+        radio.addEventListener("change", () => {
+          const existente = modal.querySelector('input[name="s-destino"]:checked').value === "existente";
+          nombre.hidden = existente;
+          select.hidden = !existente;
+        });
+      });
+    },
+    onSubmit: (modal) => resolverSolicitud(solicitud, "aceptar", modal),
+  });
+}
+
+async function resolverSolicitud(solicitud, decision, modal) {
+  const body = { decision, comentario: modal.querySelector("#s-comentario").value.trim() || null };
+  if (decision === "aceptar" && solicitud.datos?.espacio_nuevo) {
+    const destino = modal.querySelector('input[name="s-destino"]:checked').value;
+    if (destino === "existente") {
+      body.organizacion_id = modal.querySelector("#s-org-existente").value;
+    } else {
+      body.nombre_espacio = modal.querySelector("#s-nombre-espacio").value.trim();
+      if (!body.nombre_espacio) throw new Error("El nombre del espacio es obligatorio.");
+    }
+  }
+
+  const r = await apiSend(`/api/admin/solicitudes/${encodeURIComponent(solicitud.id)}/resolver`, "POST", body);
+  const aviso = r.notificados
+    ? "Le avisamos por mail."
+    : `No se pudo mandar el mail de aviso${r.aviso_error ? `: ${r.aviso_error}` : ""}.`;
+  toast(decision === "aceptar"
+    ? `${r.solicitante_nombre} ya tiene acceso a ${r.organizacion_nombre}. ${aviso}`
+    : `Solicitud #${r.numero} rechazada. ${aviso}`, r.notificados ? "ok" : "err");
+  await refrescar();
+}
+
+function solicitudPorId(id) {
+  return adminState.solicitudes.find((s) => s.id === id);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -615,6 +898,12 @@ function actividadHtml(a) {
     rol_quitado: [`${quien} dejó de ser ${rol}${a.organizacion_id ? ` de ${org}` : ""}`, "activity-quita"],
     organizacion_creada: [`Se creó la organización ${b(d.nombre)}`, "activity-org"],
     organizacion_renombrada: [`${b(d.antes)} ahora se llama ${b(d.despues)}`, "activity-org"],
+    solicitud_creada: [d.nombre_espacio
+      ? `${quien} pidió crear el espacio ${b(d.nombre_espacio)} (solicitud #${escapeHtml(d.numero)})`
+      : `${quien} pidió sumarse a ${org} (solicitud #${escapeHtml(d.numero)})`, "activity-solicitud"],
+    solicitud_aceptada: [`Se aceptó la solicitud #${escapeHtml(d.numero)} de ${quien}`, ""],
+    solicitud_rechazada: [`Se rechazó la solicitud #${escapeHtml(d.numero)} de ${quien}`, "activity-quita"],
+    solicitud_cancelada: [`${quien} canceló su solicitud #${escapeHtml(d.numero)}`, "activity-quita"],
   };
   const [texto, clase] = textos[a.accion] || [escapeHtml(a.accion), ""];
 
@@ -723,8 +1012,10 @@ function normalizarBusqueda(texto) {
 /**
  * Abre el modal. onSubmit recibe el elemento del modal y devuelve una promesa;
  * si resuelve el modal se cierra, si falla el error se muestra adentro.
+ * secondaryAction ({ label, danger, onClick }) agrega otro botón con el mismo
+ * comportamiento (ej: Rechazar al lado de Aceptar). cancelLabel null lo oculta.
  */
-function openModal({ title, description, bodyHtml, submitLabel = "Guardar", danger = false, onSubmit, onReady }) {
+function openModal({ title, description, bodyHtml, submitLabel = "Guardar", danger = false, cancelLabel = "Cancelar", secondaryAction, onSubmit, onReady }) {
   const overlay = document.getElementById("admin-modal-overlay");
   const modal = document.getElementById("admin-modal");
   modal.innerHTML = `
@@ -733,31 +1024,40 @@ function openModal({ title, description, bodyHtml, submitLabel = "Guardar", dang
     <form class="modal-body" id="modal-form" novalidate>${bodyHtml}</form>
     <div class="modal-error" id="modal-error" role="alert" hidden></div>
     <div class="modal-actions">
-      <button class="admin-btn admin-btn-ghost" type="button" id="modal-cancel">Cancelar</button>
+      ${cancelLabel ? `<button class="admin-btn admin-btn-ghost" type="button" id="modal-cancel">${escapeHtml(cancelLabel)}</button>` : ""}
+      ${secondaryAction ? `<button class="admin-btn ${secondaryAction.danger ? "admin-btn-danger" : "admin-btn-ghost"}" type="button" id="modal-secondary">${escapeHtml(secondaryAction.label)}</button>` : ""}
       <button class="admin-btn ${danger ? "admin-btn-danger" : "admin-btn-primary"}" type="submit" form="modal-form" id="modal-submit">${escapeHtml(submitLabel)}</button>
     </div>
   `;
   overlay.classList.add("open");
 
-  document.getElementById("modal-cancel").addEventListener("click", closeModal);
-  // Un <form> para que Enter envíe desde cualquier campo.
-  document.getElementById("modal-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById("modal-submit");
+  document.getElementById("modal-cancel")?.addEventListener("click", closeModal);
+
+  // Mientras corre una acción se deshabilitan todos los botones: no se puede
+  // aceptar y rechazar a la vez.
+  const botones = [...modal.querySelectorAll(".modal-actions button")];
+  async function ejecutar(accion) {
     const box = document.getElementById("modal-error");
-    if (btn.disabled) return;
-    btn.disabled = true;
+    if (botones.some((b) => b.disabled)) return;
+    botones.forEach((b) => (b.disabled = true));
     box.hidden = true;
     try {
-      await onSubmit(modal);
+      await accion(modal);
       closeModal();
     } catch (error) {
       box.textContent = error.message;
       box.hidden = false;
     } finally {
-      btn.disabled = false;
+      botones.forEach((b) => (b.disabled = false));
     }
+  }
+
+  // Un <form> para que Enter envíe desde cualquier campo.
+  document.getElementById("modal-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    ejecutar(onSubmit);
   });
+  document.getElementById("modal-secondary")?.addEventListener("click", () => ejecutar(secondaryAction.onClick));
 
   if (onReady) onReady(modal);
 }
