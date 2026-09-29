@@ -104,7 +104,9 @@ La base local escucha en `postgresql://postgres:postgres@127.0.0.1:54322/postgre
      ```
      El último par cubre los **deploy previews de Vercel** (`app-de-garay-<hash>-<team>.vercel.app`), que cambian en cada push. Sin la variante `/*`, un `redirectTo` con trailing slash no matchea y Supabase cae silenciosamente al Site URL — así se manifiesta: el login "funciona" pero siempre termina en producción en vez de en el preview desde el que arrancó.
 
-4. El frontend (`frontend/auth.js`) arma el `redirectTo` dinámicamente como `window.location.origin + window.location.pathname` — no hay nada que tocar ahí al agregar un preview nuevo, sólo mantener actualizada la allow list de Supabase.
+4. El frontend (`frontend/auth.js`) arma el `redirectTo` como `window.location.origin + "/"`: siempre la raíz del deploy desde el que se inició sesión. No hay nada que tocar ahí al agregar un preview nuevo, sólo mantener actualizada la allow list de Supabase.
+   - **Por qué la raíz y no la página actual:** en la allow list, `*` no abarca puntos ni barras, así que `/admin.html?...` no matchea `/*` y Supabase caería en el Site URL.
+   - **Volver al link original:** al empezar el login (Google o código), `auth.js` guarda en `localStorage` la ruta a la que quería ir el usuario (`oratorio.retorno`, vigente 30 minutos). Cuando la sesión queda confirmada, lo lleva ahí. Sólo acepta rutas del mismo sitio.
 
 ## Mails
 

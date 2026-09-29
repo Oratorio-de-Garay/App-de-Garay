@@ -48,6 +48,7 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 
 - **Login**: manejado enteramente por Supabase Auth, con dos caminos. No hay backend propio de sesión ni cookies — el estado de sesión vive en el cliente Supabase del browser.
   - Google OAuth (`signInWithOAuth`).
+  - Si alguien abre un link sin sesión (ej: el de una solicitud en un mail), al terminar el login vuelve a ese link, sea cual sea el camino (ver [SETUP.md](SETUP.md#autenticación-google--supabase)).
   - Mail + código de 6 dígitos (`signInWithOtp` + `verifyOtp`), sin contraseña. Es el mismo flujo para crear la cuenta y para entrar. Supabase manda el código por el SMTP configurado (Gmail, ver [SETUP.md](SETUP.md#mails)).
 - **Registro abierto con aprobación:** cualquiera puede crear una cuenta, pero sin acceso a nada. Si su email no está en `usuarios`, ve la pantalla de registro (`frontend/registro.js`) y pide sumarse a un espacio o crear uno. Un admin o superadmin acepta o rechaza la solicitud desde el panel. Ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#registro-y-solicitudes).
 - `frontend/auth.js` guarda la sesión y expone `window.apiFetch(path, options)`, un wrapper de `fetch` que agrega `Authorization: Bearer <access_token>` a cada llamada a `/api/*`. **Todo el código nuevo debe usar `apiFetch`, no `fetch` directo**, para no romper la autenticación.

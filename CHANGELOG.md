@@ -26,6 +26,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
   - Cuatro acciones nuevas de auditoría.
   - Tests pgTAP en `supabase/tests/solicitudes.test.sql`.
 - **Endpoints** `/api/registro/*` y `/api/admin/solicitudes*`.
+- **Volver al link después del login:** si alguien abre un link sin sesión (ej: el de un mail), después de iniciar sesión, con Google o con código, vuelve a ese link y no al inicio.
 
 - **Panel de administración** (`frontend/admin.html`). Lo ven sólo admins y superadmins, y tiene cuatro pestañas:
   - **Usuarios**:

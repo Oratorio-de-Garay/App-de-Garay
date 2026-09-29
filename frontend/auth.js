@@ -78,6 +78,50 @@ function showPendingFlash() {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// Volver al link original después del login
+//
+// Si alguien abre un link (ej: el de una solicitud en un mail) sin sesión,
+// al empezar el login se guarda a dónde quería ir, y cuando la sesión queda
+// confirmada se lo lleva ahí. Sirve para cualquier página y cualquier query.
+// Hace falta porque Google no vuelve a la misma URL: vuelve a la raíz (ver
+// renderLogin). localStorage y no sessionStorage: un magic link abierto en
+// otra pestaña también tiene que encontrarlo.
+// ─────────────────────────────────────────────────────────
+
+const RETORNO_STORAGE_KEY = "oratorio.retorno";
+// Un login que se abandona no debería mandar a nadie a un link viejo.
+const RETORNO_VIGENCIA_MS = 30 * 60 * 1000;
+
+function rutaActual() {
+  return location.pathname + location.search;
+}
+
+function guardarRetorno() {
+  try {
+    localStorage.setItem(RETORNO_STORAGE_KEY, JSON.stringify({ url: rutaActual(), guardado: Date.now() }));
+  } catch {
+    // Sin storage el login funciona igual; sólo se vuelve al inicio.
+  }
+}
+
+/** Devuelve (y borra) la ruta guardada, si sigue vigente y es de este sitio. */
+function tomarRetorno() {
+  try {
+    const raw = localStorage.getItem(RETORNO_STORAGE_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(RETORNO_STORAGE_KEY);
+    const { url, guardado } = JSON.parse(raw);
+    if (!(Date.now() - guardado < RETORNO_VIGENCIA_MS)) return null;
+    // Sólo rutas de este mismo sitio: "//otro.com" o "/\otro.com" serían
+    // otro dominio (open redirect).
+    if (typeof url !== "string" || !url.startsWith("/") || url.startsWith("//") || url.startsWith("/\\")) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 function readStoredOrganizationId() {
   try {
     return localStorage.getItem(ORG_STORAGE_KEY) || null;
@@ -146,11 +190,14 @@ function renderLogin() {
     <div id="login-mail"></div>
   `;
   document.getElementById("btn-google").addEventListener("click", async () => {
+    guardarRetorno();
     await supabaseClient.auth.signInWithOAuth({
       provider: "google",
-      // Con la query: el link de un mail (ej: admin.html?tab=solicitudes&...)
-      // tiene que llegar entero después del login.
-      options: { redirectTo: window.location.origin + window.location.pathname + window.location.search },
+      // Siempre a la raíz: es lo que seguro está en la allow list de Supabase
+      // (su "*" no abarca puntos, así que "/admin.html" no matchea "/*" y
+      // Supabase caería en el Site URL). La página original la restaura
+      // guardarRetorno/tomarRetorno.
+      options: { redirectTo: window.location.origin + "/" },
     });
   });
   renderPasoMail();
@@ -263,6 +310,7 @@ function renderPasoCodigo(email) {
 
 /** Devuelve el mensaje de error, o null si se mandó. */
 async function enviarCodigo(email) {
+  guardarRetorno();
   const { error } = await supabaseClient.auth.signInWithOtp({
     email,
     options: { shouldCreateUser: true },
@@ -388,6 +436,15 @@ async function evaluateSession(session) {
   }
   if (session.access_token === evaluatedToken) return;
   evaluatedToken = session.access_token;
+
+  // Recién logueado desde otra página (ej: Google vuelve a la raíz): se lo
+  // lleva al link que había abierto. La página de destino vuelve a verificar
+  // el acceso, así que acá no hace falta pedir /me.
+  const retorno = tomarRetorno();
+  if (retorno && retorno !== rutaActual()) {
+    location.replace(retorno);
+    return;
+  }
 
   try {
     const res = await apiFetch("/api/auth/me");
