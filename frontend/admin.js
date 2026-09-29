@@ -577,7 +577,9 @@ async function resolverSolicitud(solicitud, decision, modal) {
   }
 
   const r = await apiSend(`/api/admin/solicitudes/${encodeURIComponent(solicitud.id)}/resolver`, "POST", body);
-  const aviso = r.notificados ? "Le avisamos por mail." : "No se pudo mandar el mail de aviso.";
+  const aviso = r.notificados
+    ? "Le avisamos por mail."
+    : `No se pudo mandar el mail de aviso${r.aviso_error ? `: ${r.aviso_error}` : ""}.`;
   toast(decision === "aceptar"
     ? `${r.solicitante_nombre} ya tiene acceso a ${r.organizacion_nombre}. ${aviso}`
     : `Solicitud #${r.numero} rechazada. ${aviso}`, r.notificados ? "ok" : "err");

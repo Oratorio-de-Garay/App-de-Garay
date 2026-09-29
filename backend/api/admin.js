@@ -162,8 +162,9 @@ router.post("/solicitudes/:id/resolver", async (req, res) => {
       p_organizacion_id: req.body?.organizacion_id || null,
       p_nombre_espacio: req.body?.nombre_espacio ?? null,
     });
-    const notificados = await mailSolicitudResuelta(solicitud, urlDeLaApp(req));
-    res.json({ ...solicitud, notificados });
+    // aviso_error: por qué no salió el mail, para que el admin lo vea en el toast.
+    const { notificados, motivo } = await mailSolicitudResuelta(solicitud, urlDeLaApp(req));
+    res.json({ ...solicitud, notificados, aviso_error: motivo || null });
   } catch (error) {
     responderError(res, "Admin resolver solicitud", error);
   }

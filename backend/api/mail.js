@@ -41,21 +41,38 @@ export function urlDeLaApp(req) {
   return `${proto}://${req.headers["x-forwarded-host"] || req.headers.host}`;
 }
 
-/** Devuelve true si se mandó. Nunca lanza. */
+/**
+ * Nunca lanza. Devuelve { ok: true } o { ok: false, motivo }, con un motivo
+ * legible para mostrarle al admin (sin datos sensibles) y así poder
+ * diagnosticar la configuración sin entrar a los logs.
+ */
 async function enviar({ to, bcc, subject, html, text }) {
   const smtp = obtenerTransporte();
   if (!smtp) {
     console.warn(`Mail no enviado (falta SMTP_HOST): ${subject}`);
-    return false;
+    return { ok: false, motivo: "falta configurar SMTP_HOST en este entorno" };
   }
   try {
     // El asunto lleva nombres que escribió el usuario: nada de saltos de línea.
     await smtp.sendMail({ from: remitente(), to, bcc, subject: subject.replace(/[\r\n\t]+/g, " "), html, text });
-    return true;
+    return { ok: true };
   } catch (error) {
     console.error(`Mail error (${subject}):`, error);
-    return false;
+    return { ok: false, motivo: motivoDeError(error) };
   }
+}
+
+function motivoDeError(error) {
+  if (error.code === "EAUTH") {
+    return "el servidor de mail rechazó el usuario o la contraseña (revisá SMTP_USER y SMTP_PASS)";
+  }
+  if (["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EDNS", "ECONNREFUSED"].includes(error.code)) {
+    return `no se pudo conectar al servidor de mail (revisá SMTP_HOST y SMTP_PORT; ${error.code})`;
+  }
+  if (error.code === "EENVELOPE") {
+    return "el remitente o el destinatario no son válidos (revisá MAIL_FROM)";
+  }
+  return `${error.code || "error"}: ${String(error.response || error.message).slice(0, 200)}`;
 }
 
 function escapeHtml(text) {
@@ -84,16 +101,19 @@ function queQuiere(solicitud) {
     : `sumarse a <strong>${escapeHtml(solicitud.organizacion_nombre)}</strong>`;
 }
 
-/** A los aprobadores (superadmins + admins del espacio): hay una solicitud nueva. */
+/**
+ * A los aprobadores (superadmins + admins del espacio): hay una solicitud nueva.
+ * Devuelve { notificados, motivo } (motivo sólo si no se pudo mandar).
+ */
 export async function mailNuevaSolicitud(solicitud, destinatarios, appUrl) {
-  if (!destinatarios?.length) return 0;
+  if (!destinatarios?.length) return { notificados: 0, motivo: "no hay aprobadores a quienes avisar" };
   const link = `${appUrl}/admin.html?tab=solicitudes&solicitud=${encodeURIComponent(solicitud.id)}`;
   const quien = `<strong>${escapeHtml(solicitud.solicitante_nombre)}</strong> (${escapeHtml(solicitud.solicitante_email)})`;
   const asunto = solicitud.datos?.espacio_nuevo
     ? `Solicitud #${solicitud.numero}: ${solicitud.solicitante_nombre} quiere crear un espacio`
     : `Solicitud #${solicitud.numero}: ${solicitud.solicitante_nombre} quiere sumarse a ${solicitud.organizacion_nombre}`;
 
-  const ok = await enviar({
+  const envio = await enviar({
     // Los aprobadores en copia oculta: no se exponen los mails entre ellos.
     to: remitente(),
     bcc: destinatarios,
@@ -110,10 +130,10 @@ export async function mailNuevaSolicitud(solicitud, destinatarios, appUrl) {
       solicitud.datos?.espacio_nuevo ? `crear el espacio "${solicitud.datos.nombre_espacio}"` : `sumarse a ${solicitud.organizacion_nombre}`
     }.\nRevisala en: ${link}`,
   });
-  return ok ? destinatarios.length : 0;
+  return { notificados: envio.ok ? destinatarios.length : 0, motivo: envio.motivo };
 }
 
-/** Al solicitante: su solicitud fue aceptada o rechazada. */
+/** Al solicitante: su solicitud fue aceptada o rechazada. Devuelve { notificados, motivo }. */
 export async function mailSolicitudResuelta(solicitud, appUrl) {
   const aceptada = solicitud.estado === "aceptada";
   const espacio = escapeHtml(solicitud.organizacion_nombre || solicitud.datos?.nombre_espacio || "");
@@ -137,7 +157,7 @@ export async function mailSolicitudResuelta(solicitud, appUrl) {
         "Si creés que es un error, podés entrar a la app y mandar una nueva solicitud.",
       ];
 
-  const ok = await enviar({
+  const envio = await enviar({
     to: solicitud.solicitante_email,
     subject: aceptada ? "Tu solicitud fue aceptada" : "Tu solicitud fue rechazada",
     html: plantilla({
@@ -149,5 +169,5 @@ export async function mailSolicitudResuelta(solicitud, appUrl) {
       ? `Tu solicitud fue aceptada: ya tenés acceso a ${solicitud.organizacion_nombre}. Entrá en ${appUrl}/`
       : `Tu solicitud fue rechazada.${solicitud.comentario_aprobador ? ` Comentario: ${solicitud.comentario_aprobador}` : ""}`,
   });
-  return ok ? 1 : 0;
+  return { notificados: envio.ok ? 1 : 0, motivo: envio.motivo };
 }

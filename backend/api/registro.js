@@ -35,7 +35,8 @@ router.post("/solicitudes", async (req, res) => {
       p_organizacion_id: req.body?.organizacion_id || null,
       p_nombre_espacio: req.body?.nombre_espacio ?? null,
     });
-    const notificados = await mailNuevaSolicitud(solicitud, notificar, urlDeLaApp(req));
+    // El motivo de un envío fallido no se le muestra al solicitante: queda en el log.
+    const { notificados } = await mailNuevaSolicitud(solicitud, notificar, urlDeLaApp(req));
     res.status(201).json({ ...solicitud, notificados });
   } catch (error) {
     responderError(res, "Registro crear solicitud", error);
