@@ -7,6 +7,8 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 ## Sin publicar
 
 ### Agregado
+- **Desmarcar presente** (`DELETE /api/attendance/unmark`): cualquier miembro puede revertir una asistencia ya marcada con confirmación previa. El botón "✔ Presente marcado" pasa a ser "✘ Desmarcar presente" (habilitado) tanto en la ficha individual como en los botones de la lista rápida, funcionando como toggle.
+
 
 - **Registro abierto con aprobación.** Cualquiera puede crear una cuenta, pero no tiene acceso a nada hasta que lo aprueben:
   - **Login con el mail**, además de Google: se escribe el mail y se ingresa un código de 6 dígitos, sin contraseña. Es el mismo flujo para registrarse y para entrar.

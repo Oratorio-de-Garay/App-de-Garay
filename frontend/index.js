@@ -1427,6 +1427,51 @@ async function marcarPresente() {
 }
 
 
+
+async function desmarcarPresente() {
+  const nombreChico = document.querySelector(".card-name")?.textContent?.trim() || "el chico";
+  if (!confirm(`¿Desmarcar el presente de ${nombreChico}?`)) {
+    return;
+  }
+
+  const btn = document.getElementById("btn-presente");
+  const fechaInput = document.getElementById("presente-fecha");
+  const fecha = fechaInput?.value || getTodayInputValue();
+
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+
+  try {
+    const res = await apiFetch("/api/attendance/unmark", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ student_id: currentStudentId, fecha }),
+    });
+
+    if (res.status === 404) {
+      marcadoPresente = false;
+      btn.textContent = "✔ Marcar presente";
+      btn.classList.remove("done");
+      btn.disabled = false;
+      return;
+    }
+
+    if (!res.ok) throw new Error("Server error");
+
+    marcadoPresente = false;
+    btn.textContent = "✔ Marcar presente";
+    btn.classList.remove("done");
+    btn.disabled = false;
+
+    mostrarMensaje("info", "↩ Presente desmarcado.");
+  } catch (error) {
+    console.error("Error desmarcando presente:", error);
+    btn.textContent = "✘ Desmarcar presente";
+    btn.disabled = false;
+    mostrarMensaje("err", "❌ No se pudo desmarcar el presente.");
+  }
+}
+
 async function agregarNuevo() {
 
   const nombre =
