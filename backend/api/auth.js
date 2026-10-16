@@ -1,8 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import dotenv from "dotenv";
 import ws from "ws";
-
-dotenv.config();
 
 // Service-role client: bypasses RLS, used only server-side to verify
 // tokens and read users/roles. Never expose this key to the frontend.

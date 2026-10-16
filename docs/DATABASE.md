@@ -240,7 +240,7 @@ Antes de poder crear un pibe hace falta que existan filas en las tablas de looku
 
 ## Credenciales
 
-- `SUPABASE_URL` / `SUPABASE_KEY` (anon/publishable): en `backend/.env`, también hardcodeadas en `frontend/index.html` (son públicas por diseño, el control de acceso real pasa por RLS + backend).
-- `SUPABASE_SERVICE_ROLE_KEY`: sólo en `backend/.env`, **nunca** al frontend.
+- `SUPABASE_URL` / `SUPABASE_KEY` (anon/publishable): en las variables de entorno del backend (`backend/.env.local`, `backend/.env.production` o Vercel). El frontend las recibe de `GET /config.js` (son públicas por diseño, el control de acceso real pasa por RLS + backend).
+- `SUPABASE_SERVICE_ROLE_KEY`: sólo en las variables de entorno del backend, **nunca** al frontend.
 
 Ver [SETUP.md](SETUP.md) para dónde conseguir cada una.

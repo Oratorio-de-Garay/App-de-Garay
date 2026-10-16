@@ -1,15 +1,13 @@
+import { SUPABASE_URL, SUPABASE_KEY, ES_BASE_LOCAL } from "./entorno.js";
 import express from "express";
 import cors from "cors";
 import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
-import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import { requireAllowedUser, requireOrganization, puedeAdministrar } from "./auth.js";
 import adminRouter from "./admin.js";
 import registroRouter from "./registro.js";
-
-dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,22 +16,16 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Configuración pública del frontend, según el entorno. Sin variables de
-// entorno cae en el proyecto de producción (la publishable key es pública por
-// diseño). Con SUPABASE_URL local se habilita el login por email para
-// desarrollo, que en producción no existe.
-const SUPABASE_PROD_URL = "https://tcrrxgqwuxlykwyeymsp.supabase.co";
-const SUPABASE_PROD_PUBLISHABLE_KEY = "sb_publishable_86o3bgdc_aHgXPhTW7AzRQ_PH4yHoNT";
-
+// Configuración pública del frontend, según el entorno (ver entorno.js; la
+// publishable key es pública por diseño). BASE_LOCAL avisa en la pantalla del
+// código que el mail llega a Mailpit, y permite mostrar una franja si la app
+// corre en localhost contra producción.
 app.get("/config.js", (req, res) => {
-  const url = process.env.SUPABASE_URL || SUPABASE_PROD_URL;
-  const key = process.env.SUPABASE_KEY || SUPABASE_PROD_PUBLISHABLE_KEY;
-  const esLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url);
   res.type("application/javascript").set("Cache-Control", "no-store").send(
     `window.API_URL = "";\n` +
-    `window.SUPABASE_URL = ${JSON.stringify(url)};\n` +
-    `window.SUPABASE_ANON_KEY = ${JSON.stringify(key)};\n` +
-    `window.AUTH_DEV_LOGIN = ${esLocal};\n`
+    `window.SUPABASE_URL = ${JSON.stringify(SUPABASE_URL)};\n` +
+    `window.SUPABASE_ANON_KEY = ${JSON.stringify(SUPABASE_KEY)};\n` +
+    `window.BASE_LOCAL = ${ES_BASE_LOCAL};\n`
   );
 });
 
@@ -2292,6 +2284,11 @@ app.listen(
 
     console.log(
       `API server running on http://localhost:${PORT}`
+    );
+    console.log(
+      ES_BASE_LOCAL
+        ? `Base de datos: LOCAL (${SUPABASE_URL})`
+        : `⚠️  Base de datos: PRODUCCIÓN (${SUPABASE_URL}). Todo lo que hagas en la app modifica datos reales.`
     );
   }
 );
