@@ -84,6 +84,8 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Corregido
 
+- **Desmarcar presente no se podía usar:** el endpoint existía pero ningún botón lo llamaba, y el botón de presente quedaba deshabilitado al marcar. Ahora funciona como toggle en la ficha y en la lista rápida.
+- **"No se pudo marcar el presente" en el primer intento:** marcar se reintenta una vez ante error de red, 5xx o 401 (marcar es idempotente), y el mensaje de error muestra el motivo real (`Error 502`, etc.) en vez de uno genérico.
 - **Login de usuarios habilitados en un navegador compartido:**
   - **Qué pasaba:** la organización activa guardada en el navegador (de otro usuario que había usado la misma computadora) se mandaba también en `/api/auth/me`. El backend respondía 403 y un usuario recién dado de alta veía "Acceso no autorizado".
   - **Arreglo:**

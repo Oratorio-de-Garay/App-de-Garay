@@ -49,3 +49,4 @@ Aplicación web para el registro de ingreso/asistencia y gestión de buffet de u
 - Actualizar `CHANGELOG.md` y `docs/API.md` en cada cambio relevante.
 - No commitear `backend/.env` ni claves.
 - Mostrar el diff antes de aplicar cambios grandes.
+- `AGENTS.md` y `CLAUDE.md` deben tener siempre el mismo contenido. Todo cambio en uno se replica en el otro en el mismo commit.

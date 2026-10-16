@@ -564,7 +564,9 @@ function mostrarResultado(chico) {
 
   document
     .getElementById("btn-presente")
-    .addEventListener("click", marcarPresente);
+    .addEventListener("click", () =>
+      marcadoPresente ? desmarcarPresente() : marcarPresente()
+    );
 
   document
   .getElementById("presente-fecha")
@@ -803,46 +805,11 @@ async function verificarPresenteRapido(
 
     if (resultado.marked) {
 
-      btn.classList.add(
-        "done"
-      );
-
-      btn.disabled = true;
-
-
-      const texto =
-        btn.querySelector(
-          ".presente-rapido-texto"
-        );
-
-
-      if (texto) {
-
-        texto.textContent =
-          "✓ Presente marcado";
-      }
-
+      estadoBotonRapido(btn, true);
 
     } else {
 
-      btn.classList.remove(
-        "done"
-      );
-
-      btn.disabled = false;
-
-
-      const texto =
-        btn.querySelector(
-          ".presente-rapido-texto"
-        );
-
-
-      if (texto) {
-
-        texto.textContent =
-          "✓ Marcar presente";
-      }
+      estadoBotonRapido(btn, false);
     }
 
 
@@ -855,23 +822,9 @@ async function verificarPresenteRapido(
   }
 }
 
-async function marcarPresenteRapido(btn) {
-
-  if (
-    !btn ||
-    btn.classList.contains("done")
-  ) {
-    return;
-  }
-
-  const pibeId =
-    btn.dataset.pibeId;
-
-  const nombre =
-    btn.dataset.pibeNombre;
-
-  const fecha =
-    getTodayInputValue();
+// Deja el botón de la lista rápida en el estado "marcado" (se puede
+// desmarcar) o "sin marcar" (se puede marcar). Siempre queda habilitado.
+function estadoBotonRapido(btn, marcado) {
 
   const texto =
     btn.querySelector(
@@ -883,11 +836,76 @@ async function marcarPresenteRapido(btn) {
       ".presente-rapido-icono"
     );
 
+  btn.classList.toggle("done", marcado);
+
+  btn.disabled = false;
+
+  if (texto) {
+    texto.textContent = marcado
+      ? "✘ Desmarcar presente"
+      : "✓ Marcar presente";
+  }
+
+  if (icono) {
+    icono.textContent = marcado
+      ? "✘"
+      : "✓";
+  }
+}
+
+// Reintenta una vez si el pedido falla por red, por un 5xx o por un 401
+// (token vencido o función de Vercel arrancando en frío). Sólo para pedidos
+// idempotentes: marcar no duplica la asistencia.
+async function apiFetchConReintento(path, options) {
+
+  const debeReintentar = (res) =>
+    res.status === 401 || res.status >= 500;
+
+  try {
+
+    const res = await window.apiFetch(path, options);
+
+    if (!debeReintentar(res)) {
+      return res;
+    }
+
+  } catch (error) {
+
+    console.warn(
+      "Falló el pedido, reintentando:",
+      error
+    );
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 800));
+
+  return window.apiFetch(path, options);
+}
+
+async function marcarPresenteRapido(btn) {
+
+  if (!btn) {
+    return;
+  }
+
+  if (btn.classList.contains("done")) {
+    return desmarcarPresenteRapido(btn);
+  }
+
+  const pibeId =
+    btn.dataset.pibeId;
+
+  const nombre =
+    btn.dataset.pibeNombre;
+
+  const fecha =
+    getTodayInputValue();
+
   btn.disabled = true;
 
   try {
 
-    const res = await window.apiFetch(
+    const res = await apiFetchConReintento(
       `/api/attendance/mark`,
       {
         method: "POST",
@@ -903,27 +921,18 @@ async function marcarPresenteRapido(btn) {
       }
     );
 
+    // Un error de Vercel puede venir como HTML: no tiene que romper acá.
     const resultado =
-      await res.json();
+      await res.json().catch(() => ({}));
 
     if (!res.ok) {
       throw new Error(
         resultado.error ||
-        "Server error"
+        `Error ${res.status}`
       );
     }
 
-    btn.classList.add("done");
-    btn.disabled = true;
-
-    if (texto) {
-      texto.textContent =
-        "✓ Presente marcado";
-    }
-
-    if (icono) {
-      icono.textContent = "✓";
-    }
+    estadoBotonRapido(btn, true);
 
     if (resultado.alreadyMarked) {
 
@@ -947,22 +956,84 @@ async function marcarPresenteRapido(btn) {
       error
     );
 
-    btn.disabled = false;
-
-    btn.classList.remove("done");
-
-    if (texto) {
-      texto.textContent =
-        "✓ Marcar presente";
-    }
-
-    if (icono) {
-      icono.textContent = "✓";
-    }
+    estadoBotonRapido(btn, false);
 
     mostrarMensaje(
       "err",
-      "❌ No se pudo marcar el presente."
+      `❌ No se pudo marcar el presente (${error.message}).`
+    );
+  }
+}
+
+async function desmarcarPresenteRapido(btn) {
+
+  const pibeId =
+    btn.dataset.pibeId;
+
+  const nombre =
+    btn.dataset.pibeNombre;
+
+  if (
+    !confirm(
+      `¿Desmarcar el presente de ${nombre}?`
+    )
+  ) {
+    return;
+  }
+
+  const fecha =
+    getTodayInputValue();
+
+  btn.disabled = true;
+
+  try {
+
+    const res = await window.apiFetch(
+      `/api/attendance/unmark`,
+      {
+        method: "DELETE",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          student_id: pibeId,
+          fecha: fecha
+        })
+      }
+    );
+
+    // 404: ya no tenía asistencia ese día, el botón queda igual de bien.
+    if (!res.ok && res.status !== 404) {
+      const resultado =
+        await res.json().catch(() => ({}));
+
+      throw new Error(
+        resultado.error ||
+        `Error ${res.status}`
+      );
+    }
+
+    estadoBotonRapido(btn, false);
+
+    mostrarMensaje(
+      "info",
+      `↩ Presente desmarcado para ${nombre}.`
+    );
+
+  } catch (error) {
+
+    console.error(
+      "Error desmarcando presente rápido:",
+      error
+    );
+
+    estadoBotonRapido(btn, true);
+
+    mostrarMensaje(
+      "err",
+      `❌ No se pudo desmarcar el presente (${error.message}).`
     );
   }
 }
@@ -1293,11 +1364,11 @@ async function verificarPresenteFecha() {
       marcadoPresente = true;
 
       btn.textContent =
-        "✓ Presente marcado";
+        "✘ Desmarcar presente";
 
       btn.classList.add("done");
 
-      btn.disabled = true;
+      btn.disabled = false;
 
     } else {
 
@@ -1361,7 +1432,7 @@ async function marcarPresente() {
 
 
   try {
-    const res = await apiFetch("/api/attendance/mark", {
+    const res = await apiFetchConReintento("/api/attendance/mark", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1371,7 +1442,8 @@ async function marcarPresente() {
     });
 
     if (!res.ok) {
-      throw new Error("Server error");
+      const resultado = await res.json().catch(() => ({}));
+      throw new Error(resultado.error || `Error ${res.status}`);
     }
 
 
@@ -1379,10 +1451,12 @@ async function marcarPresente() {
 
 
     btn.textContent =
-      "✓ Presente marcado";
+      "✘ Desmarcar presente";
 
 
     btn.classList.add("done");
+
+    btn.disabled = false;
 
 
     document
@@ -1421,7 +1495,7 @@ async function marcarPresente() {
 
     mostrarMensaje(
       "err",
-      "❌ Error al guardar. Intentá de nuevo."
+      `❌ Error al guardar (${error.message}). Intentá de nuevo.`
     );
   }
 }
