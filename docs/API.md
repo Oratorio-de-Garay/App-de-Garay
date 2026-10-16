@@ -111,6 +111,18 @@ Registra una asistencia. **Idempotente por día**: si el pibe ya tiene una asist
 
 **Respuesta 200:** `{ "ok": true, "alreadyMarked": false }`
 
+
+## `DELETE /api/attendance/unmark`
+
+Revierte una asistencia ya registrada. Borra la fila de `asistencias` del pibe para la fecha indicada dentro de la organización activa.
+
+**Body:** `{ "student_id": "uuid", "fecha": "YYYY-MM-DD" }`
+
+**Respuesta 200:** `{ "ok": true }`
+
+**400** si falta `student_id` o `fecha`.
+**404** si el pibe no pertenece a la organización activa, o si no tiene asistencia registrada para esa fecha.
+
 ## `GET /api/attendance/dates?year=`
 
 Historial: días del año (`year`, default año actual) que tuvieron al menos una asistencia, con el total de pibes distintos ese día.

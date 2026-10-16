@@ -1319,6 +1319,58 @@ app.post(
 );
 
 
+
+// ========================================================
+// DESMARCAR PRESENTE
+// ========================================================
+
+app.delete(
+  "/api/attendance/unmark",
+  async (req, res) => {
+    try {
+      const { student_id, fecha } = req.body;
+      if (!student_id || !fecha) {
+        return res.status(400).json({ error: "Missing student_id or fecha" });
+      }
+      const { data: pibeDeLaOrg, error: pibeError } = await supabase
+        .from("pibes")
+        .select("id")
+        .eq("id", student_id)
+        .eq("organizacion_id", req.user.organizationId)
+        .maybeSingle();
+      if (pibeError) throw pibeError;
+      if (!pibeDeLaOrg) {
+        return res.status(404).json({ error: "El pibe no existe en tu organización" });
+      }
+      const inicio = new Date(fecha + "T00:00:00.000Z");
+      const fin = new Date(inicio);
+      fin.setUTCDate(fin.getUTCDate() + 1);
+      const { data: asistenciaExistente, error: buscarError } = await supabase
+        .from("asistencias")
+        .select("id")
+        .eq("pibe_id", student_id)
+        .eq("organizacion_id", req.user.organizationId)
+        .gte("fecha", inicio.toISOString())
+        .lt("fecha", fin.toISOString())
+        .limit(1);
+      if (buscarError) throw buscarError;
+      if (!asistenciaExistente || asistenciaExistente.length === 0) {
+        return res.status(404).json({ error: "No hay asistencia registrada para ese día" });
+      }
+      const { error: borrarError } = await supabase
+        .from("asistencias")
+        .delete()
+        .eq("id", asistenciaExistente[0].id)
+        .eq("organizacion_id", req.user.organizationId);
+      if (borrarError) throw borrarError;
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Unmark attendance error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
 // ========================================================
 // CREAR NUEVO PIBE
 // ========================================================

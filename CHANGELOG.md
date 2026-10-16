@@ -7,6 +7,8 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 ## Sin publicar
 
 ### Agregado
+- **Desmarcar presente** (`DELETE /api/attendance/unmark`): cualquier miembro puede revertir una asistencia ya marcada con confirmación previa. El botón "✔ Presente marcado" pasa a ser "✘ Desmarcar presente" (habilitado) tanto en la ficha individual como en los botones de la lista rápida, funcionando como toggle.
+
 
 - **Aviso de base de producción:** al arrancar, el backend dice en la terminal a qué base apunta. Si la app corre en `localhost` contra producción, muestra una franja roja.
 - **Guía para correr el proyecto en local** ([docs/DESARROLLO_LOCAL.md](docs/DESARROLLO_LOCAL.md)): requisitos, Supabase local, `.env.local`, usuarios de prueba, mails en Mailpit y problemas comunes.
@@ -92,6 +94,8 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Corregido
 
+- **Desmarcar presente no se podía usar:** el endpoint existía pero ningún botón lo llamaba, y el botón de presente quedaba deshabilitado al marcar. Ahora funciona como toggle en la ficha y en la lista rápida.
+- **"No se pudo marcar el presente" en el primer intento:** marcar se reintenta una vez ante error de red, 5xx o 401 (marcar es idempotente), y el mensaje de error muestra el motivo real (`Error 502`, etc.) en vez de uno genérico.
 - **Estilos que no se aplicaban:** a `@keyframes toast-in` de `base.css` le faltaba la llave de cierre, y anulaba las reglas que venían después: toasts en celular, movimiento reducido y el encabezado oculto mientras se verifica el acceso.
 - **Login de usuarios habilitados en un navegador compartido:**
   - **Qué pasaba:** la organización activa guardada en el navegador (de otro usuario que había usado la misma computadora) se mandaba también en `/api/auth/me`. El backend respondía 403 y un usuario recién dado de alta veía "Acceso no autorizado".
