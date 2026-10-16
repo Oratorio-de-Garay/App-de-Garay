@@ -2,7 +2,15 @@
 
 ## Variables de entorno
 
-`backend/.env` (nunca se commitea — ver `.gitignore`; usar `.env.example` de referencia):
+Ningún script lee un `backend/.env`: cada uno usa su archivo, y el backend no arranca si falta alguna de las tres variables de Supabase (no hay valores por defecto, ver `backend/api/entorno.js`).
+
+| Dónde | Archivo / lugar | Lo usa |
+|---|---|---|
+| Local, base local | `backend/.env.local` (ver `backend/.env.local.example`) | `npm run dev` |
+| Local, base de producción | `backend/.env.production` | `npm run dev:prod` |
+| Vercel | Project → Settings → Environment Variables | el deploy |
+
+Los dos archivos están en `.gitignore`. Variables:
 
 | Variable | Dónde conseguirla | Uso |
 |---|---|---|
@@ -16,14 +24,17 @@
 | `APP_URL` | — | URL de la app para los links de los mails (`https://app-de-garay.vercel.app`). Sin ella se usa la del request, que en un preview de Vercel es la del preview. |
 | `GOOGLE_AUTH_CLIENT_ID` / `GOOGLE_AUTH_CLIENT_SECRET` | Google Cloud Console → Credentials | **Informativos únicamente** — el backend no los lee (`grep process.env` lo confirma). Se cargan directo en Supabase Auth → Providers → Google, no en el código. |
 
-El frontend (`frontend/index.html`) tiene hardcodeadas `SUPABASE_URL` y `SUPABASE_ANON_KEY` (la "publishable/anon key" es pública por diseño — ver [ARCHITECTURE.md](ARCHITECTURE.md)). Si cambian, actualizar ahí también.
+El frontend no tiene `SUPABASE_URL` ni la publishable key hardcodeadas: las recibe del backend por `GET /config.js` (la "publishable/anon key" es pública por diseño — ver [ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ## Desarrollo local
+
+**La guía completa, paso a paso y con problemas comunes, está en [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md).** Lo que sigue es un resumen.
 
 ```bash
 cd backend
 npm install
-npm run dev        # node --watch api/index.js, sirve todo en http://localhost:3000
+npm run dev        # contra Supabase local (backend/.env.local)
+npm run dev:prod   # contra producción, a propósito (backend/.env.production)
 ```
 
 No hay servidor de frontend separado: `backend/api/index.js` sirve `frontend/` como estático. Abrir `http://localhost:3000` directamente — no `frontend/index.html` a mano ni un `http-server` aparte, o `apiFetch`/CORS se comportan distinto.
@@ -49,14 +60,16 @@ La base local escucha en `postgresql://postgres:postgres@127.0.0.1:54322/postgre
 
 ### App completa en local (sin tocar producción)
 
+Resumen; el detalle está en [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md).
+
 1. `npx supabase start`: levanta base, auth, API y Mailpit. Aplica las migraciones y `seed.sql` la primera vez; después usá `db reset --local` para volver a sembrar.
 2. Copiá `backend/.env.local.example` a `backend/.env.local` y completalo con la *Publishable key* y la *Secret key* de `npx supabase status`. `.env.local` está en `.gitignore`.
-3. `cd backend && npm run dev:local`, y abrí `http://localhost:3000`.
+3. `cd backend && npm run dev`, y abrí `http://localhost:3000`.
 4. **Login:** con "o con tu mail". Escribís cualquier email y el código de 6 dígitos llega a **Mailpit** (`http://127.0.0.1:54324`). Los avisos de solicitudes también llegan ahí.
    - Usuarios del seed: `oratoriogarayy@gmail.com` (superadmin), `admin@local.test` (admin de Oratorio) y `miembro@local.test` (miembro de las dos organizaciones).
    - Cualquier otro email ve la pantalla de registro, para probar las solicitudes. El seed deja una pendiente de `nuevo@local.test` para Oratorio.
 
-**Cómo decide la app a qué base apuntar:** el frontend no tiene la configuración hardcodeada; la pide a `GET /config.js`, que el backend arma con `SUPABASE_URL`/`SUPABASE_KEY`. Si no están, usa los valores de producción. Con `SUPABASE_URL` en `localhost`/`127.0.0.1`, la pantalla del código avisa que el mail llega a Mailpit. El botón de Google en local no funciona salvo que cargues credenciales en `[auth.external.google]` de `supabase/config.toml`.
+**Cómo decide la app a qué base apuntar:** el frontend no tiene la configuración hardcodeada; la pide a `GET /config.js`, que el backend arma con `SUPABASE_URL`/`SUPABASE_KEY`. Si no están, el backend no arranca. Con `SUPABASE_URL` en `localhost`/`127.0.0.1` (`window.BASE_LOCAL`), la pantalla del código avisa que el mail llega a Mailpit. Si la app corre en `localhost` contra otra base, muestra una franja roja de "Base de PRODUCCIÓN", y la terminal lo avisa al arrancar. El botón de Google en local no funciona salvo que cargues credenciales en `[auth.external.google]` de `supabase/config.toml`.
 
 ### Aplicar migraciones a producción
 
@@ -156,6 +169,6 @@ Cargar `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER`, `SMTP_PASS`, `M
 
 1. Leer [ARCHITECTURE.md](ARCHITECTURE.md) completo, y [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md) si vas a tocar autenticación o permisos.
 2. Leer [DATABASE.md](DATABASE.md) — especialmente la sección de deuda técnica sobre el schema no versionado.
-3. `cd backend && npm install && npm run dev`, abrir `http://localhost:3000` y loguearse con un email registrado en `usuarios` (se dan de alta desde `admin.html`).
+3. Levantar la app en local siguiendo [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md) y entrar con uno de los usuarios de prueba del seed.
 4. Antes de tocar el schema de Supabase: confirmar el estado real con `supabase db pull` o revisando el SQL Editor, no asumir que `supabase/migrations/` está completo.
 5. Antes de agregar un endpoint nuevo: revisar [API.md](API.md) para mantener las convenciones de forma de respuesta y manejo de errores.

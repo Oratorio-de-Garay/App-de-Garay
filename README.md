@@ -12,19 +12,24 @@ Para entender el proyecto en profundidad (arquitectura, base de datos, API, cóm
 - **[docs/DATABASE.md](docs/DATABASE.md)** — schema, relaciones, RLS.
 - **[docs/ROLES_Y_PERMISOS.md](docs/ROLES_Y_PERMISOS.md)** — roles, permisos por organización, auditoría.
 - **[docs/API.md](docs/API.md)** — referencia de endpoints.
-- **[docs/SETUP.md](docs/SETUP.md)** — variables de entorno, desarrollo local, deploy, configuración de auth.
+- **[docs/DESARROLLO_LOCAL.md](docs/DESARROLLO_LOCAL.md)** — cómo correr todo en local (base, login y mails), paso a paso.
+- **[docs/SETUP.md](docs/SETUP.md)** — variables de entorno, deploy, configuración de auth y mails en producción.
 - **[CHANGELOG.md](CHANGELOG.md)** — registro de cambios.
 - [docs/legacy/](docs/legacy/) — documentación de la versión anterior en Google Apps Script + Sheets (histórica).
 
 ## Quick start
 
+Con Node 20.6+ y Docker Desktop corriendo:
+
 ```bash
+npx supabase start                                  # base, auth y Mailpit locales
+cp backend/.env.local.example backend/.env.local    # y completar las claves de `npx supabase status`
 cd backend
 npm install
-npm run dev
+npm run dev                                         # siempre contra la base local
 ```
 
-Abrir `http://localhost:3000` (el mismo servidor sirve la API y el frontend). Requiere un `backend/.env` con las credenciales de Supabase — ver [docs/SETUP.md](docs/SETUP.md).
+Abrir `http://localhost:3000` (el mismo servidor sirve la API y el frontend). Los mails llegan a Mailpit (`http://127.0.0.1:54324`). Paso a paso, usuarios de prueba y problemas comunes en [docs/DESARROLLO_LOCAL.md](docs/DESARROLLO_LOCAL.md).
 
 ## Licencia
 
