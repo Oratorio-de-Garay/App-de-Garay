@@ -8,6 +8,8 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Agregado
 
+- **Aviso de base de producción:** al arrancar, el backend dice en la terminal a qué base apunta. Si la app corre en `localhost` contra producción, muestra una franja roja.
+- **Guía para correr el proyecto en local** ([docs/DESARROLLO_LOCAL.md](docs/DESARROLLO_LOCAL.md)): requisitos, Supabase local, `.env.local`, usuarios de prueba, mails en Mailpit y problemas comunes.
 - **Registro abierto con aprobación.** Cualquiera puede crear una cuenta, pero no tiene acceso a nada hasta que lo aprueben:
   - **Login con el mail**, además de Google: se escribe el mail y se ingresa un código de 6 dígitos, sin contraseña. Es el mismo flujo para registrarse y para entrar.
   - **Pantalla de registro** (`frontend/registro.js`):
@@ -65,6 +67,14 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Cambiado
 
+- **Supabase local levanta sólo lo que usa la app** (`supabase/config.toml`): Postgres, Auth, PostgREST, Kong y Mailpit.
+  - Se apagaron Studio, Storage, Edge Runtime, Analytics y Realtime.
+  - Docker baja unos 2,1 GB en lugar de 8,5 GB.
+  - Para ver los datos, se usa `psql` o un cliente de Postgres; Studio se puede prender a mano (ver `docs/DESARROLLO_LOCAL.md`).
+- **`npm run dev` usa siempre la base local** (`backend/.env.local`). Antes leía `backend/.env` y, con las claves de producción ahí, modificaba datos reales.
+  - Contra producción, a propósito: `npm run dev:prod`, que lee `backend/.env.production`. Se eliminó `npm run dev:local`.
+  - El backend ya no cae en los valores de producción si faltan variables: no arranca (`backend/api/entorno.js`).
+  - Se sacó `dotenv`: cada script indica su archivo con `node --env-file`.
 - **Cuenta sin acceso:**
   - Ya no ve "Acceso no autorizado", sino la pantalla de registro.
   - `/api/auth/me` responde `403` con `code: "SIN_REGISTRO"`.
@@ -82,6 +92,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Corregido
 
+- **Estilos que no se aplicaban:** a `@keyframes toast-in` de `base.css` le faltaba la llave de cierre, y anulaba las reglas que venían después: toasts en celular, movimiento reducido y el encabezado oculto mientras se verifica el acceso.
 - **Login de usuarios habilitados en un navegador compartido:**
   - **Qué pasaba:** la organización activa guardada en el navegador (de otro usuario que había usado la misma computadora) se mandaba también en `/api/auth/me`. El backend respondía 403 y un usuario recién dado de alta veía "Acceso no autorizado".
   - **Arreglo:**

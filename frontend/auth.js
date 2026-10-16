@@ -16,6 +16,16 @@ const btnLogout = document.getElementById("btn-logout");
 
 btnLogout.addEventListener("click", () => supabaseClient.auth.signOut());
 
+// Corriendo en una PC (localhost) contra la base de producción: franja fija
+// para que no se confunda con la base local (npm run dev:prod).
+if (["localhost", "127.0.0.1"].includes(location.hostname) && !window.BASE_LOCAL) {
+  const aviso = document.createElement("div");
+  aviso.className = "aviso-produccion";
+  aviso.setAttribute("role", "alert");
+  aviso.textContent = "⚠️ Base de PRODUCCIÓN: todo lo que hagas modifica datos reales.";
+  document.body.prepend(aviso);
+}
+
 // Hasta que el backend confirme el acceso no se muestra nada de la app: ni el
 // contenido ni el encabezado (base.css oculta el header con .auth-pending).
 document.body.classList.add("auth-pending");
@@ -243,7 +253,7 @@ function renderPasoCodigo(email) {
   box.innerHTML = `
     <form class="login-form" id="form-codigo" novalidate>
       <div class="auth-sub">Te mandamos un código a <strong>${escapeHtmlAuth(email)}</strong>.${
-        window.AUTH_DEV_LOGIN ? ' En local llega a <a href="http://127.0.0.1:54324" target="_blank" rel="noopener">Mailpit</a>.' : ""
+        window.BASE_LOCAL ? ' En local llega a <a href="http://127.0.0.1:54324" target="_blank" rel="noopener">Mailpit</a>.' : ""
       }</div>
       <input class="form-input login-codigo" type="text" id="login-codigo" inputmode="numeric" autocomplete="one-time-code"
         maxlength="6" pattern="[0-9]*" placeholder="000000" aria-label="Código de 6 dígitos" required>

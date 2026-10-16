@@ -84,14 +84,17 @@ allowed_cidrs_v6 = ["::/0"]
 # enabled = true
 
 [realtime]
-enabled = true
+# Apagado: la app no usa suscripciones (ver docs/DESARROLLO_LOCAL.md, "Servicios").
+enabled = false
 # Bind realtime via either IPv4 or IPv6. (default: IPv4)
 # ip_version = "IPv6"
 # The maximum length in bytes of HTTP request headers. (default: 4096)
 # max_header_length = 4096
 
 [studio]
-enabled = true
+# Apagado para no bajar la imagen (~450 MB con postgres-meta). Para usarlo,
+# poné true sin commitearlo y reiniciá (ver docs/DESARROLLO_LOCAL.md).
+enabled = false
 # Port to use for Supabase Studio.
 port = 54323
 # External URL of the API server that frontend connects to.
@@ -113,7 +116,8 @@ smtp_port = 54325
 # sender_name = "Admin"
 
 [storage]
-enabled = true
+# Apagado: la app no guarda archivos. También evita la imagen de imgproxy.
+enabled = false
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
@@ -381,7 +385,8 @@ authorization_url_path = "/oauth/consent"
 allow_dynamic_registration = false
 
 [edge_runtime]
-enabled = true
+# Apagado: el proyecto no tiene Edge Functions (supabase/functions).
+enabled = false
 # Supported request policies: `oneshot`, `per_worker`.
 # `per_worker` (default) — enables hot reload during local development.
 # `oneshot` — fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
@@ -395,7 +400,8 @@ deno_version = 2
 # secret_key = "env(SECRET_VALUE)"
 
 [analytics]
-enabled = true
+# Apagado: sólo guarda logs para Studio (Logflare + Vector).
+enabled = false
 port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
