@@ -97,6 +97,48 @@ header {
   border: 1px solid rgba(255,255,255,0.08);
 }
 
+/* Botón con el aspecto de un link (ej: activar notificaciones). */
+.side-link-btn {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.side-link-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Aviso para activar las notificaciones push (push.js). */
+.push-aviso {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: min(440px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #10261d;
+  color: #d9f2e4;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.push-aviso-texto { flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.push-aviso-texto span { font-size: 13px; opacity: 0.8; }
+.push-aviso-acciones { display: flex; gap: 8px; margin-left: auto; }
+.push-aviso button {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: inherit;
+}
+.push-aviso button.push-aviso-si { background: #1f5b3d; border-color: #2f7a53; font-weight: 600; }
+.push-aviso button:disabled { opacity: 0.6; cursor: default; }
+
 .side-link.active {
   background: #1f5b3d;
 }

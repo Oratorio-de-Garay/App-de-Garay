@@ -261,6 +261,48 @@ Las listan y resuelven los admins (las de sus organizaciones) y los superadmins 
 | `POST /api/admin/solicitudes/:id/tomar` | — | `solicitud`. El actor queda como aprobador; sigue pendiente. Reasigna si ya la tenía otro. |
 | `POST /api/admin/solicitudes/:id/resolver` | `{ decision: "aceptar" \| "rechazar", comentario?, organizacion_id?, nombre_espacio? }` | `solicitud` + `notificados` (mails enviados). Para un espacio nuevo (sólo superadmin): `organizacion_id` lo asigna a uno existente (miembro, sin rol); si no, se crea con `nombre_espacio` (o el pedido) y queda admin. `409` si ya estaba resuelta. |
 
+### Notificaciones push
+
+Un admin envía un título y un texto a **todos los dispositivos** de uno o varios usuarios de una organización que administra (el superadmin, de cualquiera), **ahora o programado** para una fecha y hora futuras. Si el server no tiene claves VAPID responde `503`. Forma de una notificación:
+
+```json
+{
+  "id": "uuid", "organizacion_id": "uuid", "organizacion_nombre": "Oratorio de Garay",
+  "remitente_email": "admin@gmail.com", "destinatario_email": "x@gmail.com", "destinatario_nombre": "María Pérez",
+  "titulo": "Cambio de horario", "texto": "El sábado arrancamos a las 15.",
+  "estado": "pendiente | programada | enviando | enviada | parcial | fallida | sin_dispositivos | cancelada",
+  "dispositivos_total": 2, "enviados": 2, "fallidos": 0,
+  "created_at": "...", "enviada_at": "... | null",
+  "programada_para": "... | null", "lote_id": "uuid", "cancelada_at": "... | null", "motivo": "... | null"
+}
+```
+
+Se crea **una notificación por destinatario** (mismo `lote_id`), cada una con su estado y contadores.
+
+- **Inmediata** (sin `programada_para`): el endpoint envía a todos los dispositivos y espera la respuesta de los servicios push antes de contestar.
+- **Programada** (con `programada_para`): sólo crea las notificaciones en estado `programada`. Las envía el despachador (`POST /api/push/despachar`, lo dispara `pg_cron` cuando hay alguna vencida), por lo que salen con **hasta ~1 minuto de demora**. Al enviarse se vuelve a validar que el destinatario siga siendo miembro de la organización; si no, queda `fallida` con el `motivo`.
+
+| Endpoint | Body | Respuesta |
+|---|---|---|
+| `POST /api/admin/notificaciones` | `{ organizacion_id, destinatarios_email: [email] (1–50), titulo (≤65), texto (≤240), programada_para? }`. `programada_para` es una fecha ISO 8601 (el cliente manda UTC) y **tiene que ser posterior a ahora**. También se acepta `destinatario_email` (uno solo). | **201** `{ lote_id, notificaciones: [notificacion], rechazados: [email] }`. Un destinatario que no es miembro de la organización no aborta el lote: va en `rechazados` (no se revela si existe). `sin_dispositivos` si el usuario no activó las notificaciones (queda registrada igual). `403` si no administra la organización, `404` si **ningún** destinatario es miembro, `400` si faltan campos, se pasan de largo, hay más de 50 destinatarios o la fecha no es posterior a ahora. |
+| `GET /api/admin/notificaciones?organizacion_id=&limit=` | — | `[notificacion]` del scope: primero las `programada`/`enviando`, después las más nuevas (default 50, máx. 200). `organizacion_id` opcional. |
+| `DELETE /api/admin/notificaciones/:id` | — | La `notificacion` en estado `cancelada`. `409` si ya no está `programada` (una inmediata o ya enviada no se cancela), `404` si no existe o es de una organización fuera de su scope. |
+
+#### `POST /api/push/despachar`
+
+Lo llama el cron de la base (`pg_cron` + `pg_net`) y **no usa sesión de usuario**: se autentica con `Authorization: Bearer <CRON_SECRET>` (comparación en tiempo constante) y no lee nada del body. Toma hasta 20 notificaciones vencidas, las envía y las cierra. `200 { procesadas }`, `401` si el secreto no coincide, `503` si falta `CRON_SECRET` o las claves VAPID. Es la única ruta de `/api` exceptuada de la sesión (ver `backend/api/index.js`).
+
+### Dispositivos push (`/api/push/*`)
+
+Los usa cualquier usuario con sesión sobre **sí mismo** (el email sale del token, nunca del body). No exigen organización activa. Responden `503` si el push no está configurado.
+
+| Endpoint | Body | Respuesta |
+|---|---|---|
+| `POST /api/push/suscripciones` | La `PushSubscription` del navegador: `{ endpoint, keys: { p256dh, auth } }` | **201** `{ id }`. Upsert por `endpoint`. `400` si el endpoint no es de un servicio push conocido (FCM, Mozilla, Apple, Windows). Hasta 20 dispositivos por usuario: se descartan los más viejos. |
+| `DELETE /api/push/suscripciones` | `{ endpoint }` | `{ eliminados }`. Sólo borra un dispositivo propio. |
+
+`GET /config.js` suma `window.VAPID_PUBLIC_KEY` (vacía si el push no está configurado).
+
 ## Registro (`/api/registro/*`)
 
 Router en `backend/api/registro.js`. Sólo exige una sesión válida (`requireSession`), no estar registrado: lo usa quien inició sesión pero todavía no tiene acceso. Todo se hace sobre el email de la sesión.

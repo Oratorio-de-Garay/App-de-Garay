@@ -7,6 +7,20 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 ## Sin publicar
 
 ### Agregado
+- **Notificaciones push** (migración `20261106000000_notificaciones_push.sql`):
+  - Un admin envía un título y un texto, de forma inmediata, a todos los dispositivos de un usuario de una organización que administra (pestaña **Notificaciones** del panel, con historial y resultado del envío).
+  - Web Push estándar (VAPID, librería `web-push`): sin Firebase ni otra dependencia externa. Variables `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (ver docs/SETUP.md); sin ellas el push queda deshabilitado.
+  - Cada usuario activa o desactiva las notificaciones en su dispositivo desde el menú lateral (`frontend/push.js`, `sw.js`, `manifest.json`).
+  - Tablas `dispositivos_push` y `notificaciones_push`, funciones `push_*` y `admin_*_notificacion*`, y la acción de auditoría `notificacion_enviada`.
+  - Endpoints `POST`/`GET /api/admin/notificaciones` y `POST`/`DELETE /api/push/suscripciones`.
+  - **Aviso para activarlas:** a todo usuario con sesión iniciada que no las tenga activadas, en cualquier página, se le muestra un aviso para habilitarlas. "Ahora no" lo pospone 7 días; no se pregunta si el navegador las bloqueó ni si el usuario las desactivó a propósito en ese dispositivo.
+  - En iOS (16.4+) sólo llegan si la app está instalada en la pantalla de inicio.
+- **Notificaciones push programadas y a varios usuarios** (migración `20261110000000_notificaciones_programadas.sql`):
+  - El formulario permite elegir **varios usuarios** (con "Seleccionar todos", hasta 50 por envío) y **cuándo** enviar: *Inmediata* o *Programar* con fecha y hora. La fecha tiene que ser posterior a ahora: se valida en el formulario y, como autoridad, en la base. Se crea una notificación por destinatario; los que no pertenecen a la organización se rechazan sin abortar el lote.
+  - Las programadas se pueden **cancelar** mientras no salgan (`DELETE /api/admin/notificaciones/:id`). Estados nuevos: `programada`, `enviando`, `cancelada`.
+  - Sin worker propio: la tabla `notificaciones_push` es la cola y `pg_cron` llama cada minuto a `POST /api/push/despachar` **sólo si hay algo vencido** (autenticado con `CRON_SECRET`, sin sesión de usuario). Salen con hasta ~1 minuto de demora. Al enviar se re-valida que el destinatario siga en la organización. Ver docs/SETUP.md (URL y secreto en Supabase Vault) y docs/ARCHITECTURE.md.
+  - Funciones `admin_crear_notificaciones`, `admin_cancelar_notificacion`, `push_tomar_vencidas`, `push_cerrar_programada`, `despachar_notificaciones_programadas`; acciones de auditoría `notificacion_programada` y `notificacion_cancelada`.
+  - `POST /api/admin/notificaciones` ahora recibe `destinatarios_email` (lista) y `programada_para` opcional, y responde `{ lote_id, notificaciones, rechazados }` en vez de una sola notificación.
 - **Desmarcar presente** (`DELETE /api/attendance/unmark`): cualquier miembro puede revertir una asistencia ya marcada con confirmación previa. El botón "✔ Presente marcado" pasa a ser "✘ Desmarcar presente" (habilitado) tanto en la ficha individual como en los botones de la lista rápida, funcionando como toggle.
 
 

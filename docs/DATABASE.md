@@ -142,6 +142,36 @@ Pedidos que aprueba un admin o superadmin, como tickets. Ver [ROLES_Y_PERMISOS.m
 
 Índice único parcial `(solicitante_email, tipo) where estado = 'pendiente'`: una sola pendiente por persona. Sin RLS pública: sólo la lee el backend.
 
+### `dispositivos_push`
+Un navegador o dispositivo suscripto a notificaciones push. Versionada en `20261106000000_notificaciones_push.sql`.
+| Columna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK |
+| email | text | FK → `usuarios.email` (ON DELETE/UPDATE CASCADE). Pertenece al usuario, no a una organización: el filtro por organización se aplica al enviar. |
+| endpoint | text | único, `https://`, hasta 2048. El backend sólo acepta hosts de servicios push conocidos. |
+| p256dh / auth | text | claves de la suscripción. **Secretas**: nunca se loguean ni se devuelven. |
+| user_agent | text | informativo |
+| created_at / ultimo_uso_at | timestamptz | `ultimo_uso_at`: último registro o envío exitoso |
+
+### `notificaciones_push`
+Historial de envíos y cola de las programadas. Versionada en `20261106000000_notificaciones_push.sql` y `20261110000000_notificaciones_programadas.sql`.
+| Columna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK |
+| organizacion_id | uuid | FK → `organizaciones.id`, not null. Define el scope. |
+| remitente_email / destinatario_email | text | "Foto" del momento del envío, **sin FK**: el historial sobrevive si se borra al usuario o se le quita el acceso. La pertenencia a la organización se valida en `admin_preparar_notificacion`. |
+| titulo | text | 1–65 caracteres |
+| texto | text | 1–240 caracteres |
+| estado | text | `pendiente` (inmediata en curso) \| `programada` \| `enviando` \| `enviada` \| `parcial` \| `fallida` \| `sin_dispositivos` \| `cancelada` |
+| programada_para | timestamptz | Nula si fue inmediata. Índice parcial sobre las `programada`. |
+| lote_id | uuid | Agrupa las notificaciones creadas en un mismo envío a varios usuarios. |
+| cancelada_at / tomada_at | timestamptz | Cuándo se canceló / cuándo la tomó el despachador (una `enviando` de más de 10 min vuelve a la cola). |
+| motivo | text | Por qué falló sin intentar enviar (ej: el destinatario ya no es miembro). |
+| dispositivos_total / enviados / fallidos | int | resultado del envío |
+| created_at / enviada_at | timestamptz | |
+
+Ambas sin políticas RLS: sólo la lee el backend.
+
 ### `buffet_eventos`
 Una jornada de venta ("Feria del Plato 29/08/2026"). Se crea una vez y agrupa todas sus ventas. Versionada en `supabase/migrations/20260830000000_buffet_eventos.sql`.
 | Columna | Tipo | Notas |
@@ -173,6 +203,8 @@ niveles_grados_pibes ──< grados_pibes ──< pibes >── edades
 pibes ──< asistencias
 organizaciones ──< buffet_eventos ──< buffet_sales ──< buffet_sale_items
 solicitud_tipos ──< solicitudes >── organizaciones   (solicitudes.aprobador_id >── usuarios)
+usuarios ──< dispositivos_push
+organizaciones ──< notificaciones_push                (remitente/destinatario: emails sin FK)
 ```
 
 ## Row Level Security (RLS)
@@ -186,7 +218,7 @@ RLS está **habilitado en todas las tablas**, y toda tabla nueva de `public` nac
 - **`organizaciones` / `organizacion_miembros`:** sólo `SELECT` de lo propio. Desde `20260926000000` además se les revocó `INSERT`/`UPDATE`/`DELETE` a `anon` y `authenticated`.
 - **`usuarios` / `usuario_roles`:** cada uno lee sólo su propia fila (`email = auth.jwt()->>'email'`). Sin escritura.
 - **`roles`:** lectura para `authenticated`.
-- **`auditoria_admin`, `solicitudes`, `solicitud_tipos`:** sin políticas. Sólo la service role.
+- **`auditoria_admin`, `solicitudes`, `solicitud_tipos`, `dispositivos_push`, `notificaciones_push`:** sin políticas. Sólo la service role.
 
 Recordatorio importante (ya mordió una vez): **RLS habilitado no implica el `GRANT` a nivel de tabla**, hacen falta ambos. El proyecto tiene los privilegios por defecto restringidos: una tabla, secuencia o función nueva **no** recibe `SELECT`/`INSERT`/`EXECUTE` automáticos, ni siquiera para `service_role`.
 
@@ -214,6 +246,25 @@ Las de solicitudes están en `20260928000000_solicitudes.sql`, con las mismas re
 | `registro_crear_solicitud`, `registro_cancelar_solicitud` | Las usa el solicitante (el email lo pone el backend desde la sesión). `registro_crear_solicitud` devuelve además a quién avisar. |
 | `admin_listar_solicitudes`, `admin_tomar_solicitud`, `admin_resolver_solicitud` | Panel, dentro del scope del actor. |
 | `solicitud_json`, `solicitud_visible_para`, `solicitud_aprobadores` | Helpers: forma única de una solicitud, scope y destinatarios de los avisos. |
+
+Las de notificaciones push están en `20261106000000_notificaciones_push.sql`, con las mismas reglas:
+
+| Función | Uso |
+|---|---|
+| `push_registrar_dispositivo`, `push_quitar_dispositivo` | Cada usuario sobre sí mismo (el email lo pone el backend desde la sesión). |
+| `admin_preparar_notificacion` | Valida scope (organización administrada y destinatario miembro), crea el registro `pendiente`, audita y devuelve los dispositivos. |
+| `admin_cerrar_notificacion` | Guarda el resultado y borra los dispositivos que el servicio push dio por vencidos (404/410). Sólo la cierra quien la creó. |
+| `admin_listar_notificaciones`, `notificacion_push_json` | Historial del scope (las programadas primero) y forma única de una notificación. |
+
+Las de programación están en `20261110000000_notificaciones_programadas.sql`:
+
+| Función | Uso |
+|---|---|
+| `admin_crear_notificaciones` | Crea una notificación por destinatario (hasta 50), inmediata (`pendiente`, devuelve los dispositivos) o con `p_programada_para` (`programada`). Valida scope por destinatario (los que no son miembros van en `rechazados`) y que la fecha sea posterior a `now()`. Audita `notificacion_enviada` / `notificacion_programada`. |
+| `admin_cancelar_notificacion` | Cancela una `programada` del scope del actor. Audita `notificacion_cancelada`. |
+| `push_tomar_vencidas` | La usa el despachador (sin actor): pasa las vencidas a `enviando` con `for update skip locked`, re-valida la membresía, devuelve los dispositivos y devuelve a la cola las `enviando` abandonadas. |
+| `push_cerrar_programada` | Guarda el resultado de una `enviando` y borra los dispositivos vencidos. |
+| `despachar_notificaciones_programadas` | La corre `pg_cron` cada minuto. Si no hay nada vencido no hace nada; si hay, llama con `pg_net` a `POST /api/push/despachar`. Lee la URL y el secreto de Supabase Vault (`despacho_url`, `despacho_secreto`). Nadie de la API puede ejecutarla. |
 
 Los SQLSTATE que levantan (y cómo se traducen a HTTP) están en [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#errores-de-las-funciones).
 

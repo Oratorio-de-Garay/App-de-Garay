@@ -22,6 +22,9 @@ Los dos archivos están en `.gitignore`. Variables:
 | `SMTP_USER` / `SMTP_PASS` | Producción: `oratoriogarayy@gmail.com` y su **contraseña de aplicación** (ver [Mails](#mails)). Local: vacías. | Idem. `SMTP_PASS` es **secreto**. |
 | `MAIL_FROM` | — | Remitente, ej: `Oratorio de Garay <oratoriogarayy@gmail.com>`. Con Gmail tiene que ser la misma cuenta que `SMTP_USER`. |
 | `APP_URL` | — | URL de la app para los links de los mails (`https://app-de-garay.vercel.app`). Sin ella se usa la del request, que en un preview de Vercel es la del preview. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Generar el par **una vez** con `npx web-push generate-vapid-keys` y usar el mismo en cada entorno donde quieras push. | Notificaciones push (`backend/api/push.js`). Opcionales: sin ellas el push queda deshabilitado (503) y el resto funciona. La pública se entrega al frontend por `/config.js`. `VAPID_PRIVATE_KEY` es **secreta**. Si se cambia el par, los dispositivos ya suscriptos dejan de recibir y tienen que reactivar. |
+| `VAPID_SUBJECT` | `mailto:` de contacto, ej: `mailto:oratoriogarayy@gmail.com` (es el default) | Identifica al emisor ante los servicios push. |
+| `CRON_SECRET` | Generarlo con `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. El mismo valor va en Vercel y en Supabase Vault (`despacho_secreto`, ver [Notificaciones programadas](#notificaciones-programadas)). | Autentica a `POST /api/push/despachar`. Opcional: sin él las notificaciones programadas no se envían (503). **Secreto.** |
 | `GOOGLE_AUTH_CLIENT_ID` / `GOOGLE_AUTH_CLIENT_SECRET` | Google Cloud Console → Credentials | **Informativos únicamente** — el backend no los lee (`grep process.env` lo confirma). Se cargan directo en Supabase Auth → Providers → Google, no en el código. |
 
 El frontend no tiene `SUPABASE_URL` ni la publishable key hardcodeadas: las recibe del backend por `GET /config.js` (la "publishable/anon key" es pública por diseño — ver [ARCHITECTURE.md](ARCHITECTURE.md)).
@@ -156,6 +159,30 @@ En local todo esto ya está en `supabase/config.toml`, y los mails llegan a Mail
 ### 3. Vercel
 
 Cargar `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` y `APP_URL` (ver la tabla de variables de entorno) y hacer un redeploy.
+
+## Notificaciones programadas
+
+Las notificaciones push programadas las dispara la base: `pg_cron` corre cada minuto `despachar_notificaciones_programadas()` y, **sólo si hay alguna vencida**, llama con `pg_net` a `POST /api/push/despachar` del backend. La migración `20261110000000_notificaciones_programadas.sql` activa `pg_cron` y `pg_net` y crea el job. Falta decirle **a qué URL llamar y con qué secreto**, que no viven en el repo sino en Supabase Vault. Una sola vez por entorno:
+
+1. Generar el secreto (ver `CRON_SECRET` en [Variables de entorno](#variables-de-entorno)) y cargarlo como `CRON_SECRET` en Vercel (Production y, si se quiere probar ahí, Preview). Redeploy.
+2. En el SQL Editor de Supabase (es un dato de configuración, no un cambio de schema):
+
+   ```sql
+   select vault.create_secret('https://app-de-garay.vercel.app/api/push/despachar', 'despacho_url');
+   select vault.create_secret('<el mismo CRON_SECRET>', 'despacho_secreto');
+   ```
+
+   Para cambiarlos después: `select vault.update_secret(id, '<nuevo valor>') from vault.secrets where name = 'despacho_url';` (idem `despacho_secreto`).
+
+Mientras falten, las programadas quedan en `programada` y la base avisa con un warning en cada pasada; las inmediatas no se ven afectadas. Para ver qué pasó: `select * from cron.job_run_details order by start_time desc limit 10;` y `select * from net._http_response order by created desc limit 10;`.
+
+**Local:** `pg_cron` no puede llamar a `localhost:3000` desde el contenedor sin configuración extra. Para probar se dispara a mano, con `CRON_SECRET` en `backend/.env.local`:
+
+```bash
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/push/despachar
+```
+
+**Alternativa sin `pg_cron`:** un Vercel Cron (por minuto sólo en plan Pro) o un servicio externo que haga ese mismo `POST` cada minuto. El endpoint es el mismo.
 
 ## Deploy (Vercel)
 
