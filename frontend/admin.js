@@ -853,18 +853,29 @@ function abrirFormOrganizacion(org) {
 // ─────────────────────────────────────────────────────────
 // Pestaña Notificaciones (push)
 //
-// Envío inmediato a todos los dispositivos de un usuario. Cada admin sólo ve
-// y puede notificar dentro de las organizaciones que administra: lo valida la
-// base (admin_preparar_notificacion), esto es sólo la interfaz.
+// Envío a todos los dispositivos de uno o varios usuarios, ahora o programado
+// para una fecha y hora. Cada admin sólo ve y puede notificar dentro de las
+// organizaciones que administra: lo valida la base
+// (admin_crear_notificaciones), esto es sólo la interfaz. Las programadas las
+// despacha el backend (ver docs/ARCHITECTURE.md); salen con hasta ~1 minuto de
+// demora.
 // ─────────────────────────────────────────────────────────
 
 const ESTADOS_NOTIFICACION = {
   pendiente: "Pendiente",
+  programada: "Programada",
+  enviando: "Enviando",
   enviada: "Enviada",
   parcial: "Parcial",
   fallida: "Fallida",
   sin_dispositivos: "Sin dispositivos",
+  cancelada: "Cancelada",
 };
+
+/** Valor para un <input type="datetime-local"> (hora local, sin zona). */
+function valorFechaLocal(fecha) {
+  return new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
 
 async function cargarNotificaciones() {
   const panel = document.getElementById("panel-notificaciones");
@@ -884,7 +895,7 @@ function renderNotificaciones() {
     <div class="admin-toolbar">
       <div class="admin-toolbar-title">
         <h2>Notificaciones</h2>
-        <p>Mandá un aviso push a todos los dispositivos de un usuario. Le llega al instante.</p>
+        <p>Mandá un aviso push a los dispositivos de uno o varios usuarios, ahora o programado.</p>
       </div>
       <button class="admin-btn admin-btn-primary" id="btn-nueva-notificacion" type="button">+ Nueva notificación</button>
     </div>
@@ -894,12 +905,37 @@ function renderNotificaciones() {
     </div>
   `;
   panel.querySelector("#btn-nueva-notificacion").addEventListener("click", abrirFormNotificacion);
+  panel.querySelectorAll("[data-cancelar]").forEach((boton) =>
+    boton.addEventListener("click", () => cancelarNotificacion(boton.dataset.cancelar)));
+}
+
+function cancelarNotificacion(id) {
+  const n = adminState.notificaciones.find((x) => x.id === id);
+  if (!n) return;
+  openModal({
+    title: "Cancelar notificación",
+    description: `“${n.titulo}” para ${n.destinatario_nombre || n.destinatario_email} no se va a enviar.`,
+    bodyHtml: "",
+    submitLabel: "Cancelar notificación",
+    cancelLabel: "Volver",
+    danger: true,
+    async onSubmit() {
+      await apiSend(`/api/admin/notificaciones/${encodeURIComponent(id)}`, "DELETE");
+      toast("Notificación cancelada.");
+      adminState.auditoria = null;
+      await cargarNotificaciones();
+    },
+  });
 }
 
 function notificacionHtml(n) {
-  const resultado = n.dispositivos_total
-    ? `${n.enviados} de ${n.dispositivos_total} ${n.dispositivos_total === 1 ? "dispositivo" : "dispositivos"}`
-    : "Ningún dispositivo activado";
+  const programada = n.estado === "programada" || n.estado === "enviando";
+  const resultado = n.estado === "programada" ? `Se envía el ${formatearFecha(n.programada_para)}`
+    : n.estado === "enviando" ? "Enviándose ahora"
+    : n.estado === "cancelada" ? "No se envió"
+    : n.dispositivos_total
+      ? `${n.enviados} de ${n.dispositivos_total} ${n.dispositivos_total === 1 ? "dispositivo" : "dispositivos"}`
+      : n.motivo || "Ningún dispositivo activado";
   return `
     <article class="admin-card admin-row">
       ${avatarHtml(n.destinatario_nombre || n.destinatario_email, n.destinatario_email)}
@@ -911,8 +947,12 @@ function notificacionHtml(n) {
         <div class="solicitud-pedido">${escapeHtml(n.texto)}</div>
         <div class="row-sub">Para ${escapeHtml(n.destinatario_nombre || n.destinatario_email)} · ${escapeHtml(resultado)}</div>
         <div class="row-tags"><span class="org-chip">${escapeHtml(n.organizacion_nombre)}</span></div>
-        <div class="field-hint">${escapeHtml(formatearFecha(n.created_at))} · por ${escapeHtml(n.remitente_email)}</div>
+        <div class="field-hint">Creada el ${escapeHtml(formatearFecha(n.created_at))} · por ${escapeHtml(n.remitente_email)}</div>
       </div>
+      ${n.estado === "programada" ? `
+        <div class="row-actions">
+          <button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-cancelar="${escapeHtml(n.id)}">Cancelar</button>
+        </div>` : ""}
     </article>
   `;
 }
@@ -924,12 +964,16 @@ function abrirFormNotificacion() {
     return;
   }
   const usuariosDe = (orgId) => adminState.usuarios.filter((u) => u.organizaciones.some((o) => o.id === orgId));
-  const opcionesUsuarios = (orgId) => usuariosDe(orgId).map((u) =>
-    `<option value="${escapeHtml(u.email)}">${escapeHtml(u.nombre ? `${u.nombre} · ${u.email}` : u.email)}</option>`).join("");
+  const opcionesUsuarios = (orgId) => usuariosDe(orgId).map((u) => `
+    <label class="dest-item">
+      <input type="checkbox" name="n-dest" value="${escapeHtml(u.email)}">
+      <span>${escapeHtml(u.nombre || u.email)}${u.nombre ? `<small>${escapeHtml(u.email)}</small>` : ""}</span>
+    </label>`).join("") || `<p class="field-hint">Esta organización no tiene usuarios.</p>`;
+  const zona = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   openModal({
     title: "Nueva notificación",
-    description: "Se envía ahora mismo a todos los dispositivos del usuario que activaron las notificaciones.",
+    description: "Se envía a todos los dispositivos de cada usuario que activaron las notificaciones.",
     submitLabel: "Enviar",
     bodyHtml: `
       <div class="form-group">
@@ -939,8 +983,28 @@ function abrirFormNotificacion() {
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label" for="n-destinatario">Usuario <span class="field-required">*</span></label>
-        <select class="form-select" id="n-destinatario">${opcionesUsuarios(orgs[0].id)}</select>
+        <span class="form-label">Usuarios <span class="field-required">*</span></span>
+        <label class="dest-item dest-todos">
+          <input type="checkbox" id="n-todos">
+          <span><strong>Seleccionar todos</strong></span>
+        </label>
+        <div class="dest-lista" id="n-destinatarios">${opcionesUsuarios(orgs[0].id)}</div>
+        <span class="field-hint" id="n-seleccionados">0 seleccionados</span>
+      </div>
+      <div class="form-group">
+        <span class="form-label">Cuándo <span class="field-required">*</span></span>
+        <label class="solicitud-opcion">
+          <input type="radio" name="n-cuando" value="ahora" checked>
+          <span><strong>Inmediata</strong><small>Se envía en el momento.</small></span>
+        </label>
+        <label class="solicitud-opcion">
+          <input type="radio" name="n-cuando" value="programar">
+          <span><strong>Programar</strong><small>Se envía en la fecha y hora que elijas.</small></span>
+        </label>
+        <div id="n-programar" hidden>
+          <input class="form-input" id="n-fecha" type="datetime-local" aria-label="Fecha y hora de envío">
+          <span class="field-hint">Hora de ${escapeHtml(zona)}. Tiene que ser posterior a ahora; sale con hasta 1 minuto de demora.</span>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label" for="n-titulo">Título <span class="field-required">*</span></label>
@@ -954,40 +1018,96 @@ function abrirFormNotificacion() {
     `,
     onReady(modal) {
       const selectOrg = modal.querySelector("#n-org");
-      const selectUsuario = modal.querySelector("#n-destinatario");
+      const lista = modal.querySelector("#n-destinatarios");
+      const todos = modal.querySelector("#n-todos");
       const texto = modal.querySelector("#n-texto");
-      selectOrg.addEventListener("change", () => {
-        selectUsuario.innerHTML = opcionesUsuarios(selectOrg.value);
+      const fecha = modal.querySelector("#n-fecha");
+      const submit = modal.querySelector("#modal-submit");
+      const casillas = () => [...lista.querySelectorAll("input[name=n-dest]")];
+
+      function actualizarSeleccion() {
+        const marcadas = casillas().filter((c) => c.checked).length;
+        modal.querySelector("#n-seleccionados").textContent =
+          `${marcadas} ${marcadas === 1 ? "seleccionado" : "seleccionados"}`;
+        todos.checked = marcadas > 0 && marcadas === casillas().length;
+      }
+      lista.addEventListener("change", actualizarSeleccion);
+      todos.addEventListener("change", () => {
+        casillas().forEach((c) => (c.checked = todos.checked));
+        actualizarSeleccion();
       });
+      selectOrg.addEventListener("change", () => {
+        lista.innerHTML = opcionesUsuarios(selectOrg.value);
+        actualizarSeleccion();
+      });
+
+      // Inmediata / Programar: el campo de fecha sólo aparece al programar.
+      modal.querySelectorAll("input[name=n-cuando]").forEach((radio) => radio.addEventListener("change", () => {
+        const programar = modal.querySelector("input[name=n-cuando]:checked").value === "programar";
+        modal.querySelector("#n-programar").hidden = !programar;
+        submit.textContent = programar ? "Programar" : "Enviar";
+        if (programar) {
+          // No se puede elegir antes de ahora (+1 min para que no venza al guardarse).
+          fecha.min = valorFechaLocal(new Date(Date.now() + 60000));
+          fecha.focus();
+        }
+      }));
+
       texto.addEventListener("input", () => {
         modal.querySelector("#n-contador").textContent = `${texto.value.length} / 240`;
       });
       modal.querySelector("#n-titulo").focus();
     },
     async onSubmit(modal) {
-      const destinatario = modal.querySelector("#n-destinatario").value;
+      const destinatarios = [...modal.querySelectorAll("input[name=n-dest]:checked")].map((c) => c.value);
       const titulo = modal.querySelector("#n-titulo").value.trim();
       const texto = modal.querySelector("#n-texto").value.trim();
-      if (!destinatario) throw new Error("Esa organización no tiene usuarios.");
+      const programar = modal.querySelector("input[name=n-cuando]:checked").value === "programar";
+      if (!destinatarios.length) throw new Error("Elegí al menos un usuario.");
       if (!titulo) throw new Error("El título es obligatorio.");
       if (!texto) throw new Error("El texto es obligatorio.");
 
-      const n = await apiSend("/api/admin/notificaciones", "POST", {
+      let programadaPara = null;
+      if (programar) {
+        const valor = modal.querySelector("#n-fecha").value;
+        if (!valor) throw new Error("Elegí la fecha y la hora de envío.");
+        const cuando = new Date(valor); // datetime-local se interpreta en la hora local
+        if (Number.isNaN(cuando.getTime()) || cuando.getTime() <= Date.now()) {
+          throw new Error("La fecha y la hora tienen que ser posteriores a ahora.");
+        }
+        programadaPara = cuando.toISOString();
+      }
+
+      const { notificaciones, rechazados } = await apiSend("/api/admin/notificaciones", "POST", {
         organizacion_id: modal.querySelector("#n-org").value,
-        destinatario_email: destinatario,
+        destinatarios_email: destinatarios,
         titulo,
         texto,
+        programada_para: programadaPara,
       });
-      const nombre = n.destinatario_nombre || n.destinatario_email;
-      if (n.estado === "enviada") {
-        toast(`Notificación enviada a ${nombre} (${n.enviados} ${n.enviados === 1 ? "dispositivo" : "dispositivos"}).`);
-      } else if (n.estado === "parcial") {
-        toast(`Se envió a ${n.enviados} de ${n.dispositivos_total} dispositivos de ${nombre}.`);
-      } else if (n.estado === "sin_dispositivos") {
-        toast(`${nombre} todavía no activó las notificaciones en ningún dispositivo.`, "err");
+
+      const cuenta = (...estados) => notificaciones.filter((n) => estados.includes(n.estado)).length;
+      const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+      const partes = [];
+      let hayProblemas = false;
+      if (programadaPara) {
+        partes.push(`${plural(notificaciones.length, "notificación programada", "notificaciones programadas")} para el ${formatearFecha(programadaPara)}`);
       } else {
-        toast(`No se pudo entregar la notificación a ${nombre}.`, "err");
+        const enviadas = cuenta("enviada", "parcial");
+        if (enviadas) partes.push(`Enviada a ${plural(enviadas, "usuario", "usuarios")}`);
+        const sinDispositivos = cuenta("sin_dispositivos");
+        if (sinDispositivos) partes.push(`${plural(sinDispositivos, "usuario", "usuarios")} sin notificaciones activadas`);
+        const fallidas = cuenta("fallida", "pendiente");
+        if (fallidas) partes.push(`${plural(fallidas, "usuario", "usuarios")} sin poder entregar`);
+        hayProblemas = !enviadas || sinDispositivos > 0 || fallidas > 0;
       }
+      if (rechazados.length) {
+        partes.push(`${plural(rechazados.length, "usuario rechazado", "usuarios rechazados")} (no pertenecen a la organización)`);
+        hayProblemas = true;
+      }
+      const mensaje = partes.join(" · ");
+      toast(mensaje.endsWith(".") ? mensaje : `${mensaje}.`, hayProblemas ? "err" : undefined);
+
       adminState.auditoria = null;
       await cargarNotificaciones();
     },
@@ -1052,6 +1172,8 @@ function actividadHtml(a) {
     solicitud_rechazada: [`Se rechazó la solicitud #${escapeHtml(d.numero)} de ${quien}`, "activity-quita"],
     solicitud_cancelada: [`${quien} canceló su solicitud #${escapeHtml(d.numero)}`, "activity-quita"],
     notificacion_enviada: [`Notificación “${escapeHtml(d.titulo)}” para ${quien} en ${org}`, "activity-solicitud"],
+    notificacion_programada: [`Notificación “${escapeHtml(d.titulo)}” programada para ${quien} en ${org}`, "activity-solicitud"],
+    notificacion_cancelada: [`Se canceló la notificación “${escapeHtml(d.titulo)}” para ${quien} en ${org}`, "activity-quita"],
   };
   const [texto, clase] = textos[a.accion] || [escapeHtml(a.accion), ""];
 

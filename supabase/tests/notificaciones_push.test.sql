@@ -60,7 +60,8 @@ select throws_ok($$ select public.admin_preparar_notificacion('adma@test.local',
   '22023', null, 'el título es obligatorio');
 select throws_ok($$ select public.admin_preparar_notificacion('adma@test.local', (select a from org), 'usua@test.local', 'Hola', repeat('x', 241)) $$,
   '22023', null, 'el texto no puede pasar de 240 caracteres');
-select is((select count(*)::int from public.notificaciones_push), 0,
+select is((select count(*)::int from public.notificaciones_push
+           where organizacion_id in (select a from org union select b from org)), 0,
   'los intentos rechazados no dejan registro');
 
 -- ─── Envío: feliz ───

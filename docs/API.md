@@ -263,23 +263,34 @@ Las listan y resuelven los admins (las de sus organizaciones) y los superadmins 
 
 ### Notificaciones push
 
-Un admin envía un título y un texto a **todos los dispositivos** de un usuario de una organización que administra (el superadmin, de cualquiera). El envío es inmediato: el endpoint espera la respuesta de los servicios push antes de contestar. Si el server no tiene claves VAPID responde `503`. Forma de una notificación:
+Un admin envía un título y un texto a **todos los dispositivos** de uno o varios usuarios de una organización que administra (el superadmin, de cualquiera), **ahora o programado** para una fecha y hora futuras. Si el server no tiene claves VAPID responde `503`. Forma de una notificación:
 
 ```json
 {
   "id": "uuid", "organizacion_id": "uuid", "organizacion_nombre": "Oratorio de Garay",
   "remitente_email": "admin@gmail.com", "destinatario_email": "x@gmail.com", "destinatario_nombre": "María Pérez",
   "titulo": "Cambio de horario", "texto": "El sábado arrancamos a las 15.",
-  "estado": "pendiente | enviada | parcial | fallida | sin_dispositivos",
+  "estado": "pendiente | programada | enviando | enviada | parcial | fallida | sin_dispositivos | cancelada",
   "dispositivos_total": 2, "enviados": 2, "fallidos": 0,
-  "created_at": "...", "enviada_at": "... | null"
+  "created_at": "...", "enviada_at": "... | null",
+  "programada_para": "... | null", "lote_id": "uuid", "cancelada_at": "... | null", "motivo": "... | null"
 }
 ```
 
+Se crea **una notificación por destinatario** (mismo `lote_id`), cada una con su estado y contadores.
+
+- **Inmediata** (sin `programada_para`): el endpoint envía a todos los dispositivos y espera la respuesta de los servicios push antes de contestar.
+- **Programada** (con `programada_para`): sólo crea las notificaciones en estado `programada`. Las envía el despachador (`POST /api/push/despachar`, lo dispara `pg_cron` cuando hay alguna vencida), por lo que salen con **hasta ~1 minuto de demora**. Al enviarse se vuelve a validar que el destinatario siga siendo miembro de la organización; si no, queda `fallida` con el `motivo`.
+
 | Endpoint | Body | Respuesta |
 |---|---|---|
-| `POST /api/admin/notificaciones` | `{ organizacion_id, destinatario_email, titulo (≤65), texto (≤240) }` | **201** `notificacion` con el resultado del envío. `sin_dispositivos` si el usuario no activó las notificaciones en ningún dispositivo (queda registrada igual). `403` si no administra esa organización, `404` si el destinatario no es miembro de ella (se informa como inexistente), `400` si faltan campos o se pasan de largo. |
-| `GET /api/admin/notificaciones?organizacion_id=&limit=` | — | `[notificacion]` del scope, las más nuevas primero (default 50, máx. 200). `organizacion_id` opcional. |
+| `POST /api/admin/notificaciones` | `{ organizacion_id, destinatarios_email: [email] (1–50), titulo (≤65), texto (≤240), programada_para? }`. `programada_para` es una fecha ISO 8601 (el cliente manda UTC) y **tiene que ser posterior a ahora**. También se acepta `destinatario_email` (uno solo). | **201** `{ lote_id, notificaciones: [notificacion], rechazados: [email] }`. Un destinatario que no es miembro de la organización no aborta el lote: va en `rechazados` (no se revela si existe). `sin_dispositivos` si el usuario no activó las notificaciones (queda registrada igual). `403` si no administra la organización, `404` si **ningún** destinatario es miembro, `400` si faltan campos, se pasan de largo, hay más de 50 destinatarios o la fecha no es posterior a ahora. |
+| `GET /api/admin/notificaciones?organizacion_id=&limit=` | — | `[notificacion]` del scope: primero las `programada`/`enviando`, después las más nuevas (default 50, máx. 200). `organizacion_id` opcional. |
+| `DELETE /api/admin/notificaciones/:id` | — | La `notificacion` en estado `cancelada`. `409` si ya no está `programada` (una inmediata o ya enviada no se cancela), `404` si no existe o es de una organización fuera de su scope. |
+
+#### `POST /api/push/despachar`
+
+Lo llama el cron de la base (`pg_cron` + `pg_net`) y **no usa sesión de usuario**: se autentica con `Authorization: Bearer <CRON_SECRET>` (comparación en tiempo constante) y no lee nada del body. Toma hasta 20 notificaciones vencidas, las envía y las cierra. `200 { procesadas }`, `401` si el secreto no coincide, `503` si falta `CRON_SECRET` o las claves VAPID. Es la única ruta de `/api` exceptuada de la sesión (ver `backend/api/index.js`).
 
 ### Dispositivos push (`/api/push/*`)
 

@@ -30,4 +30,8 @@ export const SUPABASE_KEY = process.env.SUPABASE_KEY;
 export const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 export const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
 export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:oratoriogarayy@gmail.com";
+// Secreto compartido con el disparador (pg_cron) de las notificaciones
+// programadas: POST /api/push/despachar. Sin él el despacho queda deshabilitado.
+// Generarlo con `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+export const CRON_SECRET = process.env.CRON_SECRET || "";
 export const ES_BASE_LOCAL =/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(SUPABASE_URL);

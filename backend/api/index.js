@@ -61,7 +61,11 @@ const esRegistro = (path) => path === "/registro" || path.startsWith("/registro/
 // Every /api route requires a signed-in, registered account, except the
 // health check (used for uptime monitoring) and the registration flow.
 app.use("/api", (req, res, next) => {
-  if (req.path === "/health" || esRegistro(req.path)) return next();
+  // /push/despachar lo llama el cron de la base, no un usuario: el router lo
+  // autentica con CRON_SECRET (ver push.js). Sólo esa ruta, y sólo POST.
+  if (req.path === "/health" || esRegistro(req.path) || (req.method === "POST" && req.path === "/push/despachar")) {
+    return next();
+  }
   return requireAllowedUser(req, res, next);
 });
 

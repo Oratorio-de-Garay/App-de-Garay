@@ -183,38 +183,74 @@ router.get("/notificaciones", (req, res) =>
   })
 );
 
-// Envío inmediato a todos los dispositivos del destinatario:
-// preparar (valida scope y crea el registro) → enviar → cerrar (resultado).
+// Envía a uno o varios destinatarios, ahora o programado.
+//   - Sin programada_para: crea los registros (valida scope por destinatario),
+//     envía a todos los dispositivos y cierra cada uno con su resultado.
+//   - Con programada_para: sólo crea los registros 'programada'; los envía el
+//     despachador (POST /api/push/despachar, lo dispara pg_cron).
+// La fecha tiene que ser posterior a ahora: la autoridad es la función SQL.
 router.post("/notificaciones", async (req, res) => {
   try {
     if (!PUSH_HABILITADO) {
       return res.status(503).json({ error: "Las notificaciones push no están configuradas" });
     }
-    const { notificacion, dispositivos } = await llamarRpc("admin_preparar_notificacion", {
-      p_actor: req.user.email,
-      p_organizacion_id: req.body?.organizacion_id || null,
-      p_destinatario: String(req.body?.destinatario_email || ""),
-      p_titulo: String(req.body?.titulo || ""),
-      p_texto: String(req.body?.texto || ""),
-    });
-    if (dispositivos.length === 0) {
-      return res.status(201).json(notificacion);
+    const body = req.body || {};
+    const destinatarios = Array.isArray(body.destinatarios_email)
+      ? body.destinatarios_email
+      : body.destinatario_email ? [body.destinatario_email] : [];
+
+    let programadaPara = null;
+    if (body.programada_para) {
+      const fecha = new Date(body.programada_para);
+      if (Number.isNaN(fecha.getTime())) {
+        return res.status(400).json({ error: "La fecha de envío no es válida" });
+      }
+      programadaPara = fecha.toISOString();
     }
 
-    const { exitosos, invalidos } = await enviarPush(dispositivos, {
-      titulo: notificacion.titulo,
-      texto: notificacion.texto,
-    });
-    const cerrada = await llamarRpc("admin_cerrar_notificacion", {
+    const { lote_id, items, rechazados } = await llamarRpc("admin_crear_notificaciones", {
       p_actor: req.user.email,
-      p_id: notificacion.id,
-      p_exitosos: exitosos,
-      p_invalidos: invalidos,
+      p_organizacion_id: body.organizacion_id || null,
+      p_destinatarios: destinatarios.map(String),
+      p_titulo: String(body.titulo || ""),
+      p_texto: String(body.texto || ""),
+      p_programada_para: programadaPara,
     });
-    res.status(201).json(cerrada);
+
+    const notificaciones = programadaPara
+      ? items.map((item) => item.notificacion)
+      : await Promise.all(items.map(async ({ notificacion, dispositivos }) => {
+          if (dispositivos.length === 0) return notificacion; // sin_dispositivos: ya quedó cerrada
+          try {
+            const { exitosos, invalidos } = await enviarPush(dispositivos, {
+              titulo: notificacion.titulo,
+              texto: notificacion.texto,
+            });
+            return await llamarRpc("admin_cerrar_notificacion", {
+              p_actor: req.user.email,
+              p_id: notificacion.id,
+              p_exitosos: exitosos,
+              p_invalidos: invalidos,
+            });
+          } catch (error) {
+            // Un destinatario que falla no tira abajo al resto del lote.
+            console.error("Admin enviar notificación: falló", notificacion.id, error.message);
+            return notificacion;
+          }
+        }));
+
+    res.status(201).json({ lote_id, notificaciones, rechazados });
   } catch (error) {
     responderError(res, "Admin enviar notificación", error);
   }
 });
+
+// Cancela una notificación programada (sólo mientras siga 'programada').
+router.delete("/notificaciones/:id", (req, res) =>
+  responderRpc(res, "Admin cancelar notificación", "admin_cancelar_notificacion", {
+    p_actor: req.user.email,
+    p_id: req.params.id,
+  })
+);
 
 export default router;

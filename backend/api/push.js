@@ -1,6 +1,7 @@
+import crypto from "node:crypto";
 import express from "express";
 import { setVapidDetails, sendNotification } from "web-push";
-import { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } from "./entorno.js";
+import { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT, CRON_SECRET } from "./entorno.js";
 import { llamarRpc, responderError } from "./rpc.js";
 
 // ========================================================
@@ -87,6 +88,53 @@ const router = express.Router();
 router.use((req, res, next) => {
   if (!PUSH_HABILITADO) return res.status(503).json({ error: "Las notificaciones push no están configuradas" });
   next();
+});
+
+// Comparación en tiempo constante (se hashea para que ambos midan lo mismo).
+function secretoValido(recibido) {
+  const hash = (valor) => crypto.createHash("sha256").update(String(valor)).digest();
+  return crypto.timingSafeEqual(hash(recibido), hash(CRON_SECRET));
+}
+
+// Lo llama pg_cron (vía pg_net) cuando hay notificaciones programadas vencidas.
+// No hay un usuario detrás: se autentica con el secreto compartido y no confía
+// en nada del body. index.js lo exceptúa de la sesión de usuario, sólo a esta ruta.
+// Toma hasta 20 vencidas (for update skip locked: dos despachos simultáneos no
+// envían dos veces), envía y cierra cada una. Si quedan más, el cron vuelve a
+// llamar en el minuto siguiente. Una que falle al cerrarse queda 'enviando' y
+// la base la devuelve a la cola a los 10 minutos.
+router.post("/despachar", async (req, res) => {
+  try {
+    if (!CRON_SECRET) {
+      return res.status(503).json({ error: "El despacho de notificaciones programadas no está configurado" });
+    }
+    const autorizacion = req.get("authorization") || "";
+    if (!autorizacion.startsWith("Bearer ") || !secretoValido(autorizacion.slice(7))) {
+      return res.status(401).json({ error: "No autorizado" });
+    }
+
+    const items = await llamarRpc("push_tomar_vencidas", { p_limite: 20 });
+    await Promise.allSettled(
+      items.map(async ({ notificacion, dispositivos }) => {
+        try {
+          const { exitosos, invalidos } = await enviarPush(dispositivos, {
+            titulo: notificacion.titulo,
+            texto: notificacion.texto,
+          });
+          await llamarRpc("push_cerrar_programada", {
+            p_id: notificacion.id,
+            p_exitosos: exitosos,
+            p_invalidos: invalidos,
+          });
+        } catch (error) {
+          console.error("Push despachar: falló la notificación", notificacion.id, error.message);
+        }
+      })
+    );
+    res.json({ procesadas: items.length });
+  } catch (error) {
+    responderError(res, "Push despachar", error);
+  }
 });
 
 // Registra (o actualiza) el dispositivo de quien llama. Body: la PushSubscription

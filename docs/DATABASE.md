@@ -154,7 +154,7 @@ Un navegador o dispositivo suscripto a notificaciones push. Versionada en `20261
 | created_at / ultimo_uso_at | timestamptz | `ultimo_uso_at`: último registro o envío exitoso |
 
 ### `notificaciones_push`
-Historial de envíos (y base para la programación futura).
+Historial de envíos y cola de las programadas. Versionada en `20261106000000_notificaciones_push.sql` y `20261110000000_notificaciones_programadas.sql`.
 | Columna | Tipo | Notas |
 |---|---|---|
 | id | uuid | PK |
@@ -162,7 +162,11 @@ Historial de envíos (y base para la programación futura).
 | remitente_email / destinatario_email | text | "Foto" del momento del envío, **sin FK**: el historial sobrevive si se borra al usuario o se le quita el acceso. La pertenencia a la organización se valida en `admin_preparar_notificacion`. |
 | titulo | text | 1–65 caracteres |
 | texto | text | 1–240 caracteres |
-| estado | text | `pendiente` \| `enviada` \| `parcial` \| `fallida` \| `sin_dispositivos` |
+| estado | text | `pendiente` (inmediata en curso) \| `programada` \| `enviando` \| `enviada` \| `parcial` \| `fallida` \| `sin_dispositivos` \| `cancelada` |
+| programada_para | timestamptz | Nula si fue inmediata. Índice parcial sobre las `programada`. |
+| lote_id | uuid | Agrupa las notificaciones creadas en un mismo envío a varios usuarios. |
+| cancelada_at / tomada_at | timestamptz | Cuándo se canceló / cuándo la tomó el despachador (una `enviando` de más de 10 min vuelve a la cola). |
+| motivo | text | Por qué falló sin intentar enviar (ej: el destinatario ya no es miembro). |
 | dispositivos_total / enviados / fallidos | int | resultado del envío |
 | created_at / enviada_at | timestamptz | |
 
@@ -250,7 +254,17 @@ Las de notificaciones push están en `20261106000000_notificaciones_push.sql`, c
 | `push_registrar_dispositivo`, `push_quitar_dispositivo` | Cada usuario sobre sí mismo (el email lo pone el backend desde la sesión). |
 | `admin_preparar_notificacion` | Valida scope (organización administrada y destinatario miembro), crea el registro `pendiente`, audita y devuelve los dispositivos. |
 | `admin_cerrar_notificacion` | Guarda el resultado y borra los dispositivos que el servicio push dio por vencidos (404/410). Sólo la cierra quien la creó. |
-| `admin_listar_notificaciones`, `notificacion_push_json` | Historial del scope y forma única de una notificación. |
+| `admin_listar_notificaciones`, `notificacion_push_json` | Historial del scope (las programadas primero) y forma única de una notificación. |
+
+Las de programación están en `20261110000000_notificaciones_programadas.sql`:
+
+| Función | Uso |
+|---|---|
+| `admin_crear_notificaciones` | Crea una notificación por destinatario (hasta 50), inmediata (`pendiente`, devuelve los dispositivos) o con `p_programada_para` (`programada`). Valida scope por destinatario (los que no son miembros van en `rechazados`) y que la fecha sea posterior a `now()`. Audita `notificacion_enviada` / `notificacion_programada`. |
+| `admin_cancelar_notificacion` | Cancela una `programada` del scope del actor. Audita `notificacion_cancelada`. |
+| `push_tomar_vencidas` | La usa el despachador (sin actor): pasa las vencidas a `enviando` con `for update skip locked`, re-valida la membresía, devuelve los dispositivos y devuelve a la cola las `enviando` abandonadas. |
+| `push_cerrar_programada` | Guarda el resultado de una `enviando` y borra los dispositivos vencidos. |
+| `despachar_notificaciones_programadas` | La corre `pg_cron` cada minuto. Si no hay nada vencido no hace nada; si hay, llama con `pg_net` a `POST /api/push/despachar`. Lee la URL y el secreto de Supabase Vault (`despacho_url`, `despacho_secreto`). Nadie de la API puede ejecutarla. |
 
 Los SQLSTATE que levantan (y cómo se traducen a HTTP) están en [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#errores-de-las-funciones).
 

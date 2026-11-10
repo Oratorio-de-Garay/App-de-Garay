@@ -626,6 +626,26 @@
 .estado-notif-parcial { background: var(--amarillo-bg); color: var(--amarillo-txt); border: 1px solid var(--amarillo-borde); }
 .estado-notif-fallida { background: var(--admin-rojo-bg); color: var(--admin-rojo); border: 1px solid var(--admin-rojo-borde); }
 .estado-notif-sin_dispositivos { background: #f2f4f3; color: var(--texto-sec); border: 1px solid var(--borde); }
+.estado-notif-programada { background: var(--verde-light); color: var(--verde); border: 1px solid var(--verde-mid); }
+.estado-notif-enviando { background: var(--amarillo-bg); color: var(--amarillo-txt); border: 1px solid var(--amarillo-borde); }
+.estado-notif-cancelada { background: #f2f4f3; color: var(--texto-sec); border: 1px solid var(--borde); }
+
+/* Selector de varios destinatarios. */
+.dest-lista {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1.5px solid var(--borde);
+  border-radius: 10px;
+  padding: 4px 10px;
+  background: #fff;
+}
+.dest-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; cursor: pointer; }
+.dest-item input { accent-color: var(--verde); margin-top: 3px; }
+.dest-item span { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.dest-item small { font-size: 12px; color: var(--texto-sec); }
+.dest-todos { padding-bottom: 6px; }
+#n-programar { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+#n-programar[hidden] { display: none; }
 
 .solicitud-pedido {
   font-size: 14px;
