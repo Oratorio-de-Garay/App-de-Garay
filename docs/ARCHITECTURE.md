@@ -17,6 +17,7 @@ backend/
     registro.js← router /api/registro/* (quien todavía no tiene acceso pide sumarse a un espacio)
     rpc.js     ← llamadas a las funciones SQL y traducción de sus errores a HTTP
     mail.js    ← avisos por mail de las solicitudes (nodemailer + SMTP)
+    push.js    ← notificaciones push (Web Push/VAPID): router /api/push/* y envío (enviarPush)
   package.json
   vercel.json  ← única config de deploy (todas las rutas → api/index.js)
 frontend/
@@ -26,6 +27,9 @@ frontend/
   auth.js      ← login (Google o código por mail) vía Supabase Auth; expone window.apiFetch() y window.currentUser
   registro.js  ← pantalla "Espacios" para pedir acceso (se carga antes que auth.js)
   nav.js       ← sidebar desplegable en mobile
+  push.js      ← activar/desactivar las notificaciones push del dispositivo (botón en el menú lateral)
+  sw.js        ← service worker: recibe y muestra las notificaciones (se sirve desde la raíz)
+  manifest.json / icon.svg ← PWA mínima (requerida por iOS para recibir push)
   index.js / buffet.js / admin.js ← lógica de UI de cada página
   base.css (+ buffet.css, admin.css)
 supabase/
@@ -94,6 +98,14 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 7. `admin.js` copia los helpers de modal y API de `buffet.js` (`openModal`, `apiGet`, `apiSend`, `escapeHtml`), y `registro.js` repite el patrón de llamadas a la API. Conviene moverlos a un `frontend/ui.js` compartido.
 8. Antes de un `supabase db push`, correr `supabase migration list --linked` y `supabase db push --linked --dry-run` para ver exactamente qué se va a aplicar. El historial remoto ya está sincronizado; se reparó en septiembre de 2026, cuando las migraciones de agosto figuraban como no aplicadas.
 9. **Mails best-effort:** los avisos de solicitudes se mandan en el mismo request, después de guardar. Si el SMTP falla, la solicitud queda igual (se loguea y la respuesta trae `notificados: 0`), pero no hay reintento. Si se vuelve un problema, el paso siguiente es una tabla de mails pendientes.
+
+10. **Notificaciones push (Web Push, no FCM):** se eligió el estándar Web Push con claves VAPID y la librería `web-push` porque el proyecto no usa Firebase ni tiene app nativa: no hace falta un proyecto externo ni un SDK en el frontend. Cosas a tener en cuenta:
+    - **Serverless:** la función se congela al responder, así que el envío se espera dentro del request (`Promise.allSettled`, timeout de 8 s por dispositivo). Está bien para los dispositivos de un usuario; para envíos masivos o programados hará falta una cola o un cron.
+    - **SSRF:** el server hace un POST a la URL que manda el navegador, por eso `endpointPermitido()` sólo acepta hosts de servicios push conocidos. Si aparece un servicio nuevo, se agrega a la lista.
+    - **iOS** (16.4+) sólo recibe push con la app instalada en la pantalla de inicio. El `manifest.json` sólo tiene un ícono SVG: para iOS conviene sumar un PNG 180×180 (`apple-touch-icon`).
+    - **Aviso para activarlas:** `frontend/push.js` observa `#app-shell` (visible sólo con sesión y acceso) y, en cualquier página, muestra un aviso si el permiso está en `default` o está concedido pero sin suscripción. Preferencias en `localStorage` de ese dispositivo: `oratorio.push.pospuesto` (7 días) y `oratorio.push.desactivado`. Con el permiso `denied` no se pregunta.
+    - **Sin reintentos:** un dispositivo que falla (que no sea 404/410) queda como fallido; no se reintenta. Los 404/410 se borran.
+    - **Programación (próxima tarea):** `notificaciones_push` ya tiene el historial; faltaría `programada_para`, un estado `programada` y un cron que dispare los vencidos.
 
 ## Ver también
 

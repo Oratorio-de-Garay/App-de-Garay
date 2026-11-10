@@ -22,6 +22,8 @@ Los dos archivos están en `.gitignore`. Variables:
 | `SMTP_USER` / `SMTP_PASS` | Producción: `oratoriogarayy@gmail.com` y su **contraseña de aplicación** (ver [Mails](#mails)). Local: vacías. | Idem. `SMTP_PASS` es **secreto**. |
 | `MAIL_FROM` | — | Remitente, ej: `Oratorio de Garay <oratoriogarayy@gmail.com>`. Con Gmail tiene que ser la misma cuenta que `SMTP_USER`. |
 | `APP_URL` | — | URL de la app para los links de los mails (`https://app-de-garay.vercel.app`). Sin ella se usa la del request, que en un preview de Vercel es la del preview. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Generar el par **una vez** con `npx web-push generate-vapid-keys` y usar el mismo en cada entorno donde quieras push. | Notificaciones push (`backend/api/push.js`). Opcionales: sin ellas el push queda deshabilitado (503) y el resto funciona. La pública se entrega al frontend por `/config.js`. `VAPID_PRIVATE_KEY` es **secreta**. Si se cambia el par, los dispositivos ya suscriptos dejan de recibir y tienen que reactivar. |
+| `VAPID_SUBJECT` | `mailto:` de contacto, ej: `mailto:oratoriogarayy@gmail.com` (es el default) | Identifica al emisor ante los servicios push. |
 | `GOOGLE_AUTH_CLIENT_ID` / `GOOGLE_AUTH_CLIENT_SECRET` | Google Cloud Console → Credentials | **Informativos únicamente** — el backend no los lee (`grep process.env` lo confirma). Se cargan directo en Supabase Auth → Providers → Google, no en el código. |
 
 El frontend no tiene `SUPABASE_URL` ni la publishable key hardcodeadas: las recibe del backend por `GET /config.js` (la "publishable/anon key" es pública por diseño — ver [ARCHITECTURE.md](ARCHITECTURE.md)).

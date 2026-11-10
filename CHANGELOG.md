@@ -7,6 +7,14 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 ## Sin publicar
 
 ### Agregado
+- **Notificaciones push** (migración `20261106000000_notificaciones_push.sql`):
+  - Un admin envía un título y un texto, de forma inmediata, a todos los dispositivos de un usuario de una organización que administra (pestaña **Notificaciones** del panel, con historial y resultado del envío).
+  - Web Push estándar (VAPID, librería `web-push`): sin Firebase ni otra dependencia externa. Variables `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (ver docs/SETUP.md); sin ellas el push queda deshabilitado.
+  - Cada usuario activa o desactiva las notificaciones en su dispositivo desde el menú lateral (`frontend/push.js`, `sw.js`, `manifest.json`).
+  - Tablas `dispositivos_push` y `notificaciones_push`, funciones `push_*` y `admin_*_notificacion*`, y la acción de auditoría `notificacion_enviada`.
+  - Endpoints `POST`/`GET /api/admin/notificaciones` y `POST`/`DELETE /api/push/suscripciones`.
+  - **Aviso para activarlas:** a todo usuario con sesión iniciada que no las tenga activadas, en cualquier página, se le muestra un aviso para habilitarlas. "Ahora no" lo pospone 7 días; no se pregunta si el navegador las bloqueó ni si el usuario las desactivó a propósito en ese dispositivo.
+  - En iOS (16.4+) sólo llegan si la app está instalada en la pantalla de inicio.
 - **Desmarcar presente** (`DELETE /api/attendance/unmark`): cualquier miembro puede revertir una asistencia ya marcada con confirmación previa. El botón "✔ Presente marcado" pasa a ser "✘ Desmarcar presente" (habilitado) tanto en la ficha individual como en los botones de la lista rápida, funcionando como toggle.
 
 

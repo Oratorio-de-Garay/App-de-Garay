@@ -1,4 +1,4 @@
-import { SUPABASE_URL, SUPABASE_KEY, ES_BASE_LOCAL } from "./entorno.js";
+import { SUPABASE_URL, SUPABASE_KEY, ES_BASE_LOCAL, VAPID_PUBLIC_KEY } from "./entorno.js";
 import express from "express";
 import cors from "cors";
 import { createClient } from "@supabase/supabase-js";
@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import { requireAllowedUser, requireOrganization, puedeAdministrar } from "./auth.js";
 import adminRouter from "./admin.js";
 import registroRouter from "./registro.js";
+import pushRouter from "./push.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,7 +26,9 @@ app.get("/config.js", (req, res) => {
     `window.API_URL = "";\n` +
     `window.SUPABASE_URL = ${JSON.stringify(SUPABASE_URL)};\n` +
     `window.SUPABASE_ANON_KEY = ${JSON.stringify(SUPABASE_KEY)};\n` +
-    `window.BASE_LOCAL = ${ES_BASE_LOCAL};\n`
+    `window.BASE_LOCAL = ${ES_BASE_LOCAL};\n` +
+    // Clave pública VAPID (vacía = push deshabilitado).
+    `window.VAPID_PUBLIC_KEY = ${JSON.stringify(VAPID_PUBLIC_KEY)};\n`
   );
 });
 
@@ -65,7 +68,7 @@ app.use("/api", (req, res, next) => {
 // Las rutas de datos operan sobre la organización activa. /auth/me y /admin no:
 // un superadmin sin membresías tiene que poder entrar al panel.
 app.use("/api", (req, res, next) => {
-  if (req.path === "/health" || req.path === "/auth/me" || req.path.startsWith("/admin/") || esRegistro(req.path)) {
+  if (req.path === "/health" || req.path === "/auth/me" || req.path.startsWith("/admin/") || req.path.startsWith("/push/") || esRegistro(req.path)) {
     return next();
   }
   return requireOrganization(req, res, next);
@@ -73,6 +76,7 @@ app.use("/api", (req, res, next) => {
 
 app.use("/api/registro", registroRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/push", pushRouter);
 
 // ─────────────────────────────────────────────────────────
 // Confirms the caller's token is valid and allowlisted.

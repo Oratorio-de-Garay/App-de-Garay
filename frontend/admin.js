@@ -13,6 +13,8 @@ const adminState = {
   solicitudes: [],
   // null = todavía no se pidió; se carga al abrir la pestaña Actividad.
   auditoria: null,
+  // Igual que auditoria: se carga al abrir la pestaña Notificaciones.
+  notificaciones: null,
   filtro: { q: "", org: "" },
   filtroSolicitudes: "pendiente",
   tab: "usuarios",
@@ -99,6 +101,7 @@ function setAdminTab(tab) {
     panel.classList.toggle("active", panel.id === `panel-${tab}`);
   });
   if (tab === "actividad" && adminState.auditoria === null) cargarAuditoria();
+  if (tab === "notificaciones" && adminState.notificaciones === null) cargarNotificaciones();
 }
 
 async function cargarDatos() {
@@ -848,6 +851,150 @@ function abrirFormOrganizacion(org) {
 }
 
 // ─────────────────────────────────────────────────────────
+// Pestaña Notificaciones (push)
+//
+// Envío inmediato a todos los dispositivos de un usuario. Cada admin sólo ve
+// y puede notificar dentro de las organizaciones que administra: lo valida la
+// base (admin_preparar_notificacion), esto es sólo la interfaz.
+// ─────────────────────────────────────────────────────────
+
+const ESTADOS_NOTIFICACION = {
+  pendiente: "Pendiente",
+  enviada: "Enviada",
+  parcial: "Parcial",
+  fallida: "Fallida",
+  sin_dispositivos: "Sin dispositivos",
+};
+
+async function cargarNotificaciones() {
+  const panel = document.getElementById("panel-notificaciones");
+  renderSkeleton(panel);
+  try {
+    adminState.notificaciones = await apiGet("/api/admin/notificaciones?limit=100");
+    renderNotificaciones();
+  } catch (error) {
+    renderErrorCarga(panel, error, cargarNotificaciones);
+  }
+}
+
+function renderNotificaciones() {
+  const panel = document.getElementById("panel-notificaciones");
+  const filas = adminState.notificaciones || [];
+  panel.innerHTML = `
+    <div class="admin-toolbar">
+      <div class="admin-toolbar-title">
+        <h2>Notificaciones</h2>
+        <p>Mandá un aviso push a todos los dispositivos de un usuario. Le llega al instante.</p>
+      </div>
+      <button class="admin-btn admin-btn-primary" id="btn-nueva-notificacion" type="button">+ Nueva notificación</button>
+    </div>
+    <div class="admin-list">
+      ${filas.length ? filas.map(notificacionHtml).join("")
+        : estadoVacio(ICONOS.bandeja, "Todavía no enviaste notificaciones", "Las que mandes aparecen acá con su resultado.")}
+    </div>
+  `;
+  panel.querySelector("#btn-nueva-notificacion").addEventListener("click", abrirFormNotificacion);
+}
+
+function notificacionHtml(n) {
+  const resultado = n.dispositivos_total
+    ? `${n.enviados} de ${n.dispositivos_total} ${n.dispositivos_total === 1 ? "dispositivo" : "dispositivos"}`
+    : "Ningún dispositivo activado";
+  return `
+    <article class="admin-card admin-row">
+      ${avatarHtml(n.destinatario_nombre || n.destinatario_email, n.destinatario_email)}
+      <div class="row-main">
+        <div class="row-title">
+          <span>${escapeHtml(n.titulo)}</span>
+          <span class="estado-badge estado-notif-${escapeHtml(n.estado)}">${escapeHtml(ESTADOS_NOTIFICACION[n.estado] || n.estado)}</span>
+        </div>
+        <div class="solicitud-pedido">${escapeHtml(n.texto)}</div>
+        <div class="row-sub">Para ${escapeHtml(n.destinatario_nombre || n.destinatario_email)} · ${escapeHtml(resultado)}</div>
+        <div class="row-tags"><span class="org-chip">${escapeHtml(n.organizacion_nombre)}</span></div>
+        <div class="field-hint">${escapeHtml(formatearFecha(n.created_at))} · por ${escapeHtml(n.remitente_email)}</div>
+      </div>
+    </article>
+  `;
+}
+
+function abrirFormNotificacion() {
+  const orgs = adminState.organizaciones;
+  if (!orgs.length) {
+    toast("No administrás ninguna organización.", "err");
+    return;
+  }
+  const usuariosDe = (orgId) => adminState.usuarios.filter((u) => u.organizaciones.some((o) => o.id === orgId));
+  const opcionesUsuarios = (orgId) => usuariosDe(orgId).map((u) =>
+    `<option value="${escapeHtml(u.email)}">${escapeHtml(u.nombre ? `${u.nombre} · ${u.email}` : u.email)}</option>`).join("");
+
+  openModal({
+    title: "Nueva notificación",
+    description: "Se envía ahora mismo a todos los dispositivos del usuario que activaron las notificaciones.",
+    submitLabel: "Enviar",
+    bodyHtml: `
+      <div class="form-group">
+        <label class="form-label" for="n-org">Organización <span class="field-required">*</span></label>
+        <select class="form-select" id="n-org">
+          ${orgs.map((o) => `<option value="${o.id}">${escapeHtml(o.nombre)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="n-destinatario">Usuario <span class="field-required">*</span></label>
+        <select class="form-select" id="n-destinatario">${opcionesUsuarios(orgs[0].id)}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="n-titulo">Título <span class="field-required">*</span></label>
+        <input class="form-input" id="n-titulo" type="text" maxlength="65" autocomplete="off" placeholder="Ej: Cambio de horario">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="n-texto">Texto <span class="field-required">*</span></label>
+        <textarea class="form-input" id="n-texto" rows="4" maxlength="240" placeholder="Lo que va a ver la persona en su dispositivo"></textarea>
+        <span class="field-hint" id="n-contador">0 / 240</span>
+      </div>
+    `,
+    onReady(modal) {
+      const selectOrg = modal.querySelector("#n-org");
+      const selectUsuario = modal.querySelector("#n-destinatario");
+      const texto = modal.querySelector("#n-texto");
+      selectOrg.addEventListener("change", () => {
+        selectUsuario.innerHTML = opcionesUsuarios(selectOrg.value);
+      });
+      texto.addEventListener("input", () => {
+        modal.querySelector("#n-contador").textContent = `${texto.value.length} / 240`;
+      });
+      modal.querySelector("#n-titulo").focus();
+    },
+    async onSubmit(modal) {
+      const destinatario = modal.querySelector("#n-destinatario").value;
+      const titulo = modal.querySelector("#n-titulo").value.trim();
+      const texto = modal.querySelector("#n-texto").value.trim();
+      if (!destinatario) throw new Error("Esa organización no tiene usuarios.");
+      if (!titulo) throw new Error("El título es obligatorio.");
+      if (!texto) throw new Error("El texto es obligatorio.");
+
+      const n = await apiSend("/api/admin/notificaciones", "POST", {
+        organizacion_id: modal.querySelector("#n-org").value,
+        destinatario_email: destinatario,
+        titulo,
+        texto,
+      });
+      const nombre = n.destinatario_nombre || n.destinatario_email;
+      if (n.estado === "enviada") {
+        toast(`Notificación enviada a ${nombre} (${n.enviados} ${n.enviados === 1 ? "dispositivo" : "dispositivos"}).`);
+      } else if (n.estado === "parcial") {
+        toast(`Se envió a ${n.enviados} de ${n.dispositivos_total} dispositivos de ${nombre}.`);
+      } else if (n.estado === "sin_dispositivos") {
+        toast(`${nombre} todavía no activó las notificaciones en ningún dispositivo.`, "err");
+      } else {
+        toast(`No se pudo entregar la notificación a ${nombre}.`, "err");
+      }
+      adminState.auditoria = null;
+      await cargarNotificaciones();
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────
 // Pestaña Actividad (auditoría)
 // ─────────────────────────────────────────────────────────
 
@@ -904,6 +1051,7 @@ function actividadHtml(a) {
     solicitud_aceptada: [`Se aceptó la solicitud #${escapeHtml(d.numero)} de ${quien}`, ""],
     solicitud_rechazada: [`Se rechazó la solicitud #${escapeHtml(d.numero)} de ${quien}`, "activity-quita"],
     solicitud_cancelada: [`${quien} canceló su solicitud #${escapeHtml(d.numero)}`, "activity-quita"],
+    notificacion_enviada: [`Notificación “${escapeHtml(d.titulo)}” para ${quien} en ${org}`, "activity-solicitud"],
   };
   const [texto, clase] = textos[a.accion] || [escapeHtml(a.accion), ""];
 

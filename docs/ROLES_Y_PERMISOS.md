@@ -5,6 +5,7 @@ Cómo se decide quién entra a la app, qué datos ve y quién puede administrar 
 - **Base de datos:**
   - [`supabase/migrations/20260926000000_roles_y_admin.sql`](../supabase/migrations/20260926000000_roles_y_admin.sql): tablas, funciones con todas las reglas y auditoría.
   - [`supabase/migrations/20260928000000_solicitudes.sql`](../supabase/migrations/20260928000000_solicitudes.sql): registro abierto y solicitudes.
+  - [`supabase/migrations/20261106000000_notificaciones_push.sql`](../supabase/migrations/20261106000000_notificaciones_push.sql): dispositivos y notificaciones push.
 - **Backend:**
   - [`backend/api/auth.js`](../backend/api/auth.js): middleware de sesión y guards.
   - [`backend/api/admin.js`](../backend/api/admin.js): endpoints del panel.
@@ -59,6 +60,10 @@ Cómo se decide quién entra a la app, qué datos ve y quién puede administrar 
 | Ver y resolver solicitudes para sumarse a X | — | ✓ | ✓ |
 | Ver y resolver pedidos de espacio nuevo | — | ✗ | ✓ |
 | Ver la actividad (auditoría) | — | La de X, más la propia | Toda |
+| Enviar una notificación push a un miembro de X | — | ✓ | ✓ |
+| Enviar una notificación push a alguien que no es miembro de la organización elegida | — | ✗ | ✗ |
+| Ver el historial de notificaciones | — | El de X | Todo |
+| Activar o quitar las notificaciones en su propio dispositivo | ✓ | ✓ | ✓ |
 
 1. Ser superadmin **no** da acceso a los datos de las organizaciones. Para usar Registro o Buffet de una organización tiene que ser miembro, como cualquiera.
 2. El admin sólo ve y modifica las membresías de las organizaciones que administra. Si la persona además pertenece a otra organización, esa membresía no se toca y el admin ni siquiera la ve.
@@ -87,6 +92,18 @@ Reglas:
 - **Lista de espacios:** cualquier cuenta con sesión ve los nombres de las organizaciones (sólo `id` y `nombre`). Es necesario para poder elegir.
 
 Estas reglas están cubiertas por [`supabase/tests/solicitudes.test.sql`](../supabase/tests/solicitudes.test.sql).
+
+## Notificaciones push
+
+Un admin envía un título y un texto a todos los dispositivos de un usuario (pestaña **Notificaciones** del panel). Reglas, aplicadas en `admin_preparar_notificacion`:
+
+- La organización elegida tiene que estar entre las que el actor administra (`42501`); el superadmin puede en todas.
+- El destinatario tiene que ser **miembro de esa organización** (`P0002`: fuera de ella se informa como inexistente). Un usuario de varias organizaciones recibe en todos sus dispositivos aunque lo notifique el admin de una sola.
+- Cada usuario gestiona sólo sus dispositivos: el email sale del token, nunca del body.
+- Sólo se envía a servicios push conocidos (lista de hosts en `backend/api/push.js`), para que el server no pueda usarse para hacer pedidos a URLs arbitrarias.
+- Todo envío queda en `notificaciones_push` y en la auditoría (`notificacion_enviada`).
+
+Cubierto por [`supabase/tests/notificaciones_push.test.sql`](../supabase/tests/notificaciones_push.test.sql).
 
 ## Dónde se aplican las reglas
 
@@ -141,6 +158,7 @@ Tabla `auditoria_admin`, con una fila por cambio atómico. Se ve en la pestaña 
 | `solicitud_creada` | la pedida (nula si es un espacio nuevo) | `{ numero, solicitud_id, nombre_espacio }`. El actor es el solicitante. |
 | `solicitud_aceptada` / `solicitud_rechazada` | la final / la pedida | `{ numero, solicitud_id, comentario }` |
 | `solicitud_cancelada` | la pedida | `{ numero, solicitud_id }`. El actor es el solicitante. |
+| `notificacion_enviada` | la elegida | `{ notificacion_id, titulo, dispositivos }`. El objetivo es el destinatario. |
 
 El `actor_email` de los cambios hechos por migraciones es `'migracion'`.
 

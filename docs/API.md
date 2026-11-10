@@ -261,6 +261,37 @@ Las listan y resuelven los admins (las de sus organizaciones) y los superadmins 
 | `POST /api/admin/solicitudes/:id/tomar` | — | `solicitud`. El actor queda como aprobador; sigue pendiente. Reasigna si ya la tenía otro. |
 | `POST /api/admin/solicitudes/:id/resolver` | `{ decision: "aceptar" \| "rechazar", comentario?, organizacion_id?, nombre_espacio? }` | `solicitud` + `notificados` (mails enviados). Para un espacio nuevo (sólo superadmin): `organizacion_id` lo asigna a uno existente (miembro, sin rol); si no, se crea con `nombre_espacio` (o el pedido) y queda admin. `409` si ya estaba resuelta. |
 
+### Notificaciones push
+
+Un admin envía un título y un texto a **todos los dispositivos** de un usuario de una organización que administra (el superadmin, de cualquiera). El envío es inmediato: el endpoint espera la respuesta de los servicios push antes de contestar. Si el server no tiene claves VAPID responde `503`. Forma de una notificación:
+
+```json
+{
+  "id": "uuid", "organizacion_id": "uuid", "organizacion_nombre": "Oratorio de Garay",
+  "remitente_email": "admin@gmail.com", "destinatario_email": "x@gmail.com", "destinatario_nombre": "María Pérez",
+  "titulo": "Cambio de horario", "texto": "El sábado arrancamos a las 15.",
+  "estado": "pendiente | enviada | parcial | fallida | sin_dispositivos",
+  "dispositivos_total": 2, "enviados": 2, "fallidos": 0,
+  "created_at": "...", "enviada_at": "... | null"
+}
+```
+
+| Endpoint | Body | Respuesta |
+|---|---|---|
+| `POST /api/admin/notificaciones` | `{ organizacion_id, destinatario_email, titulo (≤65), texto (≤240) }` | **201** `notificacion` con el resultado del envío. `sin_dispositivos` si el usuario no activó las notificaciones en ningún dispositivo (queda registrada igual). `403` si no administra esa organización, `404` si el destinatario no es miembro de ella (se informa como inexistente), `400` si faltan campos o se pasan de largo. |
+| `GET /api/admin/notificaciones?organizacion_id=&limit=` | — | `[notificacion]` del scope, las más nuevas primero (default 50, máx. 200). `organizacion_id` opcional. |
+
+### Dispositivos push (`/api/push/*`)
+
+Los usa cualquier usuario con sesión sobre **sí mismo** (el email sale del token, nunca del body). No exigen organización activa. Responden `503` si el push no está configurado.
+
+| Endpoint | Body | Respuesta |
+|---|---|---|
+| `POST /api/push/suscripciones` | La `PushSubscription` del navegador: `{ endpoint, keys: { p256dh, auth } }` | **201** `{ id }`. Upsert por `endpoint`. `400` si el endpoint no es de un servicio push conocido (FCM, Mozilla, Apple, Windows). Hasta 20 dispositivos por usuario: se descartan los más viejos. |
+| `DELETE /api/push/suscripciones` | `{ endpoint }` | `{ eliminados }`. Sólo borra un dispositivo propio. |
+
+`GET /config.js` suma `window.VAPID_PUBLIC_KEY` (vacía si el push no está configurado).
+
 ## Registro (`/api/registro/*`)
 
 Router en `backend/api/registro.js`. Sólo exige una sesión válida (`requireSession`), no estar registrado: lo usa quien inició sesión pero todavía no tiene acceso. Todo se hace sobre el email de la sesión.

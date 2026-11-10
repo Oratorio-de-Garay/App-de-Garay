@@ -621,6 +621,12 @@
 .estado-rechazada { background: var(--admin-rojo-bg); color: var(--admin-rojo); border: 1px solid var(--admin-rojo-borde); }
 .estado-cancelada { background: #f2f4f3; color: var(--texto-sec); border: 1px solid var(--borde); }
 
+.estado-notif-pendiente { background: var(--amarillo-bg); color: var(--amarillo-txt); border: 1px solid var(--amarillo-borde); }
+.estado-notif-enviada { background: #e6f4ea; color: #0f5c2e; border: 1px solid #a8d5b0; }
+.estado-notif-parcial { background: var(--amarillo-bg); color: var(--amarillo-txt); border: 1px solid var(--amarillo-borde); }
+.estado-notif-fallida { background: var(--admin-rojo-bg); color: var(--admin-rojo); border: 1px solid var(--admin-rojo-borde); }
+.estado-notif-sin_dispositivos { background: #f2f4f3; color: var(--texto-sec); border: 1px solid var(--borde); }
+
 .solicitud-pedido {
   font-size: 14px;
   line-height: 1.6;

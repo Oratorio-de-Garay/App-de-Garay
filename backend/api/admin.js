@@ -2,6 +2,7 @@ import express from "express";
 import { supabaseAdmin, requireAdmin, requireSuperadmin } from "./auth.js";
 import { llamarRpc, responderError, responderRpc } from "./rpc.js";
 import { mailSolicitudResuelta, urlDeLaApp } from "./mail.js";
+import { enviarPush, PUSH_HABILITADO } from "./push.js";
 
 // ========================================================
 // ADMINISTRACIÓN: usuarios, roles, organizaciones y solicitudes
@@ -167,6 +168,52 @@ router.post("/solicitudes/:id/resolver", async (req, res) => {
     res.json({ ...solicitud, notificados, aviso_error: motivo || null });
   } catch (error) {
     responderError(res, "Admin resolver solicitud", error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────
+// Notificaciones push (admin y superadmin, dentro de su scope)
+// ─────────────────────────────────────────────────────────
+
+router.get("/notificaciones", (req, res) =>
+  responderRpc(res, "Admin notificaciones", "admin_listar_notificaciones", {
+    p_actor: req.user.email,
+    p_organizacion_id: req.query.organizacion_id || null,
+    p_limite: Number(req.query.limit) || 50,
+  })
+);
+
+// Envío inmediato a todos los dispositivos del destinatario:
+// preparar (valida scope y crea el registro) → enviar → cerrar (resultado).
+router.post("/notificaciones", async (req, res) => {
+  try {
+    if (!PUSH_HABILITADO) {
+      return res.status(503).json({ error: "Las notificaciones push no están configuradas" });
+    }
+    const { notificacion, dispositivos } = await llamarRpc("admin_preparar_notificacion", {
+      p_actor: req.user.email,
+      p_organizacion_id: req.body?.organizacion_id || null,
+      p_destinatario: String(req.body?.destinatario_email || ""),
+      p_titulo: String(req.body?.titulo || ""),
+      p_texto: String(req.body?.texto || ""),
+    });
+    if (dispositivos.length === 0) {
+      return res.status(201).json(notificacion);
+    }
+
+    const { exitosos, invalidos } = await enviarPush(dispositivos, {
+      titulo: notificacion.titulo,
+      texto: notificacion.texto,
+    });
+    const cerrada = await llamarRpc("admin_cerrar_notificacion", {
+      p_actor: req.user.email,
+      p_id: notificacion.id,
+      p_exitosos: exitosos,
+      p_invalidos: invalidos,
+    });
+    res.status(201).json(cerrada);
+  } catch (error) {
+    responderError(res, "Admin enviar notificación", error);
   }
 });
 

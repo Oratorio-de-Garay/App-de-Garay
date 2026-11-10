@@ -24,4 +24,10 @@ if (faltan.length) {
 
 export const SUPABASE_URL = process.env.SUPABASE_URL;
 export const SUPABASE_KEY = process.env.SUPABASE_KEY;
-export const ES_BASE_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(SUPABASE_URL);
+// Notificaciones push (Web Push). Opcionales: sin ellas el push queda
+// deshabilitado pero el resto de la app funciona. Generarlas con
+// `npx web-push generate-vapid-keys`. Ver docs/SETUP.md.
+export const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
+export const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
+export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:oratoriogarayy@gmail.com";
+export const ES_BASE_LOCAL =/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(SUPABASE_URL);
