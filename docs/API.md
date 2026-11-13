@@ -147,6 +147,8 @@ Lista completa de pibes presentes en una fecha puntual (drill-down del historial
 
 Todo el módulo de buffet (`/api/buffet/*`) está scopeado por `X-Organization-Id`: cada query filtra por `organizacion_id`. Acá se documentan sólo eventos y ventas; el resto (`/products`, `/combos`, `/budgets`, `/meta`) sigue el mismo patrón CRUD.
 
+**Productos y combos activos.** `POST`/`PATCH` de `/products` y `/combos` aceptan `active` (boolean). `GET` lo devuelve en cada fila. Si no viene en el body, se guarda `true`: un `PATCH` sin `active` **reactiva** el registro, así que el cliente siempre lo manda. La UI de Nueva venta ofrece sólo los activos; el backend **no** rechaza ventas con productos o combos inactivos a propósito, para poder editar ventas viejas cuyo producto se desactivó después. Desactivar un producto no toca los combos que lo contienen.
+
 Un **evento** ("Feria del Plato 29/08/2026") se crea una vez y después se le cargan las ventas de a una: cada venta es un cobro, con los ítems que sean.
 
 ### `GET /api/buffet/events`

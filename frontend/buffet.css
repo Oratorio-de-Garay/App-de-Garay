@@ -74,6 +74,10 @@
   border: 1px solid var(--verde-soft);
 }
 
+/* Producto o combo desactivado: sigue visible, pero apagado. */
+.row.row-inactive { background: #f1f2f1; color: var(--texto-sec); }
+.row.row-inactive strong { color: var(--texto-sec); }
+
 /* Las ventas tienen columnas distintas a las de productos. */
 .row.row-sale { grid-template-columns: 1.2fr .5fr 1.6fr .7fr auto; }
 
@@ -133,27 +137,14 @@
 
 .check-line { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 
+/* Sólo el selector: elegir una opción la agrega directo al carrito. */
 .sale-picker {
   display: grid;
-  grid-template-columns: 2fr 1.1fr 1.3fr auto;
-  gap: 8px;
-  align-items: end;
+  grid-template-columns: 1fr;
 }
 
 .picker-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .picker-label { font-size: 12px; color: var(--texto-sec); }
-
-/* Verde claro para distinguirlo del btn-main (verde oscuro) y del btn-sec (blanco). */
-.btn-add {
-  padding: 10px 16px;
-  border-radius: 10px;
-  border: 1.5px solid var(--verde-soft);
-  background: var(--verde-light);
-  color: var(--verde);
-  font-weight: 600;
-  cursor: pointer;
-}
-.btn-add:hover { background: var(--verde-soft); }
 
 /* Cantidades y precios se cargan con los botones, sin teclado: paso 1 y $50. */
 .stepper { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px; align-items: center; }
@@ -178,13 +169,13 @@
 }
 .stepper-btn:hover { background: var(--verde-light); }
 
-.sale-cart { display: grid; gap: 8px; }
+.sale-cart { display: grid; gap: 12px; }
 
 .sale-item-row {
   display: grid;
-  grid-template-columns: 1.6fr 1fr .7fr auto;
+  grid-template-columns: 2fr 1.1fr 1.3fr .7fr auto;
   gap: 8px;
-  align-items: center;
+  align-items: end;
   padding: 10px;
   border: 1px solid var(--borde);
   border-radius: 10px;
