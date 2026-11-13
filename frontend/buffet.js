@@ -160,13 +160,18 @@ function bindStepper(modal, id) {
   const input = field(modal, id);
   const step = Number(wrap.dataset.step) || 1;
   const min = Number(wrap.dataset.min) || 0;
+  // Se dispara "input" también al cambiar el valor por código para que quien
+  // escuche el campo (p. ej. las líneas de una venta) se entere.
+  const notify = () => input.dispatchEvent(new Event("input", { bubbles: true }));
   const normalize = () => {
     input.value = Math.max(min, Math.round(Number(input.value) || min));
+    notify();
   };
   input.addEventListener("blur", normalize);
   wrap.querySelectorAll("[data-step-dir]").forEach((btn) => btn.addEventListener("click", () => {
     const current = Math.round(Number(input.value) || min);
     input.value = Math.max(min, current + step * Number(btn.dataset.stepDir));
+    notify();
   }));
 }
 
@@ -201,7 +206,7 @@ function renderProducts() {
     </div>
     <div class="list">
       ${buffetState.products.map((p) => `
-        <div class="row">
+        <div class="row${p.active ? "" : " row-inactive"}">
           <div>
             <strong>${escapeHtml(p.name)}</strong>${p.is_donated ? '<span class="chip">Donado</span>' : ""}<br>
             <small>${escapeHtml(p.category_name || "Sin categoría")} · ${escapeHtml(p.unit_name || "Sin unidad")}</small>
@@ -253,6 +258,10 @@ function openProductForm(product = null) {
         <input type="checkbox" id="prod-donated"${product?.is_donated ? " checked" : ""}>
         <span>Producto donado (sin costo ni proveedor)</span>
       </label>
+      <label class="check-line">
+        <input type="checkbox" id="prod-active"${product ? (product.active ? " checked" : "") : " checked"}>
+        <span>Producto activo (aparece en Nueva venta)</span>
+      </label>
       <div class="form-group">
         <label class="form-label" for="prod-obs">Observación</label>
         <input class="form-input" id="prod-obs" type="text" value="${escapeHtml(product?.observation || "")}">
@@ -269,7 +278,7 @@ function openProductForm(product = null) {
         stock_current: Number(field(modal, "prod-stock").value) || 0,
         is_donated: field(modal, "prod-donated").checked,
         observation: field(modal, "prod-obs").value.trim() || null,
-        active: true,
+        active: field(modal, "prod-active").checked,
       };
       const method = product ? "PATCH" : "POST";
       const path = product ? `/api/buffet/products/${product.id}` : "/api/buffet/products";
@@ -494,33 +503,97 @@ function openSaleForm(evento, venta = null) {
     unit_price: Number(i.unit_price),
   }));
 
+  // Todos los productos y combos con su estado: el selector de alta ofrece sólo
+  // los activos, pero una línea ya cargada conserva el suyo aunque se haya
+  // desactivado después (si no, editar una venta vieja lo perdería).
   const sellableOptions = [
-    ...buffetState.products.filter((p) => p.active).map((p) => ({ key: `p:${p.id}`, name: p.name, price: p.sale_price })),
-    ...buffetState.combos.filter((c) => c.active).map((c) => ({ key: `c:${c.id}`, name: `Combo · ${c.name}`, price: c.sale_price })),
+    ...buffetState.products.map((p) => ({ key: `p:${p.id}`, name: p.name, price: p.sale_price, active: p.active })),
+    ...buffetState.combos.map((c) => ({ key: `c:${c.id}`, name: `Combo · ${c.name}`, price: c.sale_price, active: c.active })),
   ];
+  const activeOptions = sellableOptions.filter((o) => o.active);
+  // El selector de ítems ofrece sólo lo que todavía no está en la venta: lo ya
+  // agregado se modifica desde su propia línea.
+  const pickOptionsHtml = () => `<option value="">Elegí un producto o combo</option>` + activeOptions
+    .filter((o) => !cart.some((i) => keyOf(i) === o.key))
+    .map((o) => `<option value="${o.key}">${escapeHtml(o.name)}</option>`)
+    .join("");
+  const keyOf = (item) => (item.combo_id ? `c:${item.combo_id}` : `p:${item.product_id}`);
+  const lineTotal = (item) => item.quantity * item.unit_price;
+  const cartTotal = () => cart.reduce((acc, item) => acc + lineTotal(item), 0);
 
+  const lineSelectHtml = (item) => {
+    const own = keyOf(item);
+    const options = sellableOptions.filter((o) => o.active || o.key === own);
+    if (!options.some((o) => o.key === own)) options.push({ key: own, name: item.description });
+    return options.map((o) => `<option value="${o.key}"${o.key === own ? " selected" : ""}>${escapeHtml(o.name)}</option>`).join("");
+  };
+
+  // Cada línea es editable: mismos tres campos (producto/combo, cantidad y
+  // precio) que se usan para elegir, así no hay que quitarla para corregirla.
   const renderCart = (modal) => {
-    const total = cart.reduce((acc, item) => acc + item.quantity * item.unit_price, 0);
     field(modal, "sale-cart").innerHTML = cart.map((item, index) => `
       <div class="sale-item-row">
-        <span>${escapeHtml(item.description)}</span>
-        <span>${item.quantity} × ${formatMoney(item.unit_price)}</span>
-        <strong>${formatMoney(item.quantity * item.unit_price)}</strong>
+        <div class="picker-field">
+          <select class="form-select" id="sale-item-product-${index}">${lineSelectHtml(item)}</select>
+        </div>
+        <div class="picker-field">
+          <span class="picker-label">Cantidad</span>
+          ${stepperHtml(`sale-item-qty-${index}`, { value: item.quantity, step: 1, min: 1, label: "cantidad" })}
+        </div>
+        <div class="picker-field">
+          <span class="picker-label">Precio</span>
+          ${stepperHtml(`sale-item-price-${index}`, { value: item.unit_price, step: 50, min: 0, label: "precio" })}
+        </div>
+        <strong class="sale-line-total" id="sale-item-total-${index}">${formatMoney(lineTotal(item))}</strong>
         <button class="btn-sec" type="button" data-remove-item="${index}">Quitar</button>
       </div>
     `).join("") || '<p class="empty-cart">Todavía no agregaste ítems.</p>';
-    field(modal, "sale-total").textContent = formatMoney(total);
+
+    cart.forEach((item, index) => {
+      bindStepper(modal, `sale-item-qty-${index}`);
+      bindStepper(modal, `sale-item-price-${index}`);
+
+      // Cantidad y precio se actualizan en el lugar, sin re-pintar: si no, se
+      // perdería el foco mientras se tipea.
+      const onNumberInput = () => {
+        item.quantity = Math.max(0, Math.round(Number(field(modal, `sale-item-qty-${index}`).value) || 0));
+        item.unit_price = Math.max(0, Math.round(Number(field(modal, `sale-item-price-${index}`).value) || 0));
+        field(modal, `sale-item-total-${index}`).textContent = formatMoney(lineTotal(item));
+        updateTotals(modal);
+      };
+      field(modal, `sale-item-qty-${index}`).addEventListener("input", onNumberInput);
+      field(modal, `sale-item-price-${index}`).addEventListener("input", onNumberInput);
+
+      // Cambiar el producto trae el precio de lista del nuevo.
+      field(modal, `sale-item-product-${index}`).addEventListener("change", (e) => {
+        const option = sellableOptions.find((o) => o.key === e.target.value);
+        if (!option) return;
+        const [kind, id] = option.key.split(":");
+        item.product_id = kind === "p" ? id : null;
+        item.combo_id = kind === "c" ? id : null;
+        item.description = option.name;
+        item.unit_price = Math.max(0, Math.round(Number(option.price) || 0));
+        renderCart(modal);
+      });
+    });
+
     modal.querySelectorAll("[data-remove-item]").forEach((btn) => btn.addEventListener("click", () => {
       cart.splice(Number(btn.dataset.removeItem), 1);
       renderCart(modal);
     }));
+    field(modal, "sale-pick").innerHTML = pickOptionsHtml();
+    updateTotals(modal);
+  };
+
+  const updateTotals = (modal) => {
+    field(modal, "sale-total").textContent = formatMoney(cartTotal());
     updateChange(modal);
   };
 
   // El vuelto es sólo una ayuda visual para quien cobra: no se manda al
   // servidor, se recalcula en el cliente a partir del total del carrito.
   const updateChange = (modal) => {
-    const total = cart.reduce((acc, item) => acc + item.quantity * item.unit_price, 0);
+    const total = cartTotal();
     const given = Number(field(modal, "sale-cash-given").value) || 0;
     const change = given - total;
     const el = field(modal, "sale-change");
@@ -544,21 +617,11 @@ function openSaleForm(evento, venta = null) {
       </div>
 
       <div class="form-group">
-        <label class="form-label">Ítems</label>
+        <label class="form-label" for="sale-pick">Ítems</label>
         <div class="sale-picker">
           <select class="form-select" id="sale-pick">
-            <option value="">Elegí un producto o combo</option>
-            ${sellableOptions.map((o) => `<option value="${o.key}">${escapeHtml(o.name)}</option>`).join("")}
+            ${pickOptionsHtml()}
           </select>
-          <div class="picker-field">
-            <span class="picker-label">Cantidad</span>
-            ${stepperHtml("sale-qty", { value: 1, step: 1, min: 1, label: "cantidad" })}
-          </div>
-          <div class="picker-field">
-            <span class="picker-label">Precio</span>
-            ${stepperHtml("sale-price", { value: 0, step: 50, min: 0, label: "precio" })}
-          </div>
-          <button class="btn-add" type="button" id="sale-add">Agregar</button>
         </div>
       </div>
 
@@ -583,8 +646,6 @@ function openSaleForm(evento, venta = null) {
     `,
     onReady: (modal) => {
       renderCart(modal);
-      bindStepper(modal, "sale-qty");
-      bindStepper(modal, "sale-price");
 
       // El campo de vuelto sólo tiene sentido cobrando en efectivo.
       const toggleCashRow = () => {
@@ -597,44 +658,29 @@ function openSaleForm(evento, venta = null) {
       field(modal, "sale-cash-given").addEventListener("input", () => updateChange(modal));
       toggleCashRow();
 
-      // Autocompleta el precio con el de lista, pero se puede editar a mano.
+      // Elegir una opción la agrega directo al carrito (cantidad 1, precio de
+      // lista); después se ajusta en la propia línea. Si ya estaba cargada, se
+      // suma una unidad en vez de duplicarla.
       field(modal, "sale-pick").addEventListener("change", (e) => {
         const option = sellableOptions.find((o) => o.key === e.target.value);
-        field(modal, "sale-price").value = Math.round(Number(option?.price ?? 0));
-      });
-
-      field(modal, "sale-add").addEventListener("click", () => {
-        const key = field(modal, "sale-pick").value;
-        const option = sellableOptions.find((o) => o.key === key);
-        if (!option) return alert("Elegí un producto o combo.");
-        const quantity = Math.round(Number(field(modal, "sale-qty").value) || 0);
-        if (quantity <= 0) return alert("La cantidad debe ser mayor a cero.");
-        const unitPrice = Math.max(0, Math.round(Number(field(modal, "sale-price").value) || 0));
-        const [kind, id] = key.split(":");
-
-        // Mismo producto al mismo precio: se suma la cantidad en vez de repetir
-        // la línea en el carrito.
-        const existente = cart.find((i) =>
-          i.product_id === (kind === "p" ? id : null) &&
-          i.combo_id === (kind === "c" ? id : null) &&
-          i.unit_price === unitPrice);
-        if (existente) existente.quantity += quantity;
+        e.target.value = "";
+        if (!option) return;
+        const [kind, id] = option.key.split(":");
+        const existente = cart.find((i) => keyOf(i) === option.key);
+        if (existente) existente.quantity += 1;
         else cart.push({
           product_id: kind === "p" ? id : null,
           combo_id: kind === "c" ? id : null,
           description: option.name,
-          quantity,
-          unit_price: unitPrice,
+          quantity: 1,
+          unit_price: Math.max(0, Math.round(Number(option.price) || 0)),
         });
-
-        field(modal, "sale-pick").value = "";
-        field(modal, "sale-qty").value = 1;
-        field(modal, "sale-price").value = 0;
         renderCart(modal);
       });
     },
     onSubmit: async (modal) => {
       if (!cart.length) throw new Error("Agregá al menos un ítem a la venta.");
+      if (cart.some((item) => item.quantity <= 0)) throw new Error("La cantidad de cada ítem debe ser mayor a cero.");
       const payload = {
         payment_method: field(modal, "sale-payment").value,
         observation: field(modal, "sale-obs").value.trim() || null,
@@ -660,9 +706,22 @@ function renderCombos() {
       </div>
       <button class="btn-main" id="btn-nuevo-combo" type="button">Nuevo combo</button>
     </div>
-    <div class="list">${buffetState.combos.map((c) => `<div class="row"><div><strong>${escapeHtml(c.name)}</strong><br><small>${escapeHtml(c.description || "")}</small></div><div><small>Precio</small><br>$${Number(c.sale_price || 0).toFixed(2)}</div><div><small>Items</small><br>${c.items_count || 0}</div><div><small>Estado</small><br>${c.active ? "Activo" : "Inactivo"}</div><div class="row-actions"><button class="btn-sec" type="button" data-delete-combo="${c.id}">Eliminar</button></div></div>`).join("") || "<p>No hay combos cargados.</p>"}</div>
+    <div class="list">
+      ${buffetState.combos.map((c) => `
+        <div class="row${c.active ? "" : " row-inactive"}">
+          <div><strong>${escapeHtml(c.name)}</strong><br><small>${escapeHtml(c.description || "")}</small></div>
+          <div><small>Precio</small><br>$${Number(c.sale_price || 0).toFixed(2)}</div>
+          <div><small>Items</small><br>${c.items_count || 0}</div>
+          <div><small>Estado</small><br>${c.active ? "Activo" : "Inactivo"}</div>
+          <div class="row-actions">
+            <button class="btn-sec" type="button" data-edit-combo="${c.id}">Editar</button>
+            <button class="btn-sec" type="button" data-delete-combo="${c.id}">Eliminar</button>
+          </div>
+        </div>`).join("") || "<p>No hay combos cargados.</p>"}
+    </div>
   `;
   document.getElementById("btn-nuevo-combo").addEventListener("click", () => openComboForm());
+  document.querySelectorAll("[data-edit-combo]").forEach((btn) => btn.addEventListener("click", () => openComboForm(buffetState.combos.find((c) => c.id === btn.dataset.editCombo))));
   document.querySelectorAll("[data-delete-combo]").forEach((btn) => btn.addEventListener("click", () => apiSend(`/api/buffet/combos/${btn.dataset.deleteCombo}`, "DELETE", {}).then(loadBuffet).catch((e) => alert(e.message))));
 }
 
@@ -682,6 +741,10 @@ function openComboForm(combo = null) {
         <label class="form-label" for="combo-price">Precio de venta</label>
         <input class="form-input" id="combo-price" type="number" step="0.01" min="0" value="${Number(combo?.sale_price ?? 0)}">
       </div>
+      <label class="check-line">
+        <input type="checkbox" id="combo-active"${combo ? (combo.active ? " checked" : "") : " checked"}>
+        <span>Combo activo (aparece en Nueva venta)</span>
+      </label>
     `,
     onSubmit: async (modal) => {
       const name = field(modal, "combo-name").value.trim();
@@ -690,7 +753,7 @@ function openComboForm(combo = null) {
         name,
         description: field(modal, "combo-desc").value.trim() || null,
         sale_price: Number(field(modal, "combo-price").value) || 0,
-        active: true,
+        active: field(modal, "combo-active").checked,
       };
       const method = combo ? "PATCH" : "POST";
       const path = combo ? `/api/buffet/combos/${combo.id}` : "/api/buffet/combos";

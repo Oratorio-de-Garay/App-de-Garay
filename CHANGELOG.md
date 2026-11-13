@@ -7,6 +7,8 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 ## Sin publicar
 
 ### Agregado
+- **Buffet: productos y combos activos/inactivos.** El formulario de "Editar" (y el de alta) de productos y de combos tiene un checkbox *activo*, igual que "Producto donado". Sólo los activos aparecen en "Elegí un producto o combo" de Nueva venta; los inactivos se muestran en gris en sus listados. Desactivar un producto **no** desactiva sus combos (cada uno tiene su propio estado). Los combos ahora tienen botón **Editar**. No requiere migración: `active` ya existía. Antes el formulario mandaba `active: true` fijo, así que guardar un producto lo reactivaba.
+- **Buffet: ítems editables en Nueva venta.** Elegir un producto o combo lo agrega directo a la venta (se eliminó el botón "Agregar" y sus alertas). El selector sólo ofrece lo que todavía no está en la venta; lo ya agregado se modifica desde su línea. Cada línea tiene producto/combo, cantidad y precio editables, así no hace falta quitarla y volver a cargarla. Al editar una venta vieja, una línea conserva su producto aunque después se haya desactivado.
 - **Notificaciones push** (migración `20261106000000_notificaciones_push.sql`):
   - Un admin envía un título y un texto, de forma inmediata, a todos los dispositivos de un usuario de una organización que administra (pestaña **Notificaciones** del panel, con historial y resultado del envío).
   - Web Push estándar (VAPID, librería `web-push`): sin Firebase ni otra dependencia externa. Variables `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (ver docs/SETUP.md); sin ellas el push queda deshabilitado.

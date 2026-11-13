@@ -184,6 +184,9 @@ Una jornada de venta ("Feria del Plato 29/08/2026"). Se crea una vez y agrupa to
 | organizacion_id | uuid | FK → `organizaciones.id`, not null |
 | created_at / updated_at | timestamptz | `updated_at` por trigger |
 
+### `buffet_products` / `buffet_combos`: columna `active`
+`active boolean not null default true` (definida en `20260812000000_buffet.sql`). Un producto o combo inactivo no se ofrece al cargar una venta nueva, pero sigue existiendo y sus ventas históricas no cambian. Son independientes: desactivar un producto no desactiva los combos que lo incluyen.
+
 ### `buffet_sales` / `buffet_sale_items`
 Una venta = un cobro dentro de un evento. Definidas en `20260828000000_buffet_sales.sql`; `event_id` se agregó en `20260830000000_buffet_eventos.sql`.
 
