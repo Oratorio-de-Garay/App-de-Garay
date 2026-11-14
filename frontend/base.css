@@ -97,14 +97,6 @@ header {
   border: 1px solid rgba(255,255,255,0.08);
 }
 
-/* Botón con el aspecto de un link (ej: activar notificaciones). */
-.side-link-btn {
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.side-link-btn:disabled { opacity: 0.6; cursor: default; }
-
 /* Aviso para activar las notificaciones push (push.js). */
 .push-aviso {
   position: fixed;

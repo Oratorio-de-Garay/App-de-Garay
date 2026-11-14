@@ -102,6 +102,7 @@ Un admin envía un título y un texto a todos los dispositivos de uno o varios u
 - La organización elegida tiene que estar entre las que el actor administra (`42501`); el superadmin puede en todas.
 - El destinatario tiene que ser **miembro de esa organización** (`P0002`: fuera de ella se informa como inexistente). Un usuario de varias organizaciones recibe en todos sus dispositivos aunque lo notifique el admin de una sola.
 - Cada usuario gestiona sólo sus dispositivos: el email sale del token, nunca del body.
+- Los dispositivos desactivados (`desactivado_at`, el servicio push respondió 404/410) no reciben envíos ni cuentan como "con notificaciones"; se conservan para que el admin vea que las tenían.
 - Sólo se envía a servicios push conocidos (lista de hosts en `backend/api/push.js`), para que el server no pueda usarse para hacer pedidos a URLs arbitrarias.
 - Con varios destinatarios, cada uno se valida por separado: los que no son miembros se rechazan sin abortar el lote y sin revelar si existen; si ninguno es válido, `P0002`.
 - La fecha de una programada tiene que ser **posterior a ahora**: lo valida la función SQL (el formulario sólo lo anticipa). Máximo 50 destinatarios por envío.

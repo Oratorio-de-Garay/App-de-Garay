@@ -626,6 +626,7 @@
 .estado-notif-parcial { background: var(--amarillo-bg); color: var(--amarillo-txt); border: 1px solid var(--amarillo-borde); }
 .estado-notif-fallida { background: var(--admin-rojo-bg); color: var(--admin-rojo); border: 1px solid var(--admin-rojo-borde); }
 .estado-notif-sin_dispositivos { background: #f2f4f3; color: var(--texto-sec); border: 1px solid var(--borde); }
+.dispositivo-desactivado { opacity: 0.6; }
 .estado-notif-programada { background: var(--verde-light); color: var(--verde); border: 1px solid var(--verde-mid); }
 .estado-notif-enviando { background: var(--amarillo-bg); color: var(--amarillo-txt); border: 1px solid var(--amarillo-borde); }
 .estado-notif-cancelada { background: #f2f4f3; color: var(--texto-sec); border: 1px solid var(--borde); }

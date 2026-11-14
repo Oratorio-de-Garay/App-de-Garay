@@ -4,7 +4,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(7);
+select plan(9);
 
 select public.superadmin_guardar_organizacion('oratoriogarayy@gmail.com', null, 'ZZ Disp A');
 select public.superadmin_guardar_organizacion('oratoriogarayy@gmail.com', null, 'ZZ Disp B');
@@ -41,6 +41,16 @@ select is((select (public.admin_listar_dispositivos('adma@test.local')::text ~ '
 select is((select count(*)::int from jsonb_array_elements(public.admin_listar_dispositivos('oratoriogarayy@gmail.com', (select b from org))) f
            where f ->> 'email' = 'usub@test.local'), 1,
   'el superadmin puede filtrar por organización');
+
+-- Un dispositivo desactivado se sigue listando, marcado como tal.
+update public.dispositivos_push set desactivado_at = now() where endpoint = 'https://push.test.local/a2';
+select is((select count(*)::int from jsonb_array_elements(public.admin_listar_dispositivos('adma@test.local')) f,
+                  jsonb_array_elements(f -> 'dispositivos') d
+           where f ->> 'email' = 'usua@test.local' and d ->> 'desactivado_at' is not null), 1,
+  'el dispositivo desactivado se lista con su fecha de baja');
+select is((select count(*)::int from jsonb_array_elements(public.admin_listar_dispositivos('adma@test.local')) f
+           where f ->> 'email' = 'usua@test.local'), 1,
+  'el usuario sigue listado con sus dispositivos');
 
 select * from finish();
 rollback;

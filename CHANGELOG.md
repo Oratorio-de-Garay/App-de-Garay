@@ -13,7 +13,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 - **Notificaciones push** (migración `20261106000000_notificaciones_push.sql`):
   - Un admin envía un título y un texto, de forma inmediata, a todos los dispositivos de un usuario de una organización que administra (pestaña **Notificaciones** del panel, con historial y resultado del envío).
   - Web Push estándar (VAPID, librería `web-push`): sin Firebase ni otra dependencia externa. Variables `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (ver docs/SETUP.md); sin ellas el push queda deshabilitado.
-  - Cada usuario activa o desactiva las notificaciones en su dispositivo desde el menú lateral (`frontend/push.js`, `sw.js`, `manifest.json`).
+  - Cada usuario las activa desde un aviso en su dispositivo y, si quiere, las desactiva desde la configuración de su navegador (`frontend/push.js`, `sw.js`, `manifest.json`).
   - Tablas `dispositivos_push` y `notificaciones_push`, funciones `push_*` y `admin_*_notificacion*`, y la acción de auditoría `notificacion_enviada`.
   - Endpoints `POST`/`GET /api/admin/notificaciones` y `POST`/`DELETE /api/push/suscripciones`.
   - **Aviso para activarlas:** a todo usuario con sesión iniciada que no las tenga activadas, en cualquier página, se le muestra un aviso para habilitarlas. "Ahora no" lo pospone 7 días; no se pregunta si el navegador las bloqueó ni si el usuario las desactivó a propósito en ese dispositivo.
@@ -86,6 +86,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Cambiado
 
+- **Notificaciones push: un dispositivo vencido se marca como desactivado en vez de borrarse** (migración `20261114100000_dispositivos_push_desactivados.sql`, columna `dispositivos_push.desactivado_at`). Cuando el servicio push responde 404/410 (p. ej. el usuario las desactivó desde el navegador) el dispositivo deja de recibir envíos pero se conserva: *Administración > Notificaciones > Dispositivos* lo muestra como "Desactivado el …" y distingue "notificaciones desactivadas" de "sin notificaciones activadas". Volver a activarlas desde el mismo navegador lo reactiva. El tope de 20 por usuario descarta primero los desactivados. Quitar el dispositivo a pedido del usuario (`DELETE /api/push/suscripciones`) sigue borrándolo.
 - **Supabase local levanta sólo lo que usa la app** (`supabase/config.toml`): Postgres, Auth, PostgREST, Kong y Mailpit.
   - Se apagaron Studio, Storage, Edge Runtime, Analytics y Realtime.
   - Docker baja unos 2,1 GB en lugar de 8,5 GB.
@@ -131,6 +132,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Eliminado
 
+- Opción "Activar/Desactivar notificaciones" del menú lateral: quien quiera desactivarlas lo hace desde su navegador. El aviso para activarlas se mantiene.
 - Columna `organizacion_miembros.rol`. Nunca se leía; los roles viven en `usuario_roles`.
 
 ### Seguridad

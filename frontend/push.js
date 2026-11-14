@@ -1,6 +1,7 @@
 // Notificaciones push en este dispositivo: registra el service worker, pide
 // permiso (siempre por un gesto del usuario) y guarda la suscripción en el
-// backend. Agrega al menú lateral un botón para activarlas o desactivarlas.
+// backend. No hay botón en el menú: para desactivarlas se usa la configuración
+// del navegador.
 //
 // Si el server no tiene claves VAPID (window.VAPID_PUBLIC_KEY vacía) o el
 // navegador no soporta push, no hace nada.
@@ -85,51 +86,6 @@
 
   window.pushNotificaciones = { activar, desactivar, estaActivo };
 
-  // ── Botón en el menú lateral ──
-  function iniciarBoton() {
-    const menu = document.getElementById("side-nav");
-    if (!menu || menu.querySelector("#btn-push")) return;
-
-    const boton = document.createElement("button");
-    boton.type = "button";
-    boton.id = "btn-push";
-    boton.className = "side-link side-link-btn";
-    menu.appendChild(boton);
-
-    async function pintar() {
-      if (Notification.permission === "denied") {
-        boton.textContent = "Notificaciones bloqueadas";
-        boton.disabled = true;
-        boton.title = "Habilitalas desde la configuración del navegador.";
-        return;
-      }
-      boton.textContent = (await estaActivo()) ? "Desactivar notificaciones" : "Activar notificaciones";
-    }
-
-    // Si se activan desde el aviso, el botón tiene que enterarse.
-    window.addEventListener("push-cambio", pintar);
-
-    boton.addEventListener("click", async () => {
-      boton.disabled = true;
-      try {
-        if (await estaActivo()) {
-          await desactivar();
-          window.toast?.("Notificaciones desactivadas en este dispositivo.");
-        } else {
-          await activar();
-          window.toast?.("Listo: este dispositivo recibirá notificaciones.");
-        }
-      } catch (error) {
-        window.toast?.(error.message, "err");
-      } finally {
-        boton.disabled = false;
-        pintar();
-      }
-    });
-
-    pintar();
-  }
-
   // ── Aviso para activarlas ──
   // A todo usuario con sesión iniciada que no las tenga activadas, en cualquier
   // página, una vez por carga. Ahora no = no se vuelve a preguntar por 7 días.
@@ -185,8 +141,6 @@
   }
 
   function iniciar() {
-    iniciarBoton();
-
     // La app (#app-shell) se muestra sólo con la sesión iniciada y con acceso:
     // ahí, y nunca en el login ni en el registro, se muestra el aviso.
     const shell = document.getElementById("app-shell");
