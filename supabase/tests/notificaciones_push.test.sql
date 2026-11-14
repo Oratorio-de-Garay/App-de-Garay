@@ -5,7 +5,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(30);
+select plan(33);
 
 -- ─── Datos de prueba ───
 -- Dos organizaciones, un admin de cada una, un usuario en A y otro en B.
@@ -46,6 +46,16 @@ select throws_ok($$ select public.push_registrar_dispositivo('noexiste@test.loca
 
 select is((select public.push_quitar_dispositivo('usub@test.local', 'https://push.test.local/a2') ->> 'eliminados'), '0',
   'un usuario no puede quitar el dispositivo de otro');
+
+-- Renovación: el registro avisa si la suscripción estaba vencida o era desconocida.
+select is((select public.push_registrar_dispositivo('usua@test.local', 'https://push.test.local/r1', 'k', 'a', null) ->> 'renovar'), 'true',
+  'un endpoint desconocido pide renovar');
+select is((select public.push_registrar_dispositivo('usua@test.local', 'https://push.test.local/r1', 'k', 'a', null) ->> 'renovar'), 'false',
+  'un endpoint activo no pide renovar');
+update public.dispositivos_push set desactivado_at = now() where endpoint = 'https://push.test.local/r1';
+select is((select public.push_registrar_dispositivo('usua@test.local', 'https://push.test.local/r1', 'k', 'a', null) ->> 'renovar'), 'true',
+  'un endpoint desactivado pide renovar y se reactiva');
+delete from public.dispositivos_push where endpoint = 'https://push.test.local/r1';
 
 -- ─── Envío: scope ───
 select throws_ok($$ select public.admin_preparar_notificacion('usua@test.local', (select a from org), 'usua@test.local', 'Hola', 'Texto') $$,
