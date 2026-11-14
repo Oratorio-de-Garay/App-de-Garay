@@ -1083,13 +1083,29 @@ function notificacionHtml(n) {
   `;
 }
 
-function abrirFormNotificacion() {
+async function abrirFormNotificacion() {
   const orgs = adminState.organizaciones;
   if (!orgs.length) {
     toast("No administrás ninguna organización.", "err");
     return;
   }
-  const usuariosDe = (orgId) => adminState.usuarios.filter((u) => u.organizaciones.some((o) => o.id === orgId));
+  // Para ordenar la lista de destinatarios hace falta saber quién tiene
+  // dispositivos activados (sin filtrar por organización). Si falla, se ordena
+  // sólo por nombre.
+  const conDispositivo = new Set();
+  try {
+    const usuariosDisp = await apiGet("/api/admin/dispositivos");
+    for (const u of usuariosDisp) {
+      if (u.dispositivos.some((d) => !d.desactivado_at)) conDispositivo.add(u.email);
+    }
+  } catch (error) {
+    console.error("No se pudieron cargar los dispositivos para ordenar:", error);
+  }
+  const usuariosDe = (orgId) => adminState.usuarios
+    .filter((u) => u.organizaciones.some((o) => o.id === orgId))
+    .sort((a, b) =>
+      (conDispositivo.has(b.email) - conDispositivo.has(a.email))
+      || (a.nombre || a.email).localeCompare(b.nombre || b.email, "es", { sensitivity: "base" }));
   const opcionesUsuarios = (orgId) => usuariosDe(orgId).map((u) => `
     <label class="dest-item">
       <input type="checkbox" name="n-dest" value="${escapeHtml(u.email)}">
