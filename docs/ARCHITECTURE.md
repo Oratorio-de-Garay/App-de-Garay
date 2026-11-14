@@ -27,7 +27,7 @@ frontend/
   auth.js      ← login (Google o código por mail) vía Supabase Auth; expone window.apiFetch() y window.currentUser
   registro.js  ← pantalla "Espacios" para pedir acceso (se carga antes que auth.js)
   nav.js       ← sidebar desplegable en mobile
-  push.js      ← activar/desactivar las notificaciones push del dispositivo (botón en el menú lateral)
+  push.js      ← activar las notificaciones push del dispositivo (aviso; se desactivan desde el navegador)
   sw.js        ← service worker: recibe y muestra las notificaciones (se sirve desde la raíz)
   manifest.json / icon.svg ← PWA mínima (requerida por iOS para recibir push)
   index.js / buffet.js / admin.js ← lógica de UI de cada página

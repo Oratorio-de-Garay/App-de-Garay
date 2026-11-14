@@ -152,6 +152,7 @@ Un navegador o dispositivo suscripto a notificaciones push. Versionada en `20261
 | p256dh / auth | text | claves de la suscripción. **Secretas**: nunca se loguean ni se devuelven. |
 | user_agent | text | informativo |
 | created_at / ultimo_uso_at | timestamptz | `ultimo_uso_at`: último registro o envío exitoso |
+| desactivado_at | timestamptz | Nulo = activo. Se completa cuando el servicio push responde 404/410 (suscripción vencida o dada de baja desde el navegador); no recibe envíos. Volver a registrar el mismo `endpoint` lo limpia. Versionada en `20261114100000_dispositivos_push_desactivados.sql`. |
 
 ### `notificaciones_push`
 Historial de envíos y cola de las programadas. Versionada en `20261106000000_notificaciones_push.sql` y `20261110000000_notificaciones_programadas.sql`.
@@ -256,9 +257,9 @@ Las de notificaciones push están en `20261106000000_notificaciones_push.sql`, c
 |---|---|
 | `push_registrar_dispositivo`, `push_quitar_dispositivo` | Cada usuario sobre sí mismo (el email lo pone el backend desde la sesión). |
 | `admin_preparar_notificacion` | Valida scope (organización administrada y destinatario miembro), crea el registro `pendiente`, audita y devuelve los dispositivos. |
-| `admin_cerrar_notificacion` | Guarda el resultado y borra los dispositivos que el servicio push dio por vencidos (404/410). Sólo la cierra quien la creó. |
+| `admin_cerrar_notificacion` | Guarda el resultado y marca como desactivados (`desactivado_at`) los dispositivos que el servicio push dio por vencidos (404/410); no los borra. Sólo la cierra quien la creó. |
 | `admin_listar_notificaciones`, `notificacion_push_json` | Historial del scope (las programadas primero) y forma única de una notificación. |
-| `admin_listar_dispositivos` | Usuarios del scope con sus `dispositivos_push` (sin endpoint ni claves; sólo el host del servicio). Sólo lectura. |
+| `admin_listar_dispositivos` | Usuarios del scope con sus `dispositivos_push`, activos y desactivados (sin endpoint ni claves; sólo el host del servicio). Sólo lectura. |
 
 Las de programación están en `20261110000000_notificaciones_programadas.sql`:
 

@@ -5,7 +5,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(27);
+select plan(30);
 
 -- ─── Datos de prueba ───
 -- Dos organizaciones, un admin de cada una, un usuario en A y otro en B.
@@ -82,8 +82,15 @@ select throws_ok($$ select public.admin_cerrar_notificacion('admb@test.local', (
 select is((select public.admin_cerrar_notificacion('adma@test.local', (select n from prep_ids),
             array[(select d1 from prep_ids)], array[(select d2 from prep_ids)]) ->> 'estado'),
   'parcial', 'un envío exitoso y uno vencido queda parcial');
-select is((select count(*)::int from public.dispositivos_push where email = 'usua@test.local'), 1,
-  'el dispositivo vencido se borra');
+select is((select count(*)::int from public.dispositivos_push where email = 'usua@test.local' and desactivado_at is null), 1,
+  'el dispositivo vencido queda desactivado y el otro activo');
+select is((select count(*)::int from public.dispositivos_push where email = 'usua@test.local'), 2,
+  'el dispositivo vencido no se borra');
+select is((select jsonb_array_length(public.admin_preparar_notificacion('adma@test.local', (select a from org), 'usua@test.local', 'Otra', 'Texto') -> 'dispositivos')), 1,
+  'un envío posterior ignora los desactivados');
+select public.push_registrar_dispositivo('usua@test.local', 'https://push.test.local/a2', 'k2', 'a2', 'UA 2');
+select is((select desactivado_at is null from public.dispositivos_push where endpoint = 'https://push.test.local/a2'), true,
+  'volver a registrar el endpoint lo reactiva');
 select throws_ok($$ select public.admin_cerrar_notificacion('adma@test.local', (select n from prep_ids), '{}', '{}') $$,
   '55000', null, 'no se puede cerrar dos veces');
 

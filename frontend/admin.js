@@ -979,7 +979,8 @@ function descripcionDispositivo(ua) {
 
 function usuarioDispositivosHtml(u) {
   const quien = u.nombre || u.email;
-  const cantidad = u.dispositivos.length;
+  const cantidad = u.dispositivos.filter((d) => !d.desactivado_at).length;
+  const desactivados = u.dispositivos.length - cantidad;
   return `
     <article class="admin-card admin-row">
       ${avatarHtml(quien, u.email)}
@@ -988,14 +989,16 @@ function usuarioDispositivosHtml(u) {
           <span>${escapeHtml(quien)}</span>
           ${cantidad
             ? `<span class="estado-badge estado-notif-enviada">${cantidad} ${cantidad === 1 ? "dispositivo" : "dispositivos"}</span>`
-            : `<span class="estado-badge estado-notif-sin_dispositivos">Sin notificaciones activadas</span>`}
+            : desactivados
+              ? `<span class="estado-badge estado-notif-cancelada">Notificaciones desactivadas</span>`
+              : `<span class="estado-badge estado-notif-sin_dispositivos">Sin notificaciones activadas</span>`}
         </div>
         ${u.nombre ? `<div class="row-sub">${escapeHtml(u.email)}</div>` : ""}
         <div class="row-tags">${u.organizaciones.map((o) => `<span class="org-chip">${escapeHtml(o.nombre)}</span>`).join("")}</div>
-        ${cantidad ? `<ul class="dispositivos-lista">${u.dispositivos.map((d) => `
-          <li>
+        ${u.dispositivos.length ? `<ul class="dispositivos-lista">${u.dispositivos.map((d) => `
+          <li${d.desactivado_at ? ' class="dispositivo-desactivado"' : ""}>
             <strong>${escapeHtml(descripcionDispositivo(d.user_agent))}</strong>
-            <span class="field-hint">${d.servicio ? `${escapeHtml(d.servicio)} · ` : ""}Activado el ${escapeHtml(formatearFecha(d.created_at))}${d.ultimo_uso_at ? ` · Último uso ${escapeHtml(formatearFecha(d.ultimo_uso_at))}` : ""}</span>
+            <span class="field-hint">${d.servicio ? `${escapeHtml(d.servicio)} · ` : ""}Activado el ${escapeHtml(formatearFecha(d.created_at))}${d.ultimo_uso_at ? ` · Último uso ${escapeHtml(formatearFecha(d.ultimo_uso_at))}` : ""}${d.desactivado_at ? ` · Desactivado el ${escapeHtml(formatearFecha(d.desactivado_at))}` : ""}</span>
           </li>`).join("")}</ul>` : ""}
       </div>
     </article>
@@ -1005,7 +1008,7 @@ function usuarioDispositivosHtml(u) {
 function renderDispositivos() {
   const contenido = document.getElementById("notif-contenido");
   const usuarios = adminState.dispositivos || [];
-  const conPush = usuarios.filter((u) => u.dispositivos.length).length;
+  const conPush = usuarios.filter((u) => u.dispositivos.some((d) => !d.desactivado_at)).length;
   const orgs = adminState.organizaciones;
   contenido.innerHTML = `
     <div class="admin-toolbar">
