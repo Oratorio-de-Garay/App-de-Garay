@@ -763,6 +763,43 @@ input[type=checkbox] {
   background: rgba(255,255,255,0.08);
 }
 
+/* "Instalar como app" (install.js): queda justo a la izquierda de "Salir",
+   después del selector de organización si existe. */
+.btn-instalar {
+  order: 1;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--verde-light);
+  border: 1.5px solid #3f6b53;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-instalar:active {
+  background: rgba(255,255,255,0.08);
+}
+
+.header-actions:has(#org-select) .btn-instalar {
+  margin-left: 0;
+}
+
+.header-actions .btn-instalar ~ .btn-logout {
+  order: 2;
+  margin-left: 0;
+}
+
+/* En pantallas angostas queda solo el ícono para no apretar el header. */
+@media (max-width: 420px) {
+  .btn-instalar-texto { display: none; }
+  .btn-instalar { padding: 6px 9px; }
+}
+
 /* Selector de organización, inyectado por auth.js junto al botón de salir.
    Va sobre el header verde, así que no reusa los colores de .form-select. */
 #org-select {
