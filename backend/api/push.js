@@ -55,7 +55,7 @@ export function endpointPermitido(endpoint) {
 export async function enviarPush(dispositivos, { titulo, texto }) {
   const exitosos = [];
   const invalidos = [];
-  const payload = JSON.stringify({ title: titulo, body: texto });
+  const payload = JSON.stringify({ title: titulo, body: texto, url: "/" });
 
   await Promise.allSettled(
     dispositivos.map(async (d) => {

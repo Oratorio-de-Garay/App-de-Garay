@@ -19,6 +19,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
   - Endpoints `POST`/`GET /api/admin/notificaciones` y `POST`/`DELETE /api/push/suscripciones`.
   - **Aviso para activarlas:** a todo usuario con sesión iniciada que no las tenga activadas, en cualquier página, se le muestra un aviso para habilitarlas. "Ahora no" lo pospone 7 días; no se pregunta si el navegador las bloqueó ni si el usuario las desactivó a propósito en ese dispositivo.
   - En iOS (16.4+) sólo llegan si la app está instalada en la pantalla de inicio.
+  - **Fix iOS:** tocar la notificación ahora abre la app aunque esté cerrada. En iOS `focus()` de una ventana suspendida rechaza o no hace nada y el service worker nunca llegaba a `openWindow`; ahora se captura el fallo y se abre la app. El payload incluye `url` (por defecto `/`).
 - **Notificaciones push programadas y a varios usuarios** (migración `20261110000000_notificaciones_programadas.sql`):
   - El formulario permite elegir **varios usuarios** (con "Seleccionar todos", hasta 50 por envío) y **cuándo** enviar: *Inmediata* o *Programar* con fecha y hora. La fecha tiene que ser posterior a ahora: se valida en el formulario y, como autoridad, en la base. Se crea una notificación por destinatario; los que no pertenecen a la organización se rechazan sin abortar el lote.
   - Las programadas se pueden **cancelar** mientras no salgan (`DELETE /api/admin/notificaciones/:id`). Estados nuevos: `programada`, `enviando`, `cancelada`.
