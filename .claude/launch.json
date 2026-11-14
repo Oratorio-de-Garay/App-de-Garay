@@ -1,0 +1,1 @@
+{"version":"0.0.1","configurations":[{"name":"backend-local","runtimeExecutable":"npm","runtimeArgs":["--prefix","backend","run","dev"],"port":3000}]}
