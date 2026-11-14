@@ -692,3 +692,27 @@
 .admin-modal textarea.form-input { resize: vertical; font-family: inherit; }
 
 .activity-solicitud .activity-dot { background: #f0a500; box-shadow: 0 0 0 4px var(--amarillo-bg); }
+
+/* ─── Notificaciones: subpestañas y dispositivos ─── */
+
+.admin-subtabs { align-self: flex-start; }
+
+.dispositivos-lista {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dispositivos-lista li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: #f7faf8;
+  font-size: 14px;
+}

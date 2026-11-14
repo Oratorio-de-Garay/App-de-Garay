@@ -64,6 +64,7 @@ Cómo se decide quién entra a la app, qué datos ve y quién puede administrar 
 | Cancelar una notificación programada de X | — | ✓ | ✓ |
 | Enviar una notificación push a alguien que no es miembro de la organización elegida | — | ✗ | ✗ |
 | Ver el historial de notificaciones | — | El de X | Todo |
+| Ver los dispositivos con notificaciones activadas de los usuarios (sin sus claves) | — | Los de X | Todos |
 | Activar o quitar las notificaciones en su propio dispositivo | ✓ | ✓ | ✓ |
 
 1. Ser superadmin **no** da acceso a los datos de las organizaciones. Para usar Registro o Buffet de una organización tiene que ser miembro, como cualquiera.

@@ -258,6 +258,7 @@ Las de notificaciones push están en `20261106000000_notificaciones_push.sql`, c
 | `admin_preparar_notificacion` | Valida scope (organización administrada y destinatario miembro), crea el registro `pendiente`, audita y devuelve los dispositivos. |
 | `admin_cerrar_notificacion` | Guarda el resultado y borra los dispositivos que el servicio push dio por vencidos (404/410). Sólo la cierra quien la creó. |
 | `admin_listar_notificaciones`, `notificacion_push_json` | Historial del scope (las programadas primero) y forma única de una notificación. |
+| `admin_listar_dispositivos` | Usuarios del scope con sus `dispositivos_push` (sin endpoint ni claves; sólo el host del servicio). Sólo lectura. |
 
 Las de programación están en `20261110000000_notificaciones_programadas.sql`:
 
