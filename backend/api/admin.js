@@ -183,6 +183,14 @@ router.get("/notificaciones", (req, res) =>
   })
 );
 
+// Dispositivos con push activado de los usuarios del scope (sin claves ni endpoint).
+router.get("/dispositivos", (req, res) =>
+  responderRpc(res, "Admin dispositivos", "admin_listar_dispositivos", {
+    p_actor: req.user.email,
+    p_organizacion_id: req.query.organizacion_id || null,
+  })
+);
+
 // Envía a uno o varios destinatarios, ahora o programado.
 //   - Sin programada_para: crea los registros (valida scope por destinatario),
 //     envía a todos los dispositivos y cierra cada uno con su resultado.

@@ -15,6 +15,11 @@ const adminState = {
   auditoria: null,
   // Igual que auditoria: se carga al abrir la pestaña Notificaciones.
   notificaciones: null,
+  // Subpestaña de Notificaciones ("envios" | "dispositivos"). Dispositivos se
+  // carga la primera vez que se abre.
+  subtabNotif: "envios",
+  dispositivos: null,
+  filtroDispositivosOrg: "",
   filtro: { q: "", org: "" },
   filtroSolicitudes: "pendiente",
   tab: "usuarios",
@@ -42,7 +47,7 @@ function initAdmin() {
   // auth.js ya redirige al inicio a quien no puede administrar.
   if (!adminState.me?.puede_administrar) return;
 
-  document.querySelectorAll(".admin-tab").forEach((btn) => {
+  document.querySelectorAll("#admin-tabs .admin-tab").forEach((btn) => {
     if (btn.hasAttribute("data-solo-superadmin")) btn.hidden = !adminState.me.es_superadmin;
     btn.addEventListener("click", () => setAdminTab(btn.dataset.tab));
   });
@@ -92,7 +97,7 @@ function aplicarDeepLink() {
 
 function setAdminTab(tab) {
   adminState.tab = tab;
-  document.querySelectorAll(".admin-tab").forEach((btn) => {
+  document.querySelectorAll("#admin-tabs .admin-tab").forEach((btn) => {
     const activa = btn.dataset.tab === tab;
     btn.classList.toggle("active", activa);
     btn.setAttribute("aria-selected", activa ? "true" : "false");
@@ -888,9 +893,16 @@ async function cargarNotificaciones() {
   }
 }
 
+const SUBTABS_NOTIF = [
+  { id: "envios", label: "Envíos" },
+  { id: "dispositivos", label: "Dispositivos" },
+];
+
+// Marco de la pestaña (título, botón y subpestañas); el contenido depende de la
+// subpestaña activa. El botón Nueva notificación está en las dos.
 function renderNotificaciones() {
   const panel = document.getElementById("panel-notificaciones");
-  const filas = adminState.notificaciones || [];
+  const sub = adminState.subtabNotif;
   panel.innerHTML = `
     <div class="admin-toolbar">
       <div class="admin-toolbar-title">
@@ -899,14 +911,125 @@ function renderNotificaciones() {
       </div>
       <button class="admin-btn admin-btn-primary" id="btn-nueva-notificacion" type="button">+ Nueva notificación</button>
     </div>
+    <nav class="admin-tabs admin-subtabs" role="tablist" aria-label="Notificaciones">
+      ${SUBTABS_NOTIF.map((s) => `
+        <button class="admin-tab${s.id === sub ? " active" : ""}" type="button" role="tab"
+          aria-selected="${s.id === sub}" data-subtab="${s.id}">${s.label}</button>`).join("")}
+    </nav>
+    <div id="notif-contenido"></div>
+  `;
+  panel.querySelector("#btn-nueva-notificacion").addEventListener("click", abrirFormNotificacion);
+  panel.querySelectorAll("[data-subtab]").forEach((boton) =>
+    boton.addEventListener("click", () => setSubtabNotif(boton.dataset.subtab)));
+  if (sub === "dispositivos") {
+    if (adminState.dispositivos === null) cargarDispositivos();
+    else renderDispositivos();
+  } else {
+    renderEnvios();
+  }
+}
+
+function setSubtabNotif(sub) {
+  if (sub === adminState.subtabNotif) return;
+  adminState.subtabNotif = sub;
+  renderNotificaciones();
+}
+
+function renderEnvios() {
+  const contenido = document.getElementById("notif-contenido");
+  const filas = adminState.notificaciones || [];
+  contenido.innerHTML = `
     <div class="admin-list">
       ${filas.length ? filas.map(notificacionHtml).join("")
         : estadoVacio(ICONOS.bandeja, "Todavía no enviaste notificaciones", "Las que mandes aparecen acá con su resultado.")}
     </div>
   `;
-  panel.querySelector("#btn-nueva-notificacion").addEventListener("click", abrirFormNotificacion);
-  panel.querySelectorAll("[data-cancelar]").forEach((boton) =>
+  contenido.querySelectorAll("[data-cancelar]").forEach((boton) =>
     boton.addEventListener("click", () => cancelarNotificacion(boton.dataset.cancelar)));
+}
+
+async function cargarDispositivos() {
+  const contenido = document.getElementById("notif-contenido");
+  renderSkeleton(contenido);
+  try {
+    const org = adminState.filtroDispositivosOrg;
+    adminState.dispositivos = await apiGet(`/api/admin/dispositivos${org ? `?organizacion_id=${encodeURIComponent(org)}` : ""}`);
+    renderDispositivos();
+  } catch (error) {
+    renderErrorCarga(contenido, error, cargarDispositivos);
+  }
+}
+
+// "Chrome · Android" a partir del user agent; si no se reconoce, "Dispositivo".
+function descripcionDispositivo(ua) {
+  if (!ua) return "Dispositivo";
+  const navegador = /Edg\//.test(ua) ? "Edge"
+    : /OPR\/|Opera/.test(ua) ? "Opera"
+    : /SamsungBrowser/.test(ua) ? "Samsung Internet"
+    : /Firefox|FxiOS/.test(ua) ? "Firefox"
+    : /Chrome|CriOS/.test(ua) ? "Chrome"
+    : /Safari/.test(ua) ? "Safari" : null;
+  const sistema = /Android/.test(ua) ? "Android"
+    : /iPhone|iPad|iPod/.test(ua) ? "iOS"
+    : /Windows/.test(ua) ? "Windows"
+    : /Mac OS X|Macintosh/.test(ua) ? "macOS"
+    : /Linux/.test(ua) ? "Linux" : null;
+  return [navegador, sistema].filter(Boolean).join(" · ") || "Dispositivo";
+}
+
+function usuarioDispositivosHtml(u) {
+  const quien = u.nombre || u.email;
+  const cantidad = u.dispositivos.length;
+  return `
+    <article class="admin-card admin-row">
+      ${avatarHtml(quien, u.email)}
+      <div class="row-main">
+        <div class="row-title">
+          <span>${escapeHtml(quien)}</span>
+          ${cantidad
+            ? `<span class="estado-badge estado-notif-enviada">${cantidad} ${cantidad === 1 ? "dispositivo" : "dispositivos"}</span>`
+            : `<span class="estado-badge estado-notif-sin_dispositivos">Sin notificaciones activadas</span>`}
+        </div>
+        ${u.nombre ? `<div class="row-sub">${escapeHtml(u.email)}</div>` : ""}
+        <div class="row-tags">${u.organizaciones.map((o) => `<span class="org-chip">${escapeHtml(o.nombre)}</span>`).join("")}</div>
+        ${cantidad ? `<ul class="dispositivos-lista">${u.dispositivos.map((d) => `
+          <li>
+            <strong>${escapeHtml(descripcionDispositivo(d.user_agent))}</strong>
+            <span class="field-hint">${d.servicio ? `${escapeHtml(d.servicio)} · ` : ""}Activado el ${escapeHtml(formatearFecha(d.created_at))}${d.ultimo_uso_at ? ` · Último uso ${escapeHtml(formatearFecha(d.ultimo_uso_at))}` : ""}</span>
+          </li>`).join("")}</ul>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function renderDispositivos() {
+  const contenido = document.getElementById("notif-contenido");
+  const usuarios = adminState.dispositivos || [];
+  const conPush = usuarios.filter((u) => u.dispositivos.length).length;
+  const orgs = adminState.organizaciones;
+  contenido.innerHTML = `
+    <div class="admin-toolbar">
+      <div class="admin-toolbar-title">
+        <p>${usuarios.length ? `${conPush} de ${usuarios.length} ${usuarios.length === 1 ? "usuario tiene" : "usuarios tienen"} notificaciones activadas.` : ""}</p>
+      </div>
+      ${orgs.length > 1 ? `
+        <select class="form-select admin-select" id="filtro-disp-org" aria-label="Organización">
+          <option value="">Todas las organizaciones</option>
+          ${orgs.map((o) => `<option value="${escapeHtml(o.id)}"${o.id === adminState.filtroDispositivosOrg ? " selected" : ""}>${escapeHtml(o.nombre)}</option>`).join("")}
+        </select>` : ""}
+    </div>
+    <div class="admin-list">
+      ${usuarios.length ? usuarios.map(usuarioDispositivosHtml).join("")
+        : estadoVacio(ICONOS.bandeja, "No hay usuarios", "Los usuarios de la organización aparecen acá con sus dispositivos.")}
+    </div>
+  `;
+  const filtro = contenido.querySelector("#filtro-disp-org");
+  if (filtro) {
+    filtro.addEventListener("change", () => {
+      adminState.filtroDispositivosOrg = filtro.value;
+      cargarDispositivos();
+    });
+  }
 }
 
 function cancelarNotificacion(id) {
@@ -1109,6 +1232,7 @@ function abrirFormNotificacion() {
       toast(mensaje.endsWith(".") ? mensaje : `${mensaje}.`, hayProblemas ? "err" : undefined);
 
       adminState.auditoria = null;
+      adminState.dispositivos = null;
       await cargarNotificaciones();
     },
   });
