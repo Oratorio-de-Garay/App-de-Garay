@@ -301,7 +301,7 @@ Los usa cualquier usuario con sesión sobre **sí mismo** (el email sale del tok
 
 | Endpoint | Body | Respuesta |
 |---|---|---|
-| `POST /api/push/suscripciones` | La `PushSubscription` del navegador: `{ endpoint, keys: { p256dh, auth } }` | **201** `{ id }`. Upsert por `endpoint`. `400` si el endpoint no es de un servicio push conocido (FCM, Mozilla, Apple, Windows). Hasta 20 dispositivos por usuario: se descartan los más viejos. |
+| `POST /api/push/suscripciones` | La `PushSubscription` del navegador: `{ endpoint, keys: { p256dh, auth } }` | **201** `{ id, renovar }`. Upsert por `endpoint`; reactiva un dispositivo desactivado. `renovar` es `true` si el endpoint no existía o estaba desactivado (el frontend entonces crea una suscripción nueva y la registra). El frontend lo llama en cada carga para auto-repararse. `400` si el endpoint no es de un servicio push conocido (FCM, Mozilla, Apple, Windows). Hasta 20 dispositivos por usuario: se descartan los más viejos. |
 | `DELETE /api/push/suscripciones` | `{ endpoint }` | `{ eliminados }`. Sólo borra un dispositivo propio. |
 
 `GET /config.js` suma `window.VAPID_PUBLIC_KEY` (vacía si el push no está configurado).

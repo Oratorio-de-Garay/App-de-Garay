@@ -68,6 +68,28 @@
     window.dispatchEvent(new Event("push-cambio"));
   }
 
+  // Auto-reparación: el servicio push puede dar por vencida la suscripción sin
+  // que el navegador se entere (permiso "Permitido" y suscripción local intactas),
+  // y entonces el servidor deja de enviarle. En cada carga se vuelve a registrar
+  // la suscripción local (sin pedir nada al usuario); si el servidor dice que
+  // estaba vencida o no la conocía, se crea una nueva y se registra esa.
+  async function sincronizar() {
+    if (Notification.permission !== "granted" || leer(CLAVE_DESACTIVADO)) return;
+    try {
+      await registro();
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) return; // sin suscripción local: lo resuelve el aviso de "Activar"
+      const { renovar } = await post("POST", sub.toJSON());
+      if (!renovar) return;
+      await sub.unsubscribe();
+      const nueva = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: claveABytes(clave) });
+      await post("POST", nueva.toJSON());
+    } catch (error) {
+      console.warn("Push: no se pudo sincronizar la suscripción", error);
+    }
+  }
+
   async function desactivar() {
     const sub = await suscripcionActual();
     if (sub) {
@@ -149,6 +171,7 @@
     const revisar = () => {
       if (shell.hidden || avisado) return;
       avisado = true;
+      sincronizar();
       // Un respiro para no tapar la pantalla recién cargada.
       setTimeout(mostrarAviso, 1500);
     };

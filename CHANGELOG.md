@@ -114,6 +114,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Corregido
 
+- **Notificaciones push: un dispositivo cuya suscripción vencía quedaba sin notificaciones para siempre.** El servicio push (FCM) puede dar por vencida una suscripción sin que el navegador se entere (permiso "Permitido" y suscripción local intactas): el envío fallaba como "sin dispositivos" y, como la app se veía activa, nunca volvía a mostrar el aviso de activar. Ahora `frontend/push.js` re-registra la suscripción local en cada carga y, si el servidor la tenía desactivada o no la conocía, crea una suscripción nueva y la registra. `POST /api/push/suscripciones` devuelve además `renovar` (migración `20261114200000_push_registrar_informa_renovacion.sql`). Un dispositivo ya desactivado se recupera la próxima vez que el usuario abre la app.
 - **Desmarcar presente no se podía usar:** el endpoint existía pero ningún botón lo llamaba, y el botón de presente quedaba deshabilitado al marcar. Ahora funciona como toggle en la ficha y en la lista rápida.
 - **"No se pudo marcar el presente" en el primer intento:** marcar se reintenta una vez ante error de red, 5xx o 401 (marcar es idempotente), y el mensaje de error muestra el motivo real (`Error 502`, etc.) en vez de uno genérico.
 - **Estilos que no se aplicaban:** a `@keyframes toast-in` de `base.css` le faltaba la llave de cierre, y anulaba las reglas que venían después: toasts en celular, movimiento reducido y el encabezado oculto mientras se verifica el acceso.
