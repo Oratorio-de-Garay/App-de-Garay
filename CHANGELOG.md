@@ -6,6 +6,9 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ## Sin publicar
 
+### Cambiado
+- **Notificaciones: orden de los destinatarios.** En "Nueva notificación", la lista de usuarios muestra primero a quienes tienen dispositivos activados y después al resto; dentro de cada grupo, por nombre (`frontend/admin.js`).
+
 ### Agregado
 - **Botón "Instalar como app"** en el header, a la izquierda de "Salir" (`frontend/install.js`). En Chrome/Edge/Android dispara el diálogo de instalación; en iOS explica cómo agregarla desde Compartir. No aparece si la app ya está instalada o el navegador no puede instalarla.
 - **Administración > Notificaciones: subpestañas Envíos y Dispositivos** (migración `20261114000000_admin_listar_dispositivos_push.sql`). *Envíos* es el historial de siempre; *Dispositivos* lista los usuarios de las organizaciones que administra con sus dispositivos que activaron las notificaciones (navegador y sistema, alta, último uso), filtrable por organización, y marca a quienes no activaron ninguna. "Nueva notificación" está en ambas. Endpoint `GET /api/admin/dispositivos`; no expone endpoint ni claves de la suscripción.
