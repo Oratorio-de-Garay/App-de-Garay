@@ -1,6 +1,6 @@
 # API
 
-Backend Express en `backend/api/index.js`, servido junto con el frontend desde el mismo dominio (ver [ARCHITECTURE.md](ARCHITECTURE.md)). Base URL en producción: la propia del deploy (`https://app-de-garay.vercel.app` o el preview correspondiente). En local: `http://localhost:3000`.
+API en Hono + TypeScript (`apps/api/`), servida junto con el frontend desde el mismo dominio (ver [ARCHITECTURE.md](ARCHITECTURE.md)). Cada grupo de rutas es un módulo en `apps/api/src/modules/<dominio>/routes.ts`; `apps/api/src/app.ts` los monta y declara qué exige cada uno para entrar. Los datos de entrada se validan con los esquemas Zod de `packages/shared/src/schemas/`. Base URL en producción: la propia del deploy (`https://app-de-garay.vercel.app` o el preview correspondiente). En local: `http://localhost:3000`.
 
 ## Autenticación
 
@@ -199,9 +199,31 @@ Registrar la venta descuenta stock (los combos se expanden a sus productos). Se 
 
 **Respuesta 201:** `{ id, total_amount }`.
 
+### `PATCH /api/buffet/sales/:id`
+
+Reemplaza el carrito entero de una venta en una sola transacción: devuelve el stock de los ítems anteriores y descuenta el de los nuevos. **Body:** `{ payment_method?, observation?, items }` (mismos ítems que el alta). **Respuesta 200:** `{ id, total_amount }`. `404` si la venta no existe en la organización.
+
 ### `DELETE /api/buffet/sales/:id`
 
 Devuelve el stock descontado y borra la venta (los ítems caen por cascada). **Respuesta 200:** `{ "ok": true }`.
+
+## Buffet: catálogo
+
+Productos, combos y presupuestos comparten el mismo comportamiento (`apps/api/src/modules/buffet/crud.ts`): toda operación filtra por la organización activa además del id.
+
+| Ruta | Body | Respuesta |
+|---|---|---|
+| `GET /api/buffet/meta` | — | `{ categories, units, suppliers }`: catálogos para los formularios. Las categorías sin organización son globales; las unidades son un catálogo global. |
+| `GET /api/buffet/products` | — | Lista con `id, name, stock_current, sale_price, observation, active, is_donated, category_id, unit_id` más `category_name`, `unit_name`, `unit_abbreviation` y `pack_size`. |
+| `POST /api/buffet/products` | `{ name, category_id?, unit_id?, stock_current?, sale_price?, observation?, active?, is_donated? }` | `201 { id }` |
+| `PATCH /api/buffet/products/:id` | Igual que el alta (reemplaza todos los campos) | `{ id }` · `404` si no existe |
+| `DELETE /api/buffet/products/:id` | — | `{ ok: true }` · `409` si tiene ventas que lo referencian |
+| `GET /api/buffet/combos` | — | Lista con `id, name, description, sale_price, active, items_count` |
+| `POST` · `PATCH` · `DELETE /api/buffet/combos[/:id]` | `{ name, description?, sale_price?, active? }` | Igual que productos |
+| `GET /api/buffet/budgets` | — | Lista con `id, title, client_name, observation, status, total_amount, items_count` |
+| `POST` · `PATCH` · `DELETE /api/buffet/budgets[/:id]` | `{ title, client_name?, observation?, status?, total_amount? }` (`status` por defecto `borrador`) | Igual que productos |
+
+Validaciones: `name` / `title` obligatorio; `sale_price` y `total_amount` no negativos; `stock_current` puede ser negativo; `category_id` y `unit_id` son uuid o vacío.
 
 ---
 
@@ -328,4 +350,29 @@ Router en `backend/api/registro.js`. Sólo exige una sesión válida (`requireSe
 
 ## Errores
 
-Formato uniforme: `{ "error": "mensaje" }`, siempre logueado en el server con `console.error("<Contexto> error:", error)` antes de responder. Casi todos los errores no-auth devuelven `500` (no hay diferenciación fina de status codes salvo `400` en validaciones de input explícitas). Las rutas de `/api/admin` y `/api/registro` traducen los errores de la base a `400`/`403`/`404`/`409` (ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#errores-de-las-funciones)).
+Formato uniforme: `{ "error": "mensaje" }`, con `code` cuando el frontend tiene que distinguir el caso (`SIN_REGISTRO`, `SIN_ORGANIZACION`). Las rutas no arman respuestas de error: lanzan, y `manejarError` (`apps/api/src/lib/errores.ts`) responde.
+
+| Status | Cuándo |
+|---|---|
+| `400` | El pedido no pasa la validación del esquema (mensaje del campo que falla), un id con formato inválido, o un JSON mal formado |
+| `401` | Sin token, o token inválido o vencido |
+| `403` | Sin acceso, sin organización, organización ajena, o sin el rol necesario |
+| `404` | El recurso no existe **en la organización activa**, o la ruta no existe |
+| `409` | Duplicado, estado que no permite la operación, o algo que otros datos referencian |
+| `500` | Inesperado. La respuesta es genérica (`"Ocurrió un error inesperado. Intentá de nuevo."`); el detalle queda sólo en el log del servidor |
+| `503` | Push o despacho sin configurar en este entorno |
+
+Los errores de las funciones SQL (cualquier ruta, no sólo `/api/admin`) se traducen por SQLSTATE y conservan el mensaje en español que arma la función (ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#errores-de-las-funciones)).
+
+### Cambios respecto del backend anterior (Express)
+
+Las rutas y la forma de las respuestas exitosas son las mismas. Cambió esto:
+
+- **Validación:** antes los datos faltantes o mal formados terminaban casi siempre en `500` con el error de Postgres; ahora son `400` con un mensaje en español. Los mensajes de validación que estaban en inglés (`"Missing student_id or fecha"`) pasaron a español.
+- **No encontrado:** `PATCH /api/buffet/events/:id` sobre un evento inexistente devolvía `500`; ahora `404`.
+- **Errores inesperados:** el `500` ya no incluye el mensaje interno de la base.
+- **`GET /api/lookups`:** `edades` devolvía las categorías de **todas** las organizaciones (aparecían repetidas en el formulario); ahora sólo las de la organización activa. La respuesta lleva `Cache-Control: private, max-age=300`.
+- **`GET /api/attendance/by-date`:** una sola consulta en vez de dos; misma respuesta.
+- **`POST /api/students`:** `telefono_emergencia` se guarda sólo con sus dígitos.
+- **Rutas inexistentes bajo `/api`:** responden `404` en JSON.
+- **CORS:** ya no se aceptan pedidos desde cualquier origen; la app y la API comparten origen.

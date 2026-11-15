@@ -9,8 +9,18 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 ### Agregado
 - **Migración a React + Vite + Hono, fase 0: tests e2e de caracterización.** Decisión y motivos en `docs/adr/0001-migracion-framework.md`; avance por fases en `docs/MIGRACION.md`. Se agrega `package.json` en la raíz, Playwright (`playwright.config.ts`, `e2e/`) y 13 tests que recorren login con código, asistencia, buffet y administración contra la base local (`npm run e2e`). Los datos que crean llevan la marca `E2E` y se borran al terminar.
 - **Migración, fase 1: herramientas.** Monorepo con npm workspaces, TypeScript estricto, ESLint, Prettier y Vitest; paquete `packages/shared` con los tipos de la base generados (`npm run db:types`) y utilidades comunes; workflow `.github/workflows/app.yml` (lint, formato, tipos, unitarios y e2e en cada PR). Un solo comando para verificar: `npm run check`. Guía en `docs/TESTING.md`.
+- **Migración, fase 2: API en Hono + TypeScript** (`apps/api/`). Mismas rutas y respuestas que el backend Express, ahora por módulos (`buffet`, `pibes`, `asistencia`, `admin`, `registro`, `push`), con validación Zod compartida con el frontend (`packages/shared/src/schemas/`), un único manejo de errores y permisos declarados al montar cada grupo de rutas. 94 tests unitarios y 42 de integración contra la base local (`npm run test:integration`). `docs/API.md` suma los endpoints del catálogo de buffet y `PATCH /api/buffet/sales/:id`, que no estaban documentados. No requiere migración de base.
+
+### Corregido
+- **`GET /api/lookups` mostraba las categorías de todas las organizaciones** (aparecían repetidas en "Nuevo chico"). Ahora sólo las de la organización activa.
+- **Datos faltantes o mal formados respondían `500`** con el error de Postgres; ahora `400` con un mensaje en español. Un evento de buffet inexistente respondía `500` al editarlo; ahora `404`.
+
+### Seguridad
+- **Los errores inesperados ya no devuelven el mensaje interno de la base** al navegador; queda sólo en el log del servidor.
+- **Se quitó `cors()` abierto a cualquier origen:** la app y la API comparten origen.
 
 ### Cambiado
+- **`npm run dev` (desde la raíz) levanta la API nueva.** El backend anterior queda en `backend/` hasta terminar la migración (`npm --prefix backend run dev`).
 - **`package-lock.json` pasa a versionarse** (raíz y `backend/`): sin lockfile, cada build de Vercel podía resolver versiones distintas de las dependencias.
 
 ### Rendimiento

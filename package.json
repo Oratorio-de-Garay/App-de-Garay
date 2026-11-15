@@ -14,12 +14,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspaces --if-present",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --project shared --project api",
+    "test:watch": "vitest --project shared --project api",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
     "db:types": "supabase gen types typescript --schema public > packages/shared/src/database.types.ts && prettier --write packages/shared/src/database.types.ts",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm test"
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test",
+    "test:integration": "vitest run --project integracion",
+    "dev": "npm run dev -w @garay/api"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

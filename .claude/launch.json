@@ -1,1 +1,12 @@
-{"version":"0.0.1","configurations":[{"name":"backend-local","runtimeExecutable":"npm","runtimeArgs":["--prefix","backend","run","dev"],"port":3000}]}
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "api-local", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 },
+    {
+      "name": "backend-anterior",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "backend", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}

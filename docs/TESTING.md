@@ -4,7 +4,7 @@
 |---|---|---|---|---|
 | Base de datos | pgTAP | `supabase/tests/*.test.sql` | Sí | `npx supabase test db` |
 | Unitarios | Vitest | `*.test.ts` junto al código | No | `npm test` |
-| Integración (API) | Vitest | `*.integration.test.ts` (desde la fase 2) | Sí | `npm run test:integration` |
+| Integración (API) | Vitest | `apps/api/test/*.integration.test.ts` | Sí | `npm run test:integration` |
 | Punta a punta | Playwright | `e2e/*.spec.ts` | Sí | `npm run e2e` |
 
 Antes de pedir revisión de un cambio: `npm run check` (lint, formato, tipos y
@@ -19,6 +19,20 @@ unitarios) y, si tocaste algo que se ve en pantalla o un endpoint, `npm run e2e`
   códigos de estado y forma de la respuesta.
 - **Punta a punta:** los recorridos que hace una persona. Pocos y valiosos:
   cada uno cuesta segundos y se rompe si cambia la interfaz.
+
+## Integración (API)
+
+Los tests le hablan a la app **en memoria** (`app.request()`, sin puerto ni
+servidor) con tokens reales de Supabase y contra la base local.
+
+- `apps/api/test/ayudas.ts` tiene `pedir(metodo, ruta, { como, org, body })`:
+  `como` es el mail del usuario que hace el pedido y `org` la organización
+  activa.
+- Lo que crean lleva la marca `ITEST` y se borra en el `afterAll` de cada
+  archivo (`limpiar()`).
+- Corren de a un archivo por vez porque comparten la base.
+- Para un endpoint nuevo: probá el caso feliz, la validación (400), que otra
+  organización no lo vea (404) y que el rol equivocado no entre (403).
 
 ## Punta a punta (Playwright)
 
@@ -59,8 +73,8 @@ paso lo que pasó, con capturas. En CI el reporte queda como artefacto del job.
 `.github/workflows/app.yml` corre en cada PR:
 
 1. **calidad:** lint, formato, tipos y unitarios.
-2. **e2e:** levanta Supabase dentro del runner, aplica migraciones y seed, y
-   corre Playwright.
+2. **integracion-y-e2e:** levanta Supabase dentro del runner, aplica
+   migraciones y seed, y corre los tests de integración y Playwright.
 
 `.github/workflows/base-de-datos.yml` (pgTAP) sigue corriendo cuando cambia
 `supabase/**`.

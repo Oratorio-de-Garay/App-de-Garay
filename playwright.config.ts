@@ -24,7 +24,7 @@ export default defineConfig({
     { name: "celular", use: { ...devices["Pixel 7"] }, grep: /@celular/ },
   ],
   webServer: {
-    command: "node --env-file=backend/.env.local backend/api/index.js",
+    command: "npx tsx --env-file=backend/.env.local apps/api/src/server.ts",
     url: `${E2E_URL}/api/health`,
     env: { PORT: String(E2E_PORT) },
     reuseExistingServer: !process.env.CI,

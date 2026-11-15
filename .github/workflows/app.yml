@@ -38,7 +38,7 @@ jobs:
       - name: Tests unitarios
         run: npm test
 
-  e2e:
+  integracion-y-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: calidad
@@ -55,9 +55,6 @@ jobs:
           version: 2.118.0
 
       - run: npm ci
-
-      # El backend anterior a la migración todavía tiene sus propias dependencias.
-      - run: npm ci --prefix backend
 
       # Postgres, Auth, PostgREST y Mailpit, con todas las migraciones y seed.sql.
       - name: Levantar Supabase local
@@ -78,6 +75,9 @@ jobs:
             echo "MAIL_FROM=Oratorio de Garay <no-responder@local.test>"
             echo "APP_URL=http://localhost:3100"
           } > backend/.env.local
+
+      - name: Tests de integración de la API
+        run: npm run test:integration
 
       - name: Navegador de Playwright
         run: npx playwright install --with-deps chromium
