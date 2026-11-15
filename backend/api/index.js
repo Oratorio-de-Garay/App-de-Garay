@@ -979,23 +979,48 @@ app.post(
       // Si no, se podría marcar asistencia sobre un pibe ajeno.
       // ==================================================
 
-      const {
-        data: pibeDeLaOrg,
-        error: pibeError,
-      } = await supabase
+      // Se consultan a la vez el pibe y la asistencia del día (no dependen una
+      // de otra y las dos filtran por organización): una espera en vez de dos.
+      const inicio =
+        new Date(
+          `${fecha}T00:00:00.000Z`
+        );
 
-        .from("pibes")
+      const fin =
+        new Date(inicio);
 
-        .select("id")
+      fin.setUTCDate(
+        fin.getUTCDate() + 1
+      );
 
-        .eq("id", student_id)
 
-        .eq(
-          "organizacion_id",
-          req.user.organizationId
-        )
+      const [
+        { data: pibeDeLaOrg, error: pibeError },
+        { data: asistenciaExistente, error: buscarError },
+      ] = await Promise.all([
 
-        .maybeSingle();
+        supabase
+          .from("pibes")
+          .select("id")
+          .eq("id", student_id)
+          .eq(
+            "organizacion_id",
+            req.user.organizationId
+          )
+          .maybeSingle(),
+
+        supabase
+          .from("asistencias")
+          .select("id")
+          .eq("pibe_id", student_id)
+          .eq(
+            "organizacion_id",
+            req.user.organizationId
+          )
+          .gte("fecha", inicio.toISOString())
+          .lt("fecha", fin.toISOString())
+          .limit(1),
+      ]);
 
 
       if (pibeError) {
@@ -1012,55 +1037,6 @@ app.post(
               "El pibe no existe en tu organización",
           });
       }
-
-
-      // ==================================================
-      // COMPROBAR SI YA TIENE PRESENTE ESE DÍA
-      // ==================================================
-
-      const inicio =
-        new Date(
-          `${fecha}T00:00:00.000Z`
-        );
-
-      const fin =
-        new Date(inicio);
-
-      fin.setUTCDate(
-        fin.getUTCDate() + 1
-      );
-
-
-      const {
-        data: asistenciaExistente,
-        error: buscarError,
-      } = await supabase
-
-        .from("asistencias")
-
-        .select("id")
-
-        .eq(
-          "pibe_id",
-          student_id
-        )
-
-        .eq(
-          "organizacion_id",
-          req.user.organizationId
-        )
-
-        .gte(
-          "fecha",
-          inicio.toISOString()
-        )
-
-        .lt(
-          "fecha",
-          fin.toISOString()
-        )
-
-        .limit(1);
 
 
       if (buscarError) {
@@ -1144,27 +1120,33 @@ app.delete(
       if (!student_id || !fecha) {
         return res.status(400).json({ error: "Missing student_id or fecha" });
       }
-      const { data: pibeDeLaOrg, error: pibeError } = await supabase
-        .from("pibes")
-        .select("id")
-        .eq("id", student_id)
-        .eq("organizacion_id", req.user.organizationId)
-        .maybeSingle();
+      const inicio = new Date(fecha + "T00:00:00.000Z");
+      const fin = new Date(inicio);
+      fin.setUTCDate(fin.getUTCDate() + 1);
+      // El pibe y la asistencia del día se consultan a la vez (ambos filtran por organización).
+      const [
+        { data: pibeDeLaOrg, error: pibeError },
+        { data: asistenciaExistente, error: buscarError },
+      ] = await Promise.all([
+        supabase
+          .from("pibes")
+          .select("id")
+          .eq("id", student_id)
+          .eq("organizacion_id", req.user.organizationId)
+          .maybeSingle(),
+        supabase
+          .from("asistencias")
+          .select("id")
+          .eq("pibe_id", student_id)
+          .eq("organizacion_id", req.user.organizationId)
+          .gte("fecha", inicio.toISOString())
+          .lt("fecha", fin.toISOString())
+          .limit(1),
+      ]);
       if (pibeError) throw pibeError;
       if (!pibeDeLaOrg) {
         return res.status(404).json({ error: "El pibe no existe en tu organización" });
       }
-      const inicio = new Date(fecha + "T00:00:00.000Z");
-      const fin = new Date(inicio);
-      fin.setUTCDate(fin.getUTCDate() + 1);
-      const { data: asistenciaExistente, error: buscarError } = await supabase
-        .from("asistencias")
-        .select("id")
-        .eq("pibe_id", student_id)
-        .eq("organizacion_id", req.user.organizationId)
-        .gte("fecha", inicio.toISOString())
-        .lt("fecha", fin.toISOString())
-        .limit(1);
       if (buscarError) throw buscarError;
       if (!asistenciaExistente || asistenciaExistente.length === 0) {
         return res.status(404).json({ error: "No hay asistencia registrada para ese día" });
@@ -1538,46 +1520,20 @@ app.get(
         new Date().getFullYear();
 
 
-      const desde =
-        `${year}-01-01T00:00:00.000Z`;
-
-
-      const hasta =
-        `${year + 1}-01-01T00:00:00.000Z`;
-
-
+      // La base ya devuelve una fila por día (ver asistencia_fechas en
+      // supabase/migrations/20261115000000_historial_asistencia_agrupado.sql).
       const {
         data,
         error,
-      } = await supabase
-
-        .from("asistencias")
-
-        .select(
-          "fecha, pibe_id"
-        )
-
-        .eq(
-          "organizacion_id",
-          req.user.organizationId
-        )
-
-        .gte(
-          "fecha",
-          desde
-        )
-
-        .lt(
-          "fecha",
-          hasta
-        )
-
-        .order(
-          "fecha",
-          {
-            ascending: false,
-          }
-        );
+      } = await supabase.rpc(
+        "asistencia_fechas",
+        {
+          p_org:
+            req.user.organizationId,
+          p_anio:
+            year,
+        }
+      );
 
 
       if (error) {
@@ -1585,86 +1541,15 @@ app.get(
       }
 
 
-      // Agrupamos las asistencias por día
-      const fechas = {};
-
-
-      for (
-        const asistencia
-        of data || []
-      ) {
-
-        if (
-          !asistencia.fecha
-        ) {
-          continue;
-        }
-
-
-        const fecha =
-          String(
-            asistencia.fecha
-          ).slice(
-            0,
-            10
-          );
-
-
-        if (
-          !fechas[fecha]
-        ) {
-
-          fechas[fecha] = {
-
-            fecha,
-
-            total: 0,
-
-            pibes:
-              new Set(),
-
-          };
-        }
-
-
-        // Evita contar dos veces
-        // al mismo chico el mismo día
-        if (
-          asistencia.pibe_id
-        ) {
-
-          fechas[
-            fecha
-          ].pibes.add(
-            asistencia.pibe_id
-          );
-        }
-      }
-
-
       const resultado =
-        Object.values(
-          fechas
-        )
-
-          .map(
-            (item) => ({
-
-              fecha:
-                item.fecha,
-
-              total:
-                item.pibes.size,
-
-            })
-          )
-
-          .sort(
-            (a, b) =>
-              b.fecha.localeCompare(
-                a.fecha
-              )
-          );
+        (data || []).map(
+          (row) => ({
+            fecha:
+              String(row.fecha).slice(0, 10),
+            total:
+              Number(row.total) || 0,
+          })
+        );
 
 
       res.json(
@@ -1696,72 +1581,25 @@ app.get("/api/attendance/top", async (req, res) => {
       Number(req.query.year) ||
       new Date().getFullYear();
 
-    const desde =
-      `${year}-01-01T00:00:00.000Z`;
-
-    const hasta =
-      `${year + 1}-01-01T00:00:00.000Z`;
-
-    const { data, error } = await supabase
-      .from("asistencias")
-      .select(`
-        fecha,
-        pibe_id,
-        pibes (
-          id,
-          nombre,
-          apellido
-        )
-      `)
-      .eq("organizacion_id", req.user.organizationId)
-      .gte("fecha", desde)
-      .lt("fecha", hasta);
+    // La base cuenta los días distintos por pibe y devuelve los del podio
+    // (con empatados); acá sólo se desempata por nombre.
+    const { data, error } = await supabase.rpc("asistencia_top", {
+      p_org: req.user.organizationId,
+      p_anio: year,
+    });
 
     if (error) throw error;
 
-    const contador = {};
-
-    // Evitamos contar dos veces al mismo chico
-    // el mismo día si hubiera una asistencia duplicada.
-    const asistenciasUnicas = new Set();
-
-    for (const row of data || []) {
-      if (!row.pibe_id || !row.fecha) continue;
-
-      const fecha = String(row.fecha).slice(0, 10);
-
-      const clave =
-        `${row.pibe_id}-${fecha}`;
-
-      if (asistenciasUnicas.has(clave)) {
-        continue;
-      }
-
-      asistenciasUnicas.add(clave);
-
-      const pibe =
-        Array.isArray(row.pibes)
-          ? row.pibes[0]
-          : row.pibes;
-
-      if (!pibe) continue;
-
-      if (!contador[pibe.id]) {
-        contador[pibe.id] = {
+    const top3 =
+      (data || [])
+        .map((pibe) => ({
           id: pibe.id,
           nombre: pibe.nombre,
           apellido: pibe.apellido,
           nombreCompleto:
             `${pibe.nombre} ${pibe.apellido}`,
-          total: 0
-        };
-      }
-
-      contador[pibe.id].total++;
-    }
-
-    const top3 =
-      Object.values(contador)
+          total: Number(pibe.total) || 0,
+        }))
         .sort((a, b) => {
           if (b.total !== a.total) {
             return b.total - a.total;

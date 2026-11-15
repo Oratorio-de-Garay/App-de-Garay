@@ -287,6 +287,10 @@ Definida en `20261114300000_buscar_pibes_resumen.sql`. `GET /api/students/search
 
 `20261114400000_buffet_ventas_transaccionales.sql`: `buffet_crear_venta`, `buffet_editar_venta` y `buffet_borrar_venta` (más los ayudantes `buffet_aplicar_stock`, `buffet_items_de_venta` y `buffet_insertar_items_venta`). Cada una corre en una transacción, expande los combos a productos y descuenta o devuelve el stock con `stock_current = stock_current + delta` (atómico; se permite stock negativo). Crear y editar devuelven `{id}` o `null` si el evento/venta no existe en la organización. `EXECUTE` sólo para `service_role`.
 
+## Funciones del historial de asistencia
+
+`20261115000000_historial_asistencia_agrupado.sql`: `asistencia_fechas(p_org, p_anio)` devuelve una fila por día con el total de pibes distintos; `asistencia_top(p_org, p_anio)` devuelve los pibes del podio (con empatados en el tercer puesto, el backend desempata por nombre). El día se toma en UTC y un pibe cuenta una vez por día. `EXECUTE` sólo para `service_role`. Las usan `GET /api/attendance/dates` y `/top`.
+
 ## Función RPC: `buscar_pibes` (heredada)
 
 Ya no la usa el backend (la reemplazó `buscar_pibes_resumen`); sigue existiendo. `GET /api/students/search` llamaba antes a `supabase.rpc("buscar_pibes", { termino })` y encadenaba `.select(...)`.
