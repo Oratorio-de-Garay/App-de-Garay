@@ -186,7 +186,7 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/p
 
 ## Deploy (Vercel)
 
-- Un solo proyecto Vercel apuntando a la raíz del repo, configurado por [`backend/vercel.json`](../backend/vercel.json).
+- Un solo proyecto Vercel con *Root Directory* `backend`, configurado por [`backend/vercel.json`](../backend/vercel.json). Tiene que estar activado *Include source files outside of the Root Directory* (Settings → General): el build copia `../frontend` a `public/` para servirlo desde la CDN.
 - Variables de entorno (las de la tabla de arriba) se cargan en Vercel → Project → Settings → Environment Variables.
 - Cada push a cualquier rama genera un **preview deployment** con URL propia; el deploy de la rama por defecto se alias a producción.
 - Después de cualquier cambio en las variables de entorno hace falta un **redeploy** para que tome efecto (Vercel no las recarga en caliente).

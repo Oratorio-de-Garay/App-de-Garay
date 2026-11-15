@@ -11,7 +11,7 @@ No hay framework de frontend, no hay ORM, no hay TypeScript, no hay tests automa
 ```
 backend/
   api/
-    index.js   ← app Express: todas las rutas /api/* + sirve frontend/ como estático
+    index.js   ← app Express: todas las rutas /api/* y /config.js (en local también sirve frontend/ como estático)
     auth.js    ← middleware: valida sesión Supabase, resuelve usuario/organización/roles + guards
     admin.js   ← router /api/admin/* (panel de administración)
     registro.js← router /api/registro/* (quien todavía no tiene acceso pide sumarse a un espacio)
@@ -19,7 +19,8 @@ backend/
     mail.js    ← avisos por mail de las solicitudes (nodemailer + SMTP)
     push.js    ← notificaciones push (Web Push/VAPID): router /api/push/* y envío (enviarPush)
   package.json
-  vercel.json  ← única config de deploy (todas las rutas → api/index.js)
+  scripts/copiar-frontend.mjs ← en el build de Vercel copia ../frontend a public/ (artefacto, no se commitea)
+  vercel.json  ← única config de deploy (estáticos desde la CDN; /api/* y /config.js → api/index.js)
 frontend/
   index.html   ← Registro (asistencias)
   buffet.html  ← Buffet
@@ -43,8 +44,11 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 ## Despliegue (Vercel)
 
 - Un solo proyecto Vercel, configurado en [`backend/vercel.json`](../backend/vercel.json).
-- Todas las rutas (`/(.*)`) se enrutan a la función serverless `backend/api/index.js`.
-- Dentro de esa función, Express sirve `frontend/` como estático (`express.static`) y expone `/api/*`. Por eso el frontend usa `API_URL = ""` (mismo origen) en vez de una URL absoluta — ver `frontend/index.html`.
+- **Estáticos desde la CDN:** el build (`@vercel/static-build`, script `vercel-build` de `backend/package.json`) copia `frontend/` a `backend/public/` y Vercel lo sirve desde su CDN, con compresión y sin pasar por la función (sin cold start).
+- **La función `backend/api/index.js` sólo atiende `/api/*` y `/config.js`** (dinámico: depende de las variables de entorno, por eso no se copia a `public/`). Cualquier otra ruta que no sea un archivo cae también a Express (404).
+- Sigue siendo el mismo origen, por eso el frontend usa `API_URL = ""` en vez de una URL absoluta — ver `frontend/index.html`.
+- **En local** (`npm run dev`) no hay build: Express sigue sirviendo `frontend/` con `express.static`, así que no hace falta copiar nada.
+- El build necesita que Vercel tenga activado *Include source files outside of the Root Directory* (Settings → General), porque `frontend/` está fuera de `backend/`.
 - Variables de entorno se configuran en el dashboard de Vercel (Project → Settings → Environment Variables). Ver [SETUP.md](SETUP.md) para la lista completa.
 - Cada push genera un **deploy preview** con URL única (`app-de-garay-<hash>-<team>.vercel.app`); `app-de-garay.vercel.app` es el alias estable de producción. Esto tiene implicancias directas en la configuración de OAuth (ver más abajo y SETUP.md).
 
@@ -94,7 +98,7 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 3. **Cambios de schema:** siempre con una migración nueva. Nunca a mano en el SQL Editor de Supabase, porque así se había desincronizado el repo (ver el historial en el CHANGELOG).
 4. No hay control de concurrencia más allá de un chequeo puntual ("¿ya tiene presente hoy?") en `/api/attendance/mark`.
 5. `/api/students/search` devuelve como máximo 30 resultados (sin paginación): alcanza para buscar por nombre, a tener en cuenta si el padrón crece mucho.
-   - **Rendimiento:** la latencia dominante es la cantidad de viajes backend↔Supabase por request (base en `sa-east-1`, función fijada a `gru1` en `backend/vercel.json`). Regla: evitar loops con `await` sobre consultas; preferir una RPC o un select embebido. La auth cachea 30 s en memoria y valida el JWT localmente. **Compromiso:** un access token sigue valiendo hasta que vence (`jwt_expiry`, 1 h) aunque se cierre la sesión en otro dispositivo; antes `getUser` lo rechazaba apenas se revocaba. Si el proyecto pasara a la clave de firma legacy (HS256), `getClaims` cae solo a `getUser` y se pierde la ganancia, no la seguridad. Pendiente: servir `frontend/` como estático de Vercel fuera de la función.
+   - **Rendimiento:** la latencia dominante es la cantidad de viajes backend↔Supabase por request (base en `sa-east-1`, función fijada a `gru1` en `backend/vercel.json`). Regla: evitar loops con `await` sobre consultas; preferir una RPC o un select embebido. La auth cachea 30 s en memoria y valida el JWT localmente. **Compromiso:** un access token sigue valiendo hasta que vence (`jwt_expiry`, 1 h) aunque se cierre la sesión en otro dispositivo; antes `getUser` lo rechazaba apenas se revocaba. Si el proyecto pasara a la clave de firma legacy (HS256), `getClaims` cae solo a `getUser` y se pierde la ganancia, no la seguridad. Los estáticos salen de la CDN de Vercel, no de la función.
 6. Los lookups (`grados_pibes`, `edades`) siguen sin UI: se editan por SQL. Usuarios, roles y organizaciones ya se administran desde `admin.html`.
 7. `admin.js` copia los helpers de modal y API de `buffet.js` (`openModal`, `apiGet`, `apiSend`, `escapeHtml`), y `registro.js` repite el patrón de llamadas a la API. Conviene moverlos a un `frontend/ui.js` compartido.
 8. Antes de un `supabase db push`, correr `supabase migration list --linked` y `supabase db push --linked --dry-run` para ver exactamente qué se va a aplicar. El historial remoto ya está sincronizado; se reparó en septiembre de 2026, cuando las migraciones de agosto figuraban como no aplicadas.
