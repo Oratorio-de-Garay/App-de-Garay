@@ -36,6 +36,54 @@ function cacheSet(map, key, value) {
   map.set(key, { exp: Date.now() + AUTH_CACHE_TTL_MS, value });
 }
 
+function authDesdeClaims(claims) {
+  // Sólo vale un token de usuario con sesión iniciada (con email). La anon key y
+  // la service role key son JWT válidos pero sin email: se rechazan.
+  if (!claims?.email || claims.role !== "authenticated") return null;
+  const metadata = claims.user_metadata || {};
+  return {
+    email: String(claims.email).toLowerCase().trim(),
+    nombreSugerido: metadata.full_name || metadata.name || null,
+  };
+}
+
+/**
+ * Valida el access token y devuelve { email, nombreSugerido } o null.
+ *
+ * Camino rápido: getClaims verifica la firma y el vencimiento localmente contra
+ * las claves públicas del proyecto (JWKS, que el cliente baja una vez y deja en
+ * memoria), sin un viaje a Auth por cada request. Sólo funciona con claves de
+ * firma asimétricas (ES256/RS256), que es lo que usa el proyecto.
+ *
+ * Respaldo: si la verificación local falla por cualquier motivo (claves no
+ * disponibles, algoritmo simétrico, error transitorio) se consulta a Auth con
+ * getUser, que es la fuente de verdad. Así un problema al bajar las claves no
+ * deja afuera a nadie; un token realmente inválido igual termina en null.
+ *
+ * Compromiso: con la verificación local, un access token sigue valiendo hasta
+ * que vence (jwt_expiry, 1 h) aunque el usuario haya cerrado sesión en otro
+ * dispositivo; getUser lo rechazaba apenas se revocaba la sesión.
+ */
+async function verificarToken(token) {
+  try {
+    const { data, error } = await supabaseAdmin.auth.getClaims(token);
+    if (!error && data?.claims) {
+      return authDesdeClaims(data.claims);
+    }
+  } catch (error) {
+    console.warn("getClaims falló, se consulta a Auth:", error?.message || error);
+  }
+
+  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+  if (userError || !userData?.user?.email) return null;
+
+  const metadata = userData.user.user_metadata || {};
+  return {
+    email: userData.user.email.toLowerCase().trim(),
+    nombreSugerido: metadata.full_name || metadata.name || null,
+  };
+}
+
 /** Invalida el contexto cacheado de un usuario (tras cambiarle roles/membresías). */
 export function invalidarContextoUsuario(email) {
   if (email) contextoCache.delete(String(email).toLowerCase().trim());
@@ -60,16 +108,10 @@ export async function requireSession(req, res, next) {
 
     let auth = cacheGet(sesionCache, token);
     if (!auth) {
-      const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-      if (userError || !userData?.user?.email) {
+      auth = await verificarToken(token);
+      if (!auth) {
         return res.status(401).json({ error: "Sesión inválida o expirada" });
       }
-
-      const metadata = userData.user.user_metadata || {};
-      auth = {
-        email: userData.user.email.toLowerCase().trim(),
-        nombreSugerido: metadata.full_name || metadata.name || null,
-      };
       cacheSet(sesionCache, token, auth);
     }
 

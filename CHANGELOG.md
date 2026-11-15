@@ -7,6 +7,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 ## Sin publicar
 
 ### Rendimiento
+- **Auth: el JWT se valida localmente** (`backend/api/auth.js`). `getClaims` verifica firma (ES256) y vencimiento contra el JWKS del proyecto, que se baja una vez por instancia, en vez de llamar a `auth.getUser` en cada request que no está en el caché. Si la verificación local falla, se usa `getUser` como respaldo. Se rechazan los tokens sin email o sin rol `authenticated` (anon/service role). No requiere migración ni subir dependencias (el lockfile ya fija `supabase-js` 2.109.0). **Compromiso:** un access token sigue valiendo hasta su vencimiento (1 h) aunque se cierre la sesión en otro dispositivo.
 - **La app iba lenta por la cantidad de viajes a Supabase por request** (la base está en São Paulo). Cambios:
   - **Auth con caché** (`backend/api/auth.js`): el token y el contexto del usuario (roles/organizaciones) se cachean 30 s en memoria por instancia, en vez de 2 viajes a Supabase por cada request. Un cambio de roles puede tardar hasta 30 s en verse.
   - **Región de Vercel `gru1`** (`backend/vercel.json`), cerca de la base.
