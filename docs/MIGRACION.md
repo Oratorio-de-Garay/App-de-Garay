@@ -6,7 +6,7 @@ Acá queda **qué se hizo en cada fase, cómo se verificó y qué quedó pendien
 | Fase | Contenido | Estado |
 |---|---|---|
 | 0 | Rama, ADR y tests e2e de caracterización sobre la app actual | Hecha |
-| 1 | Monorepo, TypeScript, lint, tests unitarios y CI | Pendiente |
+| 1 | Monorepo, TypeScript, lint, tests unitarios y CI | Hecha |
 | 2 | Backend a Hono con el mismo contrato HTTP | Pendiente |
 | 3 | Frontend a React + Tailwind + shadcn/ui | Pendiente |
 | 4 | Despliegue, limpieza del código viejo y documentación | Pendiente |
@@ -52,3 +52,40 @@ corridas seguidas; después de correr no quedan filas con la marca `E2E`.
 notificaciones push reales, ventas y presupuestos de buffet, y el flujo
 completo de aprobar una solicitud. Los tres últimos se cubren con tests de
 integración de la API en la Fase 2.
+
+## Fase 1 — Herramientas
+
+**Objetivo:** que cualquier cambio posterior se pueda verificar con un solo
+comando, antes de escribir código nuevo de la aplicación.
+
+**Qué se agregó**
+
+| Pieza | Archivos | Para qué |
+|---|---|---|
+| Monorepo | `package.json` (workspaces `apps/*` y `packages/*`) | Un solo `npm install` y un solo lockfile para API, web y código compartido |
+| TypeScript estricto | `tsconfig.base.json`, `tsconfig.json` | `strict` + `noUncheckedIndexedAccess`: acceder a un índice que puede no existir es un error de compilación |
+| Lint y formato | `eslint.config.js`, `.prettierrc.json`, `.prettierignore` | Estilo único sin discutirlo; imports de tipos explícitos |
+| Tests unitarios | `vitest.config.ts` | Un proyecto por paquete |
+| Código compartido | `packages/shared` | Tipos de la base generados (`npm run db:types`) y utilidades comunes; primer módulo: `fechas.ts` |
+| Fin de línea | `.gitattributes` | LF en el repo aunque se trabaje en Windows |
+| CI | `.github/workflows/app.yml` | Calidad en cada PR y e2e contra una base efímera |
+| Guía | `docs/TESTING.md` | Qué se prueba en cada nivel y cómo escribir un test |
+
+**Decisiones**
+- **TypeScript 6 y no 7:** `typescript-eslint` todavía exige `<6.1`. Se sube
+  cuando lo soporte.
+- **`backend/` y `frontend/` quedan fuera del linter y del formateador:** son
+  el código que se reemplaza; formatearlos sólo ensuciaría el historial.
+- **Los `.md` no pasan por Prettier:** la documentación se escribe a mano.
+- **`packages/shared` se consume como fuente TypeScript** (sin paso de build
+  propio): lo compilan Vite y el empaquetado de la API.
+- **`rangoDiaUTC` es el primer código compartido** porque el mismo cálculo
+  estaba copiado cuatro veces en `backend/api/index.js`. Valida la fecha de
+  verdad: `2026-02-31` antes se corría en silencio a marzo.
+
+**Verificación:** `npm run check` en verde (lint, formato, tipos, 13 tests
+unitarios) y `npm run e2e` 13 de 13.
+
+**Sin verificar:** el workflow `app.yml` no corrió todavía en GitHub (la rama
+no se subió). En particular, el paso que arma `backend/.env.local` a partir de
+`supabase status -o env` hay que mirarlo en la primera corrida.

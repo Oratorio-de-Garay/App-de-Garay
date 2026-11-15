@@ -1,0 +1,5 @@
+# Fin de línea LF en el repo, sin importar el sistema operativo: evita diffs
+# de "todo el archivo" entre Windows y el CI.
+* text=auto eol=lf
+*.png binary
+*.ico binary

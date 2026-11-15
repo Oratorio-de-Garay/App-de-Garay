@@ -8,6 +8,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ### Agregado
 - **Migración a React + Vite + Hono, fase 0: tests e2e de caracterización.** Decisión y motivos en `docs/adr/0001-migracion-framework.md`; avance por fases en `docs/MIGRACION.md`. Se agrega `package.json` en la raíz, Playwright (`playwright.config.ts`, `e2e/`) y 13 tests que recorren login con código, asistencia, buffet y administración contra la base local (`npm run e2e`). Los datos que crean llevan la marca `E2E` y se borran al terminar.
+- **Migración, fase 1: herramientas.** Monorepo con npm workspaces, TypeScript estricto, ESLint, Prettier y Vitest; paquete `packages/shared` con los tipos de la base generados (`npm run db:types`) y utilidades comunes; workflow `.github/workflows/app.yml` (lint, formato, tipos, unitarios y e2e en cada PR). Un solo comando para verificar: `npm run check`. Guía en `docs/TESTING.md`.
 
 ### Cambiado
 - **`package-lock.json` pasa a versionarse** (raíz y `backend/`): sin lockfile, cada build de Vercel podía resolver versiones distintas de las dependencias.
