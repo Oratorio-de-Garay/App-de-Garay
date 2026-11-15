@@ -447,12 +447,15 @@ Todos desde la raíz del repo, salvo los de `npm`:
 | Levantar Supabase local | `npx supabase start` |
 | Ver URLs y claves | `npx supabase status` |
 | Levantar la app (desde `backend/`) | `npm run dev` |
-| Volver la base a cero (migraciones + seed) | `npx supabase db reset --local` |
+| Aplicar migraciones nuevas **sin borrar datos** | `npx supabase migration up` |
+| Volver la base a cero (migraciones + seed) — **borra tus datos locales** | `npx supabase db reset --local` |
 | Correr los tests de la base (pgTAP) | `npx supabase test db` |
 | Apagar Supabase (los datos se conservan) | `npx supabase stop` |
 | Apagar y borrar los datos locales | `npx supabase stop --no-backup` |
 
 > ⚠️ **`db reset` siempre con `--local`.** `npx supabase db reset --linked` **borra la base de producción**. Nunca corras comandos con `--linked` salvo que estés siguiendo a propósito [Aplicar migraciones a producción](SETUP.md#aplicar-migraciones-a-producción).
+
+> ⚠️ **`db reset --local` también borra tus datos locales** (pibes, asistencias, ventas, usuarios que cargaste a mano) y los reemplaza por `seed.sql`; no se puede deshacer. Para probar una migración nueva usá `npx supabase migration up`, que la aplica sin tocar los datos. Si de verdad necesitás un reset y tenés datos que querés conservar, hacé un dump antes. **Los agentes de IA no deben correr `db reset` sin avisar y pedir confirmación.**
 
 Después de un `db reset`, las sesiones abiertas en el navegador dejan de valer: cerrá sesión y volvé a entrar.
 

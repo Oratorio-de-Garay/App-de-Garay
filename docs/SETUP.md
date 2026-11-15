@@ -57,7 +57,7 @@ npx supabase test db           # corre los tests pgTAP de supabase/tests/
 npx supabase stop              # apaga la base local
 ```
 
-> ⚠️ **Usá siempre `--local` con `db reset`.** `supabase db reset --linked` **borra y recrea la base de producción**.
+> ⚠️ **Usá siempre `--local` con `db reset`.** `supabase db reset --linked` **borra y recrea la base de producción**. Y `db reset --local` borra tus datos locales: para aplicar una migración nueva usá `npx supabase migration up` (ver [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md)).
 
 La base local escucha en `postgresql://postgres:postgres@127.0.0.1:54322/postgres`.
 
@@ -189,6 +189,10 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/p
 - Un solo proyecto Vercel con *Root Directory* `backend`, configurado por [`backend/vercel.json`](../backend/vercel.json). Tiene que estar activado *Include source files outside of the Root Directory* (Settings → General): el build copia `../frontend` a `public/` para servirlo desde la CDN.
 - Variables de entorno (las de la tabla de arriba) se cargan en Vercel → Project → Settings → Environment Variables.
 - Cada push a cualquier rama genera un **preview deployment** con URL propia; el deploy de la rama por defecto se alias a producción.
+- **Región de la función: `gru1` (São Paulo)**, cerca de la base (`sa-east-1`) y de los usuarios (Argentina). Está en `backend/vercel.json` y en Settings → Functions; si se cambia una, cambiar la otra.
+- **Se mantiene `builds` (config legacy) a propósito:** `backend/api/` tiene varios `.js` (auth, admin, push…) y sin `builds` Vercel publicaría cada uno como una función propia. Si se toca `vercel.json`, no pasar a la configuración moderna sin mover esos módulos fuera de `api/`.
+- **Verificar un preview:** los previews están protegidos por el login de Vercel (a `curl` responden 302). Para probarlos hay que iniciar sesión en el navegador (pidiéndoselo al usuario si lo hace un agente) y medir con `fetch` desde la propia página: los estáticos deben dar `X-Vercel-Cache: HIT` y `Content-Encoding: br`, y `/config.js` debe seguir dinámico (`no-store`). La URL del preview sale de `gh api repos/<owner>/<repo>/deployments/<id>/statuses`.
+- `VAPID_PUBLIC_KEY` suele estar vacía en el entorno **Preview**: el push no se puede probar ahí sin cargarla.
 - Después de cualquier cambio en las variables de entorno hace falta un **redeploy** para que tome efecto (Vercel no las recarga en caliente).
 - Ver la sección anterior para lo que hay que mantener sincronizado en Supabase cuando cambian las URLs de deploy.
 
