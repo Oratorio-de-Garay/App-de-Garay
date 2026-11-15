@@ -58,7 +58,7 @@ Grados y categorías de edad disponibles, para poblar los `<select>` del formula
 
 ## `GET /api/students/search?q=&date=`
 
-Busca pibes de la organización activa por nombre y/o apellido, por palabras (sin tildes ni mayúsculas; `juan perez` y `perez juan` encuentran a Juan Pérez). Usa la RPC `buscar_pibes_resumen` (ver [DATABASE.md](DATABASE.md#función-rpc-buscar_pibes_resumen)): una sola consulta, máximo 30 resultados. `q` vacío devuelve `[]` sin pegarle a la base.
+Busca pibes de la organización activa por nombre y/o apellido, por palabras (sin tildes ni mayúsculas; `juan perez` y `perez juan` encuentran a Juan Pérez). Usa la RPC `buscar_pibes_resumen` (ver [DATABASE.md](DATABASE.md#función-rpc-buscar_pibes_resumen)): una sola consulta, máximo 100 resultados (el frontend los pagina del lado del cliente; si llegan 100 avisa que hay que refinar la búsqueda). `q` vacío devuelve `[]` sin pegarle a la base.
 
 `date` (opcional, `YYYY-MM-DD`): si viene, cada pibe incluye `marcado_hoy` (¿tiene presente ese día?); si no, `marcado_hoy` es `null`. Así el frontend no necesita un `GET /api/attendance/check` por resultado.
 

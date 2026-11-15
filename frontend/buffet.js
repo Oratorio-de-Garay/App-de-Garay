@@ -223,26 +223,37 @@ function renderProducts() {
       </div>
       <button class="btn-main" id="btn-nuevo-producto" type="button">Nuevo producto</button>
     </div>
-    <div class="list">
-      ${buffetState.products.map((p) => `
-        <div class="row${p.active ? "" : " row-inactive"}">
-          <div>
-            <strong>${escapeHtml(p.name)}</strong>${p.is_donated ? '<span class="chip">Donado</span>' : ""}<br>
-            <small>${escapeHtml(p.category_name || "Sin categoría")} · ${escapeHtml(p.unit_name || "Sin unidad")}</small>
-          </div>
-          <div><small>Precio</small><br>$${Number(p.sale_price || 0).toFixed(2)}</div>
-          <div><small>Stock</small><br>${Number(p.stock_current || 0)}</div>
-          <div><small>Estado</small><br>${p.active ? "Activo" : "Inactivo"}</div>
-          <div class="row-actions">
-            <button class="btn-sec" data-edit-product="${p.id}" type="button">Editar</button>
-            <button class="btn-sec" data-delete-product="${p.id}" type="button">Eliminar</button>
-          </div>
-        </div>`).join("") || "<p>No hay productos cargados.</p>"}
-    </div>
+    <div id="productos-lista"></div>
   `;
   document.getElementById("btn-nuevo-producto").addEventListener("click", () => openProductForm());
-  panel.querySelectorAll("[data-edit-product]").forEach((btn) => btn.addEventListener("click", () => openProductForm(buffetState.products.find((p) => p.id === btn.dataset.editProduct))));
-  panel.querySelectorAll("[data-delete-product]").forEach((btn) => btn.addEventListener("click", () => deleteProduct(btn.dataset.deleteProduct)));
+  crearListadoPaginado({
+    contenedor: document.getElementById("productos-lista"),
+    clave: "buffet-productos",
+    columnas: [
+      { titulo: "Producto" },
+      { titulo: "Precio", clase: "num" },
+      { titulo: "Stock", clase: "num" },
+      { titulo: "Estado" },
+      { titulo: "", clase: "acciones" },
+    ],
+    renderFila: (p) => ({
+      clase: p.active ? "" : "inactivo",
+      celdas: [
+        `<strong>${escapeHtml(p.name)}</strong>${p.is_donated ? '<span class="chip">Donado</span>' : ""}<br>
+         <small>${escapeHtml(p.category_name || "Sin categoría")} · ${escapeHtml(p.unit_name || "Sin unidad")}</small>`,
+        `$${Number(p.sale_price || 0).toFixed(2)}`,
+        Number(p.stock_current || 0),
+        p.active ? "Activo" : "Inactivo",
+        `<button class="btn-sec" data-edit-product type="button">Editar</button>
+         <button class="btn-sec" data-delete-product type="button">Eliminar</button>`,
+      ],
+    }),
+    vacio: "<p>No hay productos cargados.</p>",
+    acciones: {
+      "[data-edit-product]": (_el, p) => openProductForm(p),
+      "[data-delete-product]": (_el, p) => deleteProduct(p.id),
+    },
+  }).setItems(buffetState.products, { mantenerPagina: true });
 }
 
 function openProductForm(product = null) {
@@ -337,10 +348,12 @@ function closeEvent() {
 
 function renderEventsList() {
   const panel = document.getElementById("panel-ventas");
-  const filtro = buffetState.eventsFilter.toLowerCase();
-  const eventos = filtro
-    ? buffetState.events.filter((e) => e.nombre.toLowerCase().includes(filtro))
-    : buffetState.events;
+  const filtrarEventos = () => {
+    const filtro = buffetState.eventsFilter.toLowerCase();
+    return filtro
+      ? buffetState.events.filter((e) => e.nombre.toLowerCase().includes(filtro))
+      : buffetState.events;
+  };
 
   panel.innerHTML = `
     <div class="toolbar">
@@ -358,42 +371,42 @@ function renderEventsList() {
       </div>
     </div>
 
-    <div class="list">
-      ${eventos.map((e) => `
-        <div class="row row-event" data-open-event="${e.id}">
-          <div>
-            <strong>${escapeHtml(e.nombre)}</strong><br>
-            <small>${formatDate(e.fecha)}${e.estado === "cerrado" ? " · cerrado" : ""}</small>
-          </div>
-          <div><small>Ventas</small><br>${e.sales_count}</div>
-          <div><small>Recaudado</small><br>${formatMoney(e.total_amount)}</div>
-          <div class="row-actions">
-            <button class="btn-sec" type="button" data-open-event-btn="${e.id}">Abrir</button>
-            <button class="btn-sec" type="button" data-delete-event="${e.id}">Eliminar</button>
-          </div>
-        </div>`).join("") || `<p>${filtro ? "Ningún evento coincide con la búsqueda." : "Todavía no creaste ningún evento."}</p>`}
-    </div>
+    <div id="eventos-lista"></div>
   `;
 
   document.getElementById("btn-nuevo-evento").addEventListener("click", () => openEventForm());
 
-  const buscador = field(panel, "filter-eventos");
-  buscador.addEventListener("input", () => {
-    buffetState.eventsFilter = buscador.value.trim();
-    renderEventsList();
-    // Re-pintar el panel destruye el input: hay que devolverle el foco.
-    const nuevo = field(panel, "filter-eventos");
-    nuevo.focus();
-    nuevo.setSelectionRange(nuevo.value.length, nuevo.value.length);
+  const lista = crearListadoPaginado({
+    contenedor: document.getElementById("eventos-lista"),
+    clave: "buffet-eventos",
+    columnas: [
+      { titulo: "Evento" },
+      { titulo: "Ventas", clase: "num" },
+      { titulo: "Recaudado", clase: "num" },
+      { titulo: "", clase: "acciones" },
+    ],
+    renderFila: (e) => [
+      `<strong>${escapeHtml(e.nombre)}</strong><br>
+       <small>${formatDate(e.fecha)}${e.estado === "cerrado" ? " · cerrado" : ""}</small>`,
+      e.sales_count,
+      formatMoney(e.total_amount),
+      `<button class="btn-sec" type="button" data-open-event-btn>Abrir</button>
+       <button class="btn-sec" type="button" data-delete-event>Eliminar</button>`,
+    ],
+    vacio: () => `<p>${buffetState.eventsFilter ? "Ningún evento coincide con la búsqueda." : "Todavía no creaste ningún evento."}</p>`,
+    onFila: openEvent,
+    acciones: {
+      "[data-open-event-btn]": (_el, e) => openEvent(e),
+      "[data-delete-event]": (_el, e) => deleteEvent(e.id),
+    },
   });
+  lista.setItems(filtrarEventos(), { mantenerPagina: true });
 
-  panel.querySelectorAll("[data-open-event]").forEach((row) => row.addEventListener("click", (ev) => {
-    if (ev.target.closest("[data-delete-event]")) return;
-    const evento = buffetState.events.find((e) => e.id === row.dataset.openEvent);
-    if (evento) openEvent(evento);
-  }));
-
-  panel.querySelectorAll("[data-delete-event]").forEach((btn) => btn.addEventListener("click", () => deleteEvent(btn.dataset.deleteEvent)));
+  // Sólo se repinta la lista: así el buscador conserva el foco sin trucos.
+  field(panel, "filter-eventos").addEventListener("input", (ev) => {
+    buffetState.eventsFilter = ev.target.value.trim();
+    lista.setItems(filtrarEventos());
+  });
 }
 
 function renderEventDetail() {
@@ -426,32 +439,39 @@ function renderEventDetail() {
       </div>
     </div>
 
-    <div class="list">
-      ${buffetState.sales.map((s, index) => `
-        <div class="row row-sale">
-          <div>
-            <strong>Venta ${buffetState.sales.length - index}</strong><br>
-            <small>${escapeHtml(s.payment_method || "")}</small>
-          </div>
-          <div><small>Ítems</small><br>${s.items_count}</div>
-          <div><small>Detalle</small><br><small>${escapeHtml(s.items.map((i) => `${Number(i.quantity)}× ${i.description}`).join(", ")) || "—"}</small></div>
-          <div><small>Total</small><br>${formatMoney(s.total_amount)}</div>
-          <div class="row-actions">
-            <button class="btn-sec" data-edit-sale="${s.id}" type="button">Editar</button>
-            <button class="btn-sec" data-delete-sale="${s.id}" type="button">Eliminar</button>
-          </div>
-        </div>`).join("") || "<p>Todavía no hay ventas en este evento.</p>"}
-    </div>
+    <div id="ventas-lista"></div>
   `;
 
   document.getElementById("btn-volver-eventos").addEventListener("click", closeEvent);
   document.getElementById("btn-editar-evento").addEventListener("click", () => openEventForm(evento));
   document.getElementById("btn-nueva-venta").addEventListener("click", () => openSaleForm(evento));
-  panel.querySelectorAll("[data-delete-sale]").forEach((btn) => btn.addEventListener("click", () => deleteSale(btn.dataset.deleteSale)));
-  panel.querySelectorAll("[data-edit-sale]").forEach((btn) => btn.addEventListener("click", () => {
-    const venta = buffetState.sales.find((s) => s.id === btn.dataset.editSale);
-    if (venta) openSaleForm(evento, venta);
-  }));
+
+  crearListadoPaginado({
+    contenedor: document.getElementById("ventas-lista"),
+    clave: "buffet-ventas",
+    columnas: [
+      { titulo: "Venta" },
+      { titulo: "Ítems", clase: "num" },
+      { titulo: "Detalle" },
+      { titulo: "Total", clase: "num" },
+      { titulo: "", clase: "acciones" },
+    ],
+    // El número de venta sale del índice global, no del de la página.
+    renderFila: (s, index) => [
+      `<strong>Venta ${buffetState.sales.length - index}</strong><br>
+       <small>${escapeHtml(s.payment_method || "")}</small>`,
+      s.items_count,
+      `<small>${escapeHtml(s.items.map((i) => `${Number(i.quantity)}× ${i.description}`).join(", ")) || "—"}</small>`,
+      formatMoney(s.total_amount),
+      `<button class="btn-sec" data-edit-sale type="button">Editar</button>
+       <button class="btn-sec" data-delete-sale type="button">Eliminar</button>`,
+    ],
+    vacio: "<p>Todavía no hay ventas en este evento.</p>",
+    acciones: {
+      "[data-edit-sale]": (_el, s) => openSaleForm(evento, s),
+      "[data-delete-sale]": (_el, s) => deleteSale(s.id),
+    },
+  }).setItems(buffetState.sales, { mantenerPagina: true });
 }
 
 function openEventForm(evento = null) {
@@ -725,23 +745,36 @@ function renderCombos() {
       </div>
       <button class="btn-main" id="btn-nuevo-combo" type="button">Nuevo combo</button>
     </div>
-    <div class="list">
-      ${buffetState.combos.map((c) => `
-        <div class="row${c.active ? "" : " row-inactive"}">
-          <div><strong>${escapeHtml(c.name)}</strong><br><small>${escapeHtml(c.description || "")}</small></div>
-          <div><small>Precio</small><br>$${Number(c.sale_price || 0).toFixed(2)}</div>
-          <div><small>Items</small><br>${c.items_count || 0}</div>
-          <div><small>Estado</small><br>${c.active ? "Activo" : "Inactivo"}</div>
-          <div class="row-actions">
-            <button class="btn-sec" type="button" data-edit-combo="${c.id}">Editar</button>
-            <button class="btn-sec" type="button" data-delete-combo="${c.id}">Eliminar</button>
-          </div>
-        </div>`).join("") || "<p>No hay combos cargados.</p>"}
-    </div>
+    <div id="combos-lista"></div>
   `;
   document.getElementById("btn-nuevo-combo").addEventListener("click", () => openComboForm());
-  document.querySelectorAll("[data-edit-combo]").forEach((btn) => btn.addEventListener("click", () => openComboForm(buffetState.combos.find((c) => c.id === btn.dataset.editCombo))));
-  document.querySelectorAll("[data-delete-combo]").forEach((btn) => btn.addEventListener("click", () => apiSend(`/api/buffet/combos/${btn.dataset.deleteCombo}`, "DELETE", {}).then(loadBuffet).catch((e) => alert(e.message))));
+  crearListadoPaginado({
+    contenedor: document.getElementById("combos-lista"),
+    clave: "buffet-combos",
+    columnas: [
+      { titulo: "Combo" },
+      { titulo: "Precio", clase: "num" },
+      { titulo: "Items", clase: "num" },
+      { titulo: "Estado" },
+      { titulo: "", clase: "acciones" },
+    ],
+    renderFila: (c) => ({
+      clase: c.active ? "" : "inactivo",
+      celdas: [
+        `<strong>${escapeHtml(c.name)}</strong><br><small>${escapeHtml(c.description || "")}</small>`,
+        `$${Number(c.sale_price || 0).toFixed(2)}`,
+        c.items_count || 0,
+        c.active ? "Activo" : "Inactivo",
+        `<button class="btn-sec" type="button" data-edit-combo>Editar</button>
+         <button class="btn-sec" type="button" data-delete-combo>Eliminar</button>`,
+      ],
+    }),
+    vacio: "<p>No hay combos cargados.</p>",
+    acciones: {
+      "[data-edit-combo]": (_el, c) => openComboForm(c),
+      "[data-delete-combo]": (_el, c) => apiSend(`/api/buffet/combos/${c.id}`, "DELETE", {}).then(loadBuffet).catch((e) => alert(e.message)),
+    },
+  }).setItems(buffetState.combos, { mantenerPagina: true });
 }
 
 function openComboForm(combo = null) {
@@ -791,10 +824,31 @@ function renderBudgets() {
       </div>
       <button class="btn-main" id="btn-nuevo-presupuesto" type="button">Nuevo presupuesto</button>
     </div>
-    <div class="list">${buffetState.budgets.map((b) => `<div class="row"><div><strong>${escapeHtml(b.title)}</strong><br><small>${escapeHtml(b.client_name || "")}</small></div><div><small>Total</small><br>$${Number(b.total_amount || 0).toFixed(2)}</div><div><small>Items</small><br>${b.items_count || 0}</div><div><small>Estado</small><br>${escapeHtml(b.status || "borrador")}</div><div class="row-actions"><button class="btn-sec" type="button" data-delete-budget="${b.id}">Eliminar</button></div></div>`).join("") || "<p>No hay presupuestos cargados.</p>"}</div>
+    <div id="presupuestos-lista"></div>
   `;
   document.getElementById("btn-nuevo-presupuesto").addEventListener("click", () => openBudgetForm());
-  document.querySelectorAll("[data-delete-budget]").forEach((btn) => btn.addEventListener("click", () => apiSend(`/api/buffet/budgets/${btn.dataset.deleteBudget}`, "DELETE", {}).then(loadBuffet).catch((e) => alert(e.message))));
+  crearListadoPaginado({
+    contenedor: document.getElementById("presupuestos-lista"),
+    clave: "buffet-presupuestos",
+    columnas: [
+      { titulo: "Presupuesto" },
+      { titulo: "Total", clase: "num" },
+      { titulo: "Items", clase: "num" },
+      { titulo: "Estado" },
+      { titulo: "", clase: "acciones" },
+    ],
+    renderFila: (b) => [
+      `<strong>${escapeHtml(b.title)}</strong><br><small>${escapeHtml(b.client_name || "")}</small>`,
+      `$${Number(b.total_amount || 0).toFixed(2)}`,
+      b.items_count || 0,
+      escapeHtml(b.status || "borrador"),
+      '<button class="btn-sec" type="button" data-delete-budget>Eliminar</button>',
+    ],
+    vacio: "<p>No hay presupuestos cargados.</p>",
+    acciones: {
+      "[data-delete-budget]": (_el, b) => apiSend(`/api/buffet/budgets/${b.id}`, "DELETE", {}).then(loadBuffet).catch((e) => alert(e.message)),
+    },
+  }).setItems(buffetState.budgets, { mantenerPagina: true });
 }
 
 function openBudgetForm(budget = null) {

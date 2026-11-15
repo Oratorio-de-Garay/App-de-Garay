@@ -260,7 +260,7 @@ async function buscar(asistida = false) {
       // Aunque encuentre solamente una persona,
       // la mostramos como sugerencia para que el usuario
       // pueda elegirla.
-      mostrarMultiples(data);
+      mostrarMultiples(data, { truncado: data.length >= LIMITE_BUSQUEDA });
 
       return;
     }
@@ -303,7 +303,7 @@ async function buscar(asistida = false) {
 
     } else {
 
-      mostrarMultiples(data);
+      mostrarMultiples(data, { truncado: data.length >= LIMITE_BUSQUEDA });
     }
 
   } catch (error) {
@@ -583,207 +583,94 @@ function mostrarResultado(chico) {
     .addEventListener("click", abrirModal);
 }
 
-function mostrarMultiples(chicos) {
+// Pibes de la última búsqueda: el estado "marcado hoy" de cada botón vive acá
+// (no en el DOM) para que sobreviva al cambiar de página.
+// Debe coincidir con p_limite de /api/students/search.
+const LIMITE_BUSQUEDA = 100;
 
-  const items = chicos
+let chicosListados = [];
 
-    .map((c) => {
+const COLUMNAS_PIBES = [
+  { titulo: "Nombre" },
+  { titulo: "Grado" },
+  { titulo: "Edad" },
+  { titulo: "Presente", clase: "acciones" }
+];
 
-      const iniciales =
-        c.nombreCompleto
+function celdasPibe(c) {
 
-          .split(" ")
+  const nombreCompleto =
+    c.nombreCompleto ||
+    `${c.nombre || ""} ${c.apellido || ""}`.trim();
 
-          .slice(0, 2)
+  return [
+    `<div class="celda-pibe">
+       <div class="avatar avatar-sm">${escapeHtml(inicialesDe(nombreCompleto))}</div>
+       <span class="result-item-name">${escapeHtml(nombreCompleto)}</span>
+     </div>`,
+    escapeHtml(c.grado) || "Sin grado",
+    escapeHtml(c.edad) || "—",
+    `<button
+       type="button"
+       class="btn-presente-rapido"
+       data-pibe-id="${escapeHtml(c.id)}"
+       data-pibe-nombre="${escapeHtml(nombreCompleto)}"
+     >
+       <span class="presente-rapido-texto">✓ Marcar presente</span>
+       <span class="presente-rapido-icono">✓</span>
+     </button>`
+  ];
+}
 
-          .map(
-            (p) => p[0]
-          )
+function mostrarMultiples(chicos, { truncado = false } = {}) {
 
-          .join("")
-
-          .toUpperCase();
-
-
-      return `
-
-        <div class="resultado-con-presente">
-
-
-          <!-- TARJETA DEL CHICO -->
-
-          <div
-            class="result-item"
-            data-chico='${escapeHtml(
-              JSON.stringify(c)
-            )}'
-          >
-
-            <div class="result-item-left">
-
-              <div class="avatar avatar-sm">
-                ${escapeHtml(iniciales)}
-              </div>
-
-
-              <div>
-
-                <div class="result-item-name">
-
-                  ${escapeHtml(
-                    c.nombreCompleto
-                  )}
-
-                </div>
-
-
-                <div class="result-item-meta">
-
-                  ${escapeHtml(c.grado) || "Sin grado"}
-
-                  ·
-
-                  ${escapeHtml(c.edad) || ""}
-
-                </div>
-
-              </div>
-
-            </div>
-
-
-            <span class="result-item-chevron">
-              ›
-            </span>
-
-          </div>
-
-
-          <!-- BOTÓN DE PRESENTE -->
-
-          <button
-            type="button"
-            class="btn-presente-rapido"
-            data-pibe-id="${escapeHtml(c.id)}"
-            data-pibe-nombre="${escapeHtml(
-              c.nombreCompleto
-            )}"
-          >
-
-            <span class="presente-rapido-texto">
-              ✓ Marcar presente
-            </span>
-
-            <span class="presente-rapido-icono">
-              ✓
-            </span>
-
-          </button>
-
-
-        </div>
-      `;
-    })
-
-    .join("");
-
+  chicosListados = chicos;
 
   agregarHTML(`
-
     <div class="alert alert-info">
-
-      <span class="alert-icon">
-        👥
-      </span>
-
+      <span class="alert-icon">👥</span>
       <span>
-        Se encontraron ${chicos.length} chicos. Elegí uno:
+        Se encontraron ${chicos.length} chicos${truncado ? " (hay más: refiná la búsqueda)" : ""}. Elegí uno:
       </span>
-
     </div>
 
-
-    <div class="multi-results">
-
-      ${items}
-
-    </div>
+    <div id="resultados-multiples"></div>
   `);
 
+  const lista = crearListadoPaginado({
+    contenedor: document.getElementById("resultados-multiples"),
+    clave: "registro-busqueda",
+    columnas: COLUMNAS_PIBES,
+    renderFila: celdasPibe,
 
-  // ======================================================
-  // ABRIR FICHA TOCANDO LA TARJETA
-  // ======================================================
+    // Abrir la ficha tocando la fila (los botones no cuentan).
+    onFila: (chico) => seleccionarChico(chico),
 
-  document
-    .querySelectorAll(".result-item")
-    .forEach((item) => {
+    acciones: {
+      ".btn-presente-rapido": (btn) => marcarPresenteRapido(btn)
+    },
 
-      item.addEventListener(
-        "click",
-        () => {
+    // Cada página nueva pinta botones nuevos: se les devuelve su estado.
+    // El estado "ya marcado" viene en la propia búsqueda (marcado_hoy); sólo
+    // si el backend no lo informó se consulta por separado.
+    onRender: (tbody, pagina) => {
 
-          const chico =
-            JSON.parse(
-              unescapeHtml(
-                item.dataset.chico
-              )
-            );
+      tbody.querySelectorAll(".btn-presente-rapido").forEach((btn, i) => {
 
-          seleccionarChico(chico);
+        const chico = pagina[i];
+
+        if (typeof chico?.marcado_hoy === "boolean") {
+          estadoBotonRapido(btn, chico.marcado_hoy);
+        } else {
+          verificarPresenteRapido(btn, chico.id);
         }
-      );
-    });
+      });
+    }
+  });
 
-
-  // ======================================================
-  // BOTONES DE PRESENTE RÁPIDO
-  // ======================================================
-
-  document
-    .querySelectorAll(
-      ".btn-presente-rapido"
-    )
-    .forEach((btn) => {
-
-      const id =
-        btn.dataset.pibeId;
-
-
-      // El estado "ya marcado" viene en la propia búsqueda (marcado_hoy).
-      // Sólo si el backend no lo informó se consulta por separado.
-      const chicoResultado =
-        chicos.find((c) => String(c.id) === String(id));
-
-      if (typeof chicoResultado?.marcado_hoy === "boolean") {
-
-        estadoBotonRapido(
-          btn,
-          chicoResultado.marcado_hoy
-        );
-
-      } else {
-
-        verificarPresenteRapido(
-          btn,
-          id
-        );
-      }
-
-
-      btn.addEventListener(
-        "click",
-        async (event) => {
-
-          event.stopPropagation();
-
-          await marcarPresenteRapido(
-            btn
-          );
-        }
-      );
-    });
+  lista.setItems(chicos);
 }
+
 
 async function verificarPresenteRapido(
   btn,
@@ -855,6 +742,15 @@ function estadoBotonRapido(btn, marcado) {
   btn.classList.toggle("done", marcado);
 
   btn.disabled = false;
+
+  // El estado vive también en el ítem: al cambiar de página se repinta el botón.
+  const chico = chicosListados.find(
+    (c) => String(c.id) === String(btn.dataset.pibeId)
+  );
+
+  if (chico) {
+    chico.marcado_hoy = marcado;
+  }
 
   if (texto) {
     texto.textContent = marcado
@@ -2269,213 +2165,48 @@ function renderHistorialFechas(fechas, year) {
   }
 
 
-  const meses =
-    new Map();
-
-
-  for (
-    const item
-    of fechas
-  ) {
-
-    const fecha =
-      parseFechaLocal(
-        item.fecha
-      );
-
-
-    const clave =
-      `${fecha.getFullYear()}-${String(
-        fecha.getMonth() + 1
-      ).padStart(2, "0")}`;
-
-
-    if (
-      !meses.has(clave)
-    ) {
-
-      meses.set(
-        clave,
-        []
-      );
-    }
-
-
-    meses
-      .get(clave)
-      .push(item);
-  }
-
-
-  const html =
-    [...meses.entries()]
-      .map(
-        ([clave, items]) => {
-
-          const [
-            anio,
-            mes
-          ] =
-            clave
-              .split("-")
-              .map(Number);
-
-
-          const tituloMes =
-            new Intl.DateTimeFormat(
-              "es-AR",
-              {
-                month: "long",
-                year: "numeric"
-              }
-            )
-              .format(
-                new Date(
-                  anio,
-                  mes - 1,
-                  1
-                )
-              );
-
-
-          const filas =
-            items
-              .map(
-                (item) => {
-
-                  const fecha =
-                    parseFechaLocal(
-                      item.fecha
-                    );
-
-
-                  const textoFecha =
-                    capitalizar(
-                      new Intl.DateTimeFormat(
-                        "es-AR",
-                        {
-                          weekday: "long",
-                          day: "numeric",
-                          month: "long"
-                        }
-                      )
-                        .format(fecha)
-                    );
-
-
-                  const total =
-                    Number(
-                      item.total
-                    ) || 0;
-
-
-                  const textoTotal =
-                    `${total} ${
-                      total === 1
-                        ? "presente"
-                        : "presentes"
-                    }`;
-
-
-                  return `
-                    <button
-                      type="button"
-                      class="result-item historial-fecha"
-                      data-fecha="${escapeHtml(item.fecha)}"
-                      style="
-                        width:100%;
-                        border:0;
-                        background:transparent;
-                        text-align:left;
-                        cursor:pointer;
-                      "
-                    >
-
-                      <div class="result-item-left">
-
-                        <div class="avatar avatar-sm">
-                          📅
-                        </div>
-
-                        <div>
-
-                          <div class="result-item-name">
-                            ${escapeHtml(textoFecha)}
-                          </div>
-
-                          <div class="result-item-meta">
-                            ${escapeHtml(textoTotal)}
-                          </div>
-
-                        </div>
-
-                      </div>
-
-
-                      <span class="result-item-chevron">
-                        ›
-                      </span>
-
-                    </button>
-                  `;
-                }
-              )
-              .join("");
-
-
-          return `
-            <section style="margin-top:20px;">
-
-              <div style="
-                font-size:13px;
-                font-weight:800;
-                letter-spacing:.06em;
-                text-transform:uppercase;
-                opacity:.7;
-                margin:0 0 8px 4px;
-              ">
-                ${escapeHtml(
-                  capitalizar(
-                    tituloMes
-                  )
-                )}
-              </div>
-
-
-              <div class="multi-results">
-                ${filas}
-              </div>
-
-            </section>
-          `;
-        }
-      )
-      .join("");
-
-
-  cont.innerHTML =
-    html;
-
-
-  document
-    .querySelectorAll(
-      ".historial-fecha"
-    )
-    .forEach(
-      (btn) => {
-
-        btn.addEventListener(
-          "click",
-          () => {
-
-            verAsistenciasFecha(
-              btn.dataset.fecha
-            );
-
-          }
-        );
+  const formatoDia =
+    new Intl.DateTimeFormat(
+      "es-AR",
+      {
+        weekday: "long",
+        day: "numeric",
+        month: "long"
       }
     );
+
+  const formatoMes =
+    new Intl.DateTimeFormat(
+      "es-AR",
+      {
+        month: "long",
+        year: "numeric"
+      }
+    );
+
+  cont.innerHTML = "";
+
+  crearListadoPaginado({
+    contenedor: cont,
+    clave: "registro-historial-fechas",
+    columnas: [
+      { titulo: "Fecha" },
+      { titulo: "Mes" },
+      { titulo: "Presentes", clase: "num" }
+    ],
+    renderFila: (item) => {
+
+      const fecha =
+        parseFechaLocal(item.fecha);
+
+      return [
+        `<strong>${escapeHtml(capitalizar(formatoDia.format(fecha)))}</strong>`,
+        escapeHtml(capitalizar(formatoMes.format(fecha))),
+        Number(item.total) || 0
+      ];
+    },
+    onFila: (item) => verAsistenciasFecha(item.fecha)
+  }).setItems(fechas);
 }
 
 
@@ -2638,120 +2369,19 @@ async function verAsistenciasFecha(fechaISO) {
     }
 
 
-    detalle.innerHTML = `
-      <div class="multi-results">
+    detalle.innerHTML = "";
 
-        ${pibes
-          .map(
-            (pibe) => {
-
-              const nombreCompleto =
-                pibe.nombreCompleto ||
-                `${pibe.nombre || ""} ${pibe.apellido || ""}`.trim();
-
-
-              const iniciales =
-                nombreCompleto
-                  .split(" ")
-                  .filter(Boolean)
-                  .slice(0, 2)
-                  .map(
-                    (p) =>
-                      p[0]
-                  )
-                  .join("")
-                  .toUpperCase();
-
-
-              const meta =
-                [
-                  pibe.grado,
-                  pibe.edad
-                ]
-                  .filter(Boolean)
-                  .join(" · ") ||
-                "Sin datos adicionales";
-                return `
-  <div
-    class="result-item historial-pibe"
-    data-pibe-id="${escapeHtml(pibe.id)}"
-    data-pibe-nombre="${escapeHtml(nombreCompleto)}"
-    style="cursor:pointer;"
-  >
-
-    <div class="result-item-left">
-
-      <div class="avatar avatar-sm">
-        ${escapeHtml(iniciales)}
-      </div>
-
-      <div>
-
-        <div class="result-item-name">
-          ${escapeHtml(nombreCompleto)}
-        </div>
-
-        <div class="result-item-meta">
-          ${escapeHtml(meta)}
-        </div>
-
-      </div>
-
-    </div>
-
-    <span class="result-item-chevron">
-      ›
-    </span>
-
-  </div>
-`;
-
-
-            }
-          )
-          .join("")}
-
-      </div>
-    `;
-          document
-  .querySelectorAll(".historial-pibe")
-  .forEach((item) => {
-
-    item.addEventListener("click", async () => {
-
-      const id = item.dataset.pibeId;
-
-      try {
-
-        const res = await window.apiFetch(
-          `/api/students/${encodeURIComponent(id)}`
-        );
-
-        if (!res.ok) {
-          throw new Error("Server error");
-        }
-
-        const chico = await res.json();
-
-        limpiarContenido();
-        mostrarResultado(chico);
-
-      } catch (error) {
-
-        console.error(
-          "Error abriendo chico desde historial:",
-          error
-        );
-
-        mostrarMensaje(
-          "err",
-          "❌ No se pudieron cargar los datos del chico."
-        );
-      }
-
-    });
-
-  });
+    crearListadoPaginado({
+      contenedor: detalle,
+      clave: "registro-presentes-fecha",
+      columnas: [
+        { titulo: "Nombre" },
+        { titulo: "Grado" },
+        { titulo: "Edad" }
+      ],
+      renderFila: (pibe) => celdasPibe(pibe).slice(0, 3),
+      onFila: (pibe) => abrirFichaDesdeHistorial(pibe.id)
+    }).setItems(pibes);
 
   } catch (error) {
 
@@ -2775,6 +2405,38 @@ async function verAsistenciasFecha(fechaISO) {
         </div>
       `;
     }
+  }
+}
+
+
+async function abrirFichaDesdeHistorial(id) {
+
+  try {
+
+    const res = await window.apiFetch(
+      `/api/students/${encodeURIComponent(id)}`
+    );
+
+    if (!res.ok) {
+      throw new Error("Server error");
+    }
+
+    const chico = await res.json();
+
+    limpiarContenido();
+    mostrarResultado(chico);
+
+  } catch (error) {
+
+    console.error(
+      "Error abriendo chico desde historial:",
+      error
+    );
+
+    mostrarMensaje(
+      "err",
+      "❌ No se pudieron cargar los datos del chico."
+    );
   }
 }
 

@@ -1,0 +1,187 @@
+/* Listado paginado (ver utils/paginacion.js): tabla en desktop, tarjetas en móvil.
+   Usa las variables de base.css. */
+
+.listado { margin-top: 12px; }
+
+.listado-vacio:not([hidden]) { padding: 4px 0; }
+
+.listado-barra {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 2px;
+}
+.listado-barra .paginador { margin-left: auto; }
+.listado-barra-pie { padding-bottom: 2px; }
+.listado-barra-pie .listado-contador { order: 0; }
+
+.listado-tamano {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--texto-sec);
+}
+.listado-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 36px;
+  padding: 0 30px 0 12px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+  color: var(--texto);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.listado-select:focus-visible { outline: 2px solid var(--verde-mid); outline-offset: 2px; }
+
+.listado-contador {
+  font-size: 13px;
+  color: var(--texto-sec);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Paginador ───────────────────────────────────────── */
+.paginador { display: flex; justify-content: flex-end; }
+.paginador[hidden] { display: none; }
+.paginador > .tui-pagination { margin: 0; }
+.paginador { gap: 4px; align-items: center; }
+
+.paginador .pg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  margin: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--texto);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.paginador a.pg-btn:hover { background: var(--verde-light); border-color: var(--verde-soft); }
+.paginador a.pg-btn:focus-visible { outline: 2px solid var(--verde-mid); outline-offset: 2px; }
+.paginador .pg-actual {
+  background: var(--verde);
+  color: #fff;
+  cursor: default;
+  box-shadow: 0 1px 3px rgba(26, 58, 42, .3);
+}
+.paginador .pg-flecha { border-color: var(--borde); background: var(--card); }
+.paginador .is-disabled {
+  color: #c2c7cf;
+  background: #f3f4f6;
+  border-color: var(--borde);
+  cursor: not-allowed;
+}
+.paginador .pg-mas { color: var(--texto-sec); }
+
+/* tui envuelve los botones en <a>/<strong> sueltos: sin estilos propios. */
+.paginador .tui-pagination { display: flex; align-items: center; flex-wrap: nowrap; }
+
+/* ── Tabla ───────────────────────────────────────────── */
+.tabla-wrap {
+  overflow-x: auto;
+  background: var(--card);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+}
+.tabla { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+.tabla thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 11px 14px;
+  background: #f3f6f4;
+  color: var(--texto-sec);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--borde);
+}
+.tabla tbody td {
+  padding: 12px 14px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--borde);
+}
+.tabla tbody tr:last-child td { border-bottom: 0; }
+.tabla tbody tr:nth-child(even) { background: #fafcfb; }
+.tabla tbody tr:hover { background: var(--verde-light); }
+.tabla tbody tr.clickeable { cursor: pointer; }
+.tabla tbody tr.inactivo td { opacity: .55; }
+.tabla .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tabla .acciones { text-align: right; white-space: nowrap; }
+.tabla .acciones > * { margin-left: 6px; }
+.tabla small { color: var(--texto-sec); }
+.tabla td > strong { font-weight: 600; }
+.tabla .celda-pibe { display: flex; align-items: center; gap: 10px; }
+.tabla .celda-pibe .avatar { flex: none; }
+
+/* ── Móvil: cada fila es una tarjeta ─────────────────── */
+@media (max-width: 640px) {
+  .listado-barra { gap: 8px 12px; }
+  .listado-barra .paginador { margin-left: 0; width: 100%; justify-content: center; }
+  .listado-barra-pie { justify-content: center; }
+  .listado-contador { margin-left: auto; }
+  .listado-barra-pie .listado-contador { margin: 0; }
+
+  .tabla-wrap { background: transparent; border: 0; box-shadow: none; overflow: visible; }
+  .tabla, .tabla tbody, .tabla tr, .tabla td { display: block; width: 100%; }
+  .tabla thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .tabla tbody tr,
+  .tabla tbody tr:nth-child(even) {
+    margin-bottom: 10px;
+    padding: 6px 14px;
+    background: var(--card);
+    border: 1px solid var(--borde);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+  }
+  .tabla tbody tr:hover { background: var(--card); }
+  .tabla tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+    text-align: right;
+    border-bottom: 1px dashed var(--borde);
+  }
+  .tabla tbody td:last-child { border-bottom: 0; }
+  .tabla tbody td::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--texto-sec);
+    text-align: left;
+  }
+  .tabla tbody td[data-label=""]::before { content: none; }
+  /* La primera celda (nombre) y las acciones ocupan todo el ancho. */
+  .tabla tbody td:first-child { justify-content: flex-start; text-align: left; font-size: 15px; }
+  .tabla td.acciones { justify-content: flex-end; flex-wrap: wrap; }
+  .tabla td.acciones > * { margin-left: 0; }
+  .tabla td.acciones button { min-height: 40px; }
+  .paginador .pg-btn { min-width: 40px; height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paginador .pg-btn { transition: none; }
+}
