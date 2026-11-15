@@ -273,7 +273,23 @@ Las de programación están en `20261110000000_notificaciones_programadas.sql`:
 
 Los SQLSTATE que levantan (y cómo se traducen a HTTP) están en [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#errores-de-las-funciones).
 
-## Función RPC: `buscar_pibes`
+## Función RPC: `buscar_pibes_resumen`
+
+Definida en `20261114300000_buscar_pibes_resumen.sql`. `GET /api/students/search` llama a `supabase.rpc("buscar_pibes_resumen", { p_org, p_termino, p_fecha, p_limite })`.
+
+- **Qué busca:** cada palabra del término debe aparecer en `nombre || ' ' || apellido`, sin distinguir mayúsculas ni tildes, en cualquier orden. Usa `normalizar_busqueda()` (envoltorio `IMMUTABLE` de `unaccent` + `lower`) y el índice GIN trigram `idx_pibes_busqueda_trgm`.
+- **Devuelve** por pibe: datos de la ficha, grado, edad, `visitas`, `ultima_asistencia` y `marcado_hoy` (si `p_fecha` está informada). Máximo `p_limite` (tope 100).
+- **Organización:** filtra por `p_org` adentro.
+- **Permisos:** `EXECUTE` sólo para `service_role` (la usa el backend).
+- Índices de apoyo: `asistencias(organizacion_id, fecha)` y `asistencias(pibe_id, fecha desc)`.
+
+## Funciones de ventas de buffet
+
+`20261114400000_buffet_ventas_transaccionales.sql`: `buffet_crear_venta`, `buffet_editar_venta` y `buffet_borrar_venta` (más los ayudantes `buffet_aplicar_stock`, `buffet_items_de_venta` y `buffet_insertar_items_venta`). Cada una corre en una transacción, expande los combos a productos y descuenta o devuelve el stock con `stock_current = stock_current + delta` (atómico; se permite stock negativo). Crear y editar devuelven `{id}` o `null` si el evento/venta no existe en la organización. `EXECUTE` sólo para `service_role`.
+
+## Función RPC: `buscar_pibes` (heredada)
+
+Ya no la usa el backend (la reemplazó `buscar_pibes_resumen`); sigue existiendo. `GET /api/students/search` llamaba antes a `supabase.rpc("buscar_pibes", { termino })` y encadenaba `.select(...)`.
 
 `GET /api/students/search` llama a `supabase.rpc("buscar_pibes", { termino })` y encadena `.select(...)` para traer los datos embebidos de `grados_pibes` y `edades`.
 
