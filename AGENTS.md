@@ -48,5 +48,7 @@ Aplicación web para el registro de ingreso/asistencia y gestión de buffet de u
 - No tocar RLS sin actualizar `docs/ROLES_Y_PERMISOS.md`.
 - Actualizar `CHANGELOG.md` y `docs/API.md` en cada cambio relevante.
 - No commitear `backend/.env` ni claves.
+- **Nunca correr `supabase db reset` sin avisar y pedir confirmación**, ni siquiera con `--local`: borra los datos locales que el usuario cargó a mano. Para aplicar migraciones nuevas en local usar `npx supabase migration up`; los tests (`npx supabase test db`) corren en transacciones y no borran nada. Jamás `--linked` (ver `docs/DESARROLLO_LOCAL.md`).
+- Vercel: antes de tocar `backend/vercel.json` o el despliegue leer "Deploy (Vercel)" en `docs/SETUP.md` (región `gru1`, config `builds` legacy a propósito, build que copia `frontend/` a `public/`, cómo verificar un preview protegido por login).
 - Mostrar el diff antes de aplicar cambios grandes.
 - `AGENTS.md` y `CLAUDE.md` deben tener siempre el mismo contenido. Todo cambio en uno se replica en el otro en el mismo commit.
