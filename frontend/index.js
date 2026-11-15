@@ -228,7 +228,10 @@ async function buscar(asistida = false) {
 
 
   try {
-    const res = await apiFetch(`/api/students/search?q=${encodeURIComponent(termino)}`);
+    const res = await apiFetch(
+      `/api/students/search?q=${encodeURIComponent(termino)}&date=${encodeURIComponent(getTodayInputValue())}`,
+      { signal: controller.signal }
+    );
     if (!res.ok) throw new Error("Server error");
 
     const data = await res.json();
@@ -747,12 +750,25 @@ function mostrarMultiples(chicos) {
         btn.dataset.pibeId;
 
 
-      // Al mostrar resultados,
-      // comprobamos si ya está presente.
-      verificarPresenteRapido(
-        btn,
-        id
-      );
+      // El estado "ya marcado" viene en la propia búsqueda (marcado_hoy).
+      // Sólo si el backend no lo informó se consulta por separado.
+      const chicoResultado =
+        chicos.find((c) => String(c.id) === String(id));
+
+      if (typeof chicoResultado?.marcado_hoy === "boolean") {
+
+        estadoBotonRapido(
+          btn,
+          chicoResultado.marcado_hoy
+        );
+
+      } else {
+
+        verificarPresenteRapido(
+          btn,
+          id
+        );
+      }
 
 
       btn.addEventListener(

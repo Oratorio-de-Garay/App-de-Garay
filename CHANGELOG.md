@@ -6,6 +6,16 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ## Sin publicar
 
+### Rendimiento
+- **La app iba lenta por la cantidad de viajes a Supabase por request** (la base está en São Paulo). Cambios:
+  - **Auth con caché** (`backend/api/auth.js`): el token y el contexto del usuario (roles/organizaciones) se cachean 30 s en memoria por instancia, en vez de 2 viajes a Supabase por cada request. Un cambio de roles puede tardar hasta 30 s en verse.
+  - **Región de Vercel `gru1`** (`backend/vercel.json`), cerca de la base.
+  - **Búsqueda de pibes en una sola consulta** (migración `20261114300000_buscar_pibes_resumen.sql`): nueva RPC `buscar_pibes_resumen` que filtra por organización adentro, busca por palabras (sirve "Juan Perez" y el orden da igual), limita a 30 y devuelve visitas, última asistencia y `marcado_hoy`. Antes eran ~2 consultas por resultado más un `GET /api/attendance/check` por tarjeta. Índice trigram sobre nombre+apellido e índices `asistencias(organizacion_id, fecha)` y `asistencias(pibe_id, fecha desc)`. La búsqueda anterior ahora se cancela de verdad (`AbortController`).
+  - **Ventas de buffet transaccionales** (migración `20261114400000_buffet_ventas_transaccionales.sql`): crear, editar y borrar una venta son una sola función SQL que descuenta el stock de forma atómica (corrige la condición de carrera que podía perder stock). Combos y presupuestos traen el conteo de ítems embebido (sin N+1) y se agregaron índices en `buffet_combo_items(combo_id)` y `buffet_budget_items(budget_id)`. Tras guardar o borrar una venta el frontend recarga 3 endpoints en lugar de 6.
+  - `GET /api/students/:id` hace sus 3 consultas en paralelo.
+  - **Historial agrupado en SQL** (migración `20261115000000_historial_asistencia_agrupado.sql`): `GET /api/attendance/dates` y `/top` ya no traen todas las asistencias del año para contar en JS; las funciones `asistencia_fechas` y `asistencia_top` devuelven el resultado agrupado (mismo criterio: día UTC, un pibe cuenta una vez por día). Mismas respuestas que antes.
+  - `POST /api/attendance/mark` y `DELETE /api/attendance/unmark` consultan el pibe y la asistencia del día a la vez (una espera menos).
+
 ### Cambiado
 - **Notificaciones: orden de los destinatarios.** En "Nueva notificación", la lista de usuarios muestra primero a quienes tienen dispositivos activados y después al resto; dentro de cada grupo, por nombre (`frontend/admin.js`).
 

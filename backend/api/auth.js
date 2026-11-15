@@ -13,6 +13,34 @@ const supabaseAdmin = createClient(
   }
 );
 
+// Cache en memoria (por instancia serverless caliente). Cada request pagaba dos
+// viajes a Supabase (auth.getUser + contexto_usuario) antes de hacer nada útil.
+// TTL corto: un cambio de roles/membresías tarda a lo sumo este tiempo en verse.
+const AUTH_CACHE_TTL_MS = 30_000;
+const AUTH_CACHE_MAX = 500;
+const sesionCache = new Map(); // token -> { exp, value }
+const contextoCache = new Map(); // email -> { exp, value }
+
+function cacheGet(map, key) {
+  const hit = map.get(key);
+  if (!hit) return undefined;
+  if (hit.exp < Date.now()) {
+    map.delete(key);
+    return undefined;
+  }
+  return hit.value;
+}
+
+function cacheSet(map, key, value) {
+  if (map.size >= AUTH_CACHE_MAX) map.delete(map.keys().next().value);
+  map.set(key, { exp: Date.now() + AUTH_CACHE_TTL_MS, value });
+}
+
+/** Invalida el contexto cacheado de un usuario (tras cambiarle roles/membresías). */
+export function invalidarContextoUsuario(email) {
+  if (email) contextoCache.delete(String(email).toLowerCase().trim());
+}
+
 /**
  * Valida la sesión de Supabase (Google o código por mail) sin exigir que el
  * email esté registrado. Deja en req.auth: email y nombreSugerido (el nombre
@@ -30,16 +58,22 @@ export async function requireSession(req, res, next) {
       return res.status(401).json({ error: "No autenticado" });
     }
 
-    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !userData?.user?.email) {
-      return res.status(401).json({ error: "Sesión inválida o expirada" });
+    let auth = cacheGet(sesionCache, token);
+    if (!auth) {
+      const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+      if (userError || !userData?.user?.email) {
+        return res.status(401).json({ error: "Sesión inválida o expirada" });
+      }
+
+      const metadata = userData.user.user_metadata || {};
+      auth = {
+        email: userData.user.email.toLowerCase().trim(),
+        nombreSugerido: metadata.full_name || metadata.name || null,
+      };
+      cacheSet(sesionCache, token, auth);
     }
 
-    const metadata = userData.user.user_metadata || {};
-    req.auth = {
-      email: userData.user.email.toLowerCase().trim(),
-      nombreSugerido: metadata.full_name || metadata.name || null,
-    };
+    req.auth = { ...auth };
     next();
   } catch (error) {
     console.error("Auth check error:", error);
@@ -67,10 +101,15 @@ async function resolverUsuario(req, res, next) {
 
     // Usuario, membresías y roles en una sola consulta (ver contexto_usuario
     // en supabase/migrations/20260926000000_roles_y_admin.sql).
-    const { data: contexto, error: contextoError } = await supabaseAdmin
-      .rpc("contexto_usuario", { p_email: email });
+    let contexto = cacheGet(contextoCache, email);
+    if (!contexto) {
+      const { data, error: contextoError } = await supabaseAdmin
+        .rpc("contexto_usuario", { p_email: email });
 
-    if (contextoError) throw contextoError;
+      if (contextoError) throw contextoError;
+      contexto = data;
+      cacheSet(contextoCache, email, contexto);
+    }
 
     // El code le dice al frontend que muestre la pantalla de registro
     // (solicitar sumarse a un espacio) en vez de un error.

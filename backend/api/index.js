@@ -231,26 +231,20 @@ app.delete("/api/buffet/products/:id", async (req, res) => {
 
 app.get("/api/buffet/combos", async (req, res) => {
   try {
+    // El conteo de ítems viaja embebido: una sola consulta en vez de una por combo.
     const { data, error } = await supabase
       .from("buffet_combos")
-      .select("id, name, description, sale_price, active")
+      .select("id, name, description, sale_price, active, buffet_combo_items(count)")
       .eq("organizacion_id", req.user.organizationId)
       .order("name");
     if (error) throw error;
-    const combos = await Promise.all((data || []).map(async (row) => {
-      const { count } = await supabase
-        .from("buffet_combo_items")
-        .select("*", { count: "exact", head: true })
-        .eq("combo_id", row.id)
-        .eq("organizacion_id", req.user.organizationId);
-      return {
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        sale_price: row.sale_price,
-        active: row.active,
-        items_count: count || 0,
-      };
+    const combos = (data || []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      sale_price: row.sale_price,
+      active: row.active,
+      items_count: row.buffet_combo_items?.[0]?.count || 0,
     }));
     res.json(combos);
   } catch (error) {
@@ -320,25 +314,18 @@ app.get("/api/buffet/budgets", async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("buffet_budgets")
-      .select("id, title, client_name, observation, status, total_amount")
+      .select("id, title, client_name, observation, status, total_amount, buffet_budget_items(count)")
       .eq("organizacion_id", req.user.organizationId)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    const budgets = await Promise.all((data || []).map(async (row) => {
-      const { count } = await supabase
-        .from("buffet_budget_items")
-        .select("*", { count: "exact", head: true })
-        .eq("budget_id", row.id)
-        .eq("organizacion_id", req.user.organizationId);
-      return {
-        id: row.id,
-        title: row.title,
-        client_name: row.client_name,
-        observation: row.observation,
-        status: row.status,
-        total_amount: row.total_amount,
-        items_count: count || 0,
-      };
+    const budgets = (data || []).map((row) => ({
+      id: row.id,
+      title: row.title,
+      client_name: row.client_name,
+      observation: row.observation,
+      status: row.status,
+      total_amount: row.total_amount,
+      items_count: row.buffet_budget_items?.[0]?.count || 0,
     }));
     res.json(budgets);
   } catch (error) {
@@ -531,57 +518,11 @@ app.delete("/api/buffet/events/:id", async (req, res) => {
 });
 
 
-/**
- * Traduce los ítems de una venta a un descuento (sign = -1) o devolución
- * (sign = +1) de stock por producto. Los combos se expanden a sus productos.
- * Se permite stock negativo a propósito: en las ferias del plato los productos
- * son donaciones y normalmente no tienen stock cargado.
- */
-async function applyStockDelta(items, sign, organizationId) {
-  const deltas = new Map();
-
-  for (const item of items) {
-    const quantity = Number(item.quantity) || 0;
-    if (!quantity) continue;
-
-    if (item.product_id) {
-      deltas.set(item.product_id, (deltas.get(item.product_id) || 0) + sign * quantity);
-      continue;
-    }
-
-    if (item.combo_id) {
-      const { data, error } = await supabase
-        .from("buffet_combo_items")
-        .select("product_id, quantity")
-        .eq("combo_id", item.combo_id)
-        .eq("organizacion_id", organizationId);
-      if (error) throw error;
-      for (const comboItem of data || []) {
-        const total = sign * quantity * (Number(comboItem.quantity) || 0);
-        deltas.set(comboItem.product_id, (deltas.get(comboItem.product_id) || 0) + total);
-      }
-    }
-  }
-
-  if (!deltas.size) return;
-
-  const { data: products, error: readError } = await supabase
-    .from("buffet_products")
-    .select("id, stock_current")
-    .in("id", [...deltas.keys()])
-    .eq("organizacion_id", organizationId);
-  if (readError) throw readError;
-
-  for (const product of products || []) {
-    const next = Number(product.stock_current || 0) + deltas.get(product.id);
-    const { error } = await supabase
-      .from("buffet_products")
-      .update({ stock_current: next })
-      .eq("id", product.id)
-      .eq("organizacion_id", organizationId);
-    if (error) throw error;
-  }
-}
+// El descuento/devolución de stock (expandiendo combos) ahora lo hacen en SQL,
+// de forma atómica, buffet_crear_venta / buffet_editar_venta / buffet_borrar_venta
+// (supabase/migrations/20261114400000_buffet_ventas_transaccionales.sql).
+// Se permite stock negativo a propósito: en las ferias del plato los productos
+// son donaciones y normalmente no tienen stock cargado.
 
 /**
  * Normaliza los ítems del cliente y recalcula los totales en el servidor.
@@ -662,47 +603,21 @@ app.post("/api/buffet/sales", async (req, res) => {
     if (!items.length) return res.status(400).json({ error: "La venta debe tener al menos un ítem." });
     if (!payload.event_id) return res.status(400).json({ error: "Falta el evento." });
 
-    // Buscar el evento dentro de la organización valida de paso que sea propio.
-    const { data: evento, error: eventoError } = await supabase
-      .from("buffet_eventos")
-      .select("id, nombre, fecha")
-      .eq("id", payload.event_id)
-      .eq("organizacion_id", org)
-      .maybeSingle();
-    if (eventoError) throw eventoError;
-    if (!evento) return res.status(400).json({ error: "El evento no existe." });
-
-    const { data: sale, error } = await supabase
-      .from("buffet_sales")
-      .insert({
-        sale_date: payload.sale_date || evento.fecha,
-        event_id: evento.id,
-        // Snapshot del nombre: el historial sigue legible si el evento se renombra.
-        event_name: evento.nombre,
-        payment_method: payload.payment_method || "efectivo",
-        observation: payload.observation || null,
-        total_amount: total,
-        organizacion_id: org,
-      })
-      .select("id")
-      .single();
+    // Una sola transacción en la base: valida que el evento sea de la
+    // organización, crea la venta y los ítems y descuenta el stock.
+    const { data: created, error } = await supabase.rpc("buffet_crear_venta", {
+      p_org: org,
+      p_event_id: payload.event_id,
+      p_sale_date: payload.sale_date || null,
+      p_payment_method: payload.payment_method || "efectivo",
+      p_observation: payload.observation || null,
+      p_total: total,
+      p_items: items,
+    });
     if (error) throw error;
+    if (!created) return res.status(400).json({ error: "El evento no existe." });
 
-    // Supabase JS no ofrece transacciones: si algo falla después de crear la
-    // cabecera la borramos a mano para no dejar ventas vacías o a medio aplicar.
-    try {
-      const { error: itemsError } = await supabase
-        .from("buffet_sale_items")
-        .insert(items.map((item) => ({ ...item, sale_id: sale.id, organizacion_id: org })));
-      if (itemsError) throw itemsError;
-
-      await applyStockDelta(items, -1, org);
-    } catch (inner) {
-      await supabase.from("buffet_sales").delete().eq("id", sale.id).eq("organizacion_id", org);
-      throw inner;
-    }
-
-    res.status(201).json({ id: sale.id, total_amount: total });
+    res.status(201).json({ id: created.id, total_amount: total });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -715,49 +630,18 @@ app.patch("/api/buffet/sales/:id", async (req, res) => {
     const { items, total } = normalizeSaleItems(payload.items);
     if (!items.length) return res.status(400).json({ error: "La venta debe tener al menos un ítem." });
 
-    const { data: existing, error: existingError } = await supabase
-      .from("buffet_sales")
-      .select("id")
-      .eq("id", req.params.id)
-      .eq("organizacion_id", org)
-      .maybeSingle();
-    if (existingError) throw existingError;
-    if (!existing) return res.status(404).json({ error: "La venta no existe." });
-
-    // Se devuelve el stock de los ítems viejos antes de aplicar los nuevos:
-    // reemplazar el carrito entero es más simple que calcular la diferencia.
-    const { data: oldItems, error: oldItemsError } = await supabase
-      .from("buffet_sale_items")
-      .select("product_id, combo_id, quantity")
-      .eq("sale_id", req.params.id)
-      .eq("organizacion_id", org);
-    if (oldItemsError) throw oldItemsError;
-    await applyStockDelta(oldItems || [], 1, org);
-
-    const { error: deleteError } = await supabase
-      .from("buffet_sale_items")
-      .delete()
-      .eq("sale_id", req.params.id)
-      .eq("organizacion_id", org);
-    if (deleteError) throw deleteError;
-
-    const { error: itemsError } = await supabase
-      .from("buffet_sale_items")
-      .insert(items.map((item) => ({ ...item, sale_id: req.params.id, organizacion_id: org })));
-    if (itemsError) throw itemsError;
-
-    await applyStockDelta(items, -1, org);
-
-    const { error: updateError } = await supabase
-      .from("buffet_sales")
-      .update({
-        payment_method: payload.payment_method || "efectivo",
-        observation: payload.observation || null,
-        total_amount: total,
-      })
-      .eq("id", req.params.id)
-      .eq("organizacion_id", org);
-    if (updateError) throw updateError;
+    // Reemplaza el carrito entero dentro de una transacción (devuelve el stock
+    // de los ítems viejos y descuenta el de los nuevos).
+    const { data: updated, error } = await supabase.rpc("buffet_editar_venta", {
+      p_org: org,
+      p_sale: req.params.id,
+      p_payment_method: payload.payment_method || "efectivo",
+      p_observation: payload.observation || null,
+      p_total: total,
+      p_items: items,
+    });
+    if (error) throw error;
+    if (!updated) return res.status(404).json({ error: "La venta no existe." });
 
     res.json({ id: req.params.id, total_amount: total });
   } catch (error) {
@@ -768,20 +652,10 @@ app.patch("/api/buffet/sales/:id", async (req, res) => {
 app.delete("/api/buffet/sales/:id", async (req, res) => {
   try {
     const org = req.user.organizationId;
-    const { data: items, error: itemsError } = await supabase
-      .from("buffet_sale_items")
-      .select("product_id, combo_id, quantity")
-      .eq("sale_id", req.params.id)
-      .eq("organizacion_id", org);
-    if (itemsError) throw itemsError;
-
-    await applyStockDelta(items || [], 1, org);
-
-    const { error } = await supabase
-      .from("buffet_sales")
-      .delete()
-      .eq("id", req.params.id)
-      .eq("organizacion_id", org);
+    const { error } = await supabase.rpc("buffet_borrar_venta", {
+      p_org: org,
+      p_sale: req.params.id,
+    });
     if (error) throw error;
     res.json({ ok: true });
   } catch (error) {
@@ -889,55 +763,45 @@ app.get(
 
     try {
 
-      const { q } = req.query;
+      const { q, date } = req.query;
 
 
       if (
-        !q ||
+        typeof q !== "string" ||
         q.trim().length === 0
       ) {
 
         return res.json([]);
       }
 
+      // Opcional (YYYY-MM-DD): si viene, cada pibe trae marcado_hoy para esa
+      // fecha y el frontend no necesita un /attendance/check por tarjeta.
+      const fecha =
+        typeof date === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(date)
+          ? date
+          : null;
 
+
+      // Una sola consulta: pibes de la organización + visitas + última
+      // asistencia + marcado_hoy (ver buscar_pibes_resumen en
+      // supabase/migrations/20261114300000_buscar_pibes_resumen.sql).
       const {
         data,
         error,
-      } = await supabase
-
-        .rpc(
-          "buscar_pibes",
-          {
-            termino:
-              sanitizeSearchTerm(q),
-          }
-        )
-
-        .select(
-          `
-          id,
-          nombre,
-          apellido,
-          entrego_ficha,
-          observaciones,
-          telefono_emergencia,
-          grados_pibes (
-            id,
-            nivel,
-            grado
-          ),
-          edades (
-            id,
-            nombre
-          )
-          `
-        )
-
-        .eq(
-          "organizacion_id",
-          req.user.organizationId
-        );
+      } = await supabase.rpc(
+        "buscar_pibes_resumen",
+        {
+          p_org:
+            req.user.organizationId,
+          p_termino:
+            sanitizeSearchTerm(q),
+          p_fecha:
+            fecha,
+          p_limite:
+            30,
+        }
+      );
 
 
       if (error) {
@@ -946,121 +810,61 @@ app.get(
 
 
       const pibesConVisitas =
-        await Promise.all(
+        (data || []).map(
+          (pibe) => ({
 
-          data.map(
-            async (pibe) => {
+            id: pibe.id,
 
-              const {
-                count,
-                error: visitError,
-              } = await supabase
+            nombre:
+              pibe.nombre,
 
-                .from("asistencias")
+            apellido:
+              pibe.apellido,
 
-                .select(
-                  "*",
-                  {
-                    count: "exact",
-                    head: true,
-                  }
-                )
+            nombreCompleto:
+              `${pibe.nombre} ${pibe.apellido}`,
 
-                .eq(
-                  "pibe_id",
-                  pibe.id
-                )
+            grado_id:
+              pibe.grado_id ??
+              null,
 
-                .eq(
-                  "organizacion_id",
-                  req.user.organizationId
-                );
+            grado:
+              pibe.grado_id
+                ? gradoLabel({
+                    nivel: pibe.grado_nivel,
+                    grado: pibe.grado_numero,
+                  })
+                : null,
 
+            edad_id:
+              pibe.edad_id ??
+              null,
 
-              if (visitError) {
-                throw visitError;
-              }
-              const {
-  data: ultimaAsistencia,
-  error: ultimaAsistenciaError,
-} = await supabase
+            edad:
+              pibe.edad_nombre ??
+              null,
 
-  .from("asistencias")
+            ficha:
+              pibe.entrego_ficha,
 
-  .select("fecha")
+            obs:
+              pibe.observaciones,
 
-  .eq(
-    "pibe_id",
-    pibe.id
-  )
+            telefono:
+              pibe.telefono_emergencia,
 
-  .eq(
-    "organizacion_id",
-    req.user.organizationId
-  )
+            visitas:
+              Number(pibe.visitas) || 0,
 
-  .order(
-    "fecha",
-    { ascending: false }
-  )
+            ultima_asistencia:
+              pibe.ultima_asistencia ||
+              null,
 
-  .limit(1)
-
-  .maybeSingle();
-
-
-if (ultimaAsistenciaError) {
-  throw ultimaAsistenciaError;
-}
-
-
-              return {
-
-                id: pibe.id,
-
-                nombre:
-                  pibe.nombre,
-
-                apellido:
-                  pibe.apellido,
-
-                nombreCompleto:
-                  `${pibe.nombre} ${pibe.apellido}`,
-
-                grado_id:
-                  pibe.grados_pibes?.id ??
-                  null,
-
-                grado:
-                  gradoLabel(
-                    pibe.grados_pibes
-                  ),
-
-                edad_id:
-                  pibe.edades?.id ??
-                  null,
-
-                edad:
-                  pibe.edades?.nombre ??
-                  null,
-
-                ficha:
-                  pibe.entrego_ficha,
-
-                obs:
-                  pibe.observaciones,
-
-                telefono:
-                  pibe.telefono_emergencia,
-
-                visitas:
-                  count || 0,
-
-                ultima_asistencia:
-  ultimaAsistencia?.fecha ||  null,
-              };
-            }
-          )
+            marcado_hoy:
+              fecha
+                ? Boolean(pibe.marcado_hoy)
+                : null,
+          })
         );
 
 
@@ -1175,23 +979,48 @@ app.post(
       // Si no, se podría marcar asistencia sobre un pibe ajeno.
       // ==================================================
 
-      const {
-        data: pibeDeLaOrg,
-        error: pibeError,
-      } = await supabase
+      // Se consultan a la vez el pibe y la asistencia del día (no dependen una
+      // de otra y las dos filtran por organización): una espera en vez de dos.
+      const inicio =
+        new Date(
+          `${fecha}T00:00:00.000Z`
+        );
 
-        .from("pibes")
+      const fin =
+        new Date(inicio);
 
-        .select("id")
+      fin.setUTCDate(
+        fin.getUTCDate() + 1
+      );
 
-        .eq("id", student_id)
 
-        .eq(
-          "organizacion_id",
-          req.user.organizationId
-        )
+      const [
+        { data: pibeDeLaOrg, error: pibeError },
+        { data: asistenciaExistente, error: buscarError },
+      ] = await Promise.all([
 
-        .maybeSingle();
+        supabase
+          .from("pibes")
+          .select("id")
+          .eq("id", student_id)
+          .eq(
+            "organizacion_id",
+            req.user.organizationId
+          )
+          .maybeSingle(),
+
+        supabase
+          .from("asistencias")
+          .select("id")
+          .eq("pibe_id", student_id)
+          .eq(
+            "organizacion_id",
+            req.user.organizationId
+          )
+          .gte("fecha", inicio.toISOString())
+          .lt("fecha", fin.toISOString())
+          .limit(1),
+      ]);
 
 
       if (pibeError) {
@@ -1208,55 +1037,6 @@ app.post(
               "El pibe no existe en tu organización",
           });
       }
-
-
-      // ==================================================
-      // COMPROBAR SI YA TIENE PRESENTE ESE DÍA
-      // ==================================================
-
-      const inicio =
-        new Date(
-          `${fecha}T00:00:00.000Z`
-        );
-
-      const fin =
-        new Date(inicio);
-
-      fin.setUTCDate(
-        fin.getUTCDate() + 1
-      );
-
-
-      const {
-        data: asistenciaExistente,
-        error: buscarError,
-      } = await supabase
-
-        .from("asistencias")
-
-        .select("id")
-
-        .eq(
-          "pibe_id",
-          student_id
-        )
-
-        .eq(
-          "organizacion_id",
-          req.user.organizationId
-        )
-
-        .gte(
-          "fecha",
-          inicio.toISOString()
-        )
-
-        .lt(
-          "fecha",
-          fin.toISOString()
-        )
-
-        .limit(1);
 
 
       if (buscarError) {
@@ -1340,27 +1120,33 @@ app.delete(
       if (!student_id || !fecha) {
         return res.status(400).json({ error: "Missing student_id or fecha" });
       }
-      const { data: pibeDeLaOrg, error: pibeError } = await supabase
-        .from("pibes")
-        .select("id")
-        .eq("id", student_id)
-        .eq("organizacion_id", req.user.organizationId)
-        .maybeSingle();
+      const inicio = new Date(fecha + "T00:00:00.000Z");
+      const fin = new Date(inicio);
+      fin.setUTCDate(fin.getUTCDate() + 1);
+      // El pibe y la asistencia del día se consultan a la vez (ambos filtran por organización).
+      const [
+        { data: pibeDeLaOrg, error: pibeError },
+        { data: asistenciaExistente, error: buscarError },
+      ] = await Promise.all([
+        supabase
+          .from("pibes")
+          .select("id")
+          .eq("id", student_id)
+          .eq("organizacion_id", req.user.organizationId)
+          .maybeSingle(),
+        supabase
+          .from("asistencias")
+          .select("id")
+          .eq("pibe_id", student_id)
+          .eq("organizacion_id", req.user.organizationId)
+          .gte("fecha", inicio.toISOString())
+          .lt("fecha", fin.toISOString())
+          .limit(1),
+      ]);
       if (pibeError) throw pibeError;
       if (!pibeDeLaOrg) {
         return res.status(404).json({ error: "El pibe no existe en tu organización" });
       }
-      const inicio = new Date(fecha + "T00:00:00.000Z");
-      const fin = new Date(inicio);
-      fin.setUTCDate(fin.getUTCDate() + 1);
-      const { data: asistenciaExistente, error: buscarError } = await supabase
-        .from("asistencias")
-        .select("id")
-        .eq("pibe_id", student_id)
-        .eq("organizacion_id", req.user.organizationId)
-        .gte("fecha", inicio.toISOString())
-        .lt("fecha", fin.toISOString())
-        .limit(1);
       if (buscarError) throw buscarError;
       if (!asistenciaExistente || asistenciaExistente.length === 0) {
         return res.status(404).json({ error: "No hay asistencia registrada para ese día" });
@@ -1531,9 +1317,17 @@ app.get("/api/students/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { data: pibe, error } = await supabase
-      .from("pibes")
-      .select(`
+    // Las tres consultas son independientes: van en paralelo (una sola espera).
+    // Las de asistencias también filtran por organización, así que si el pibe
+    // es de otra no devuelven nada que se pueda filtrar.
+    const [
+      { data: pibe, error },
+      { count, error: visitError },
+      { data: ultimaAsistencia, error: ultimaAsistenciaError },
+    ] = await Promise.all([
+      supabase
+        .from("pibes")
+        .select(`
         id,
         nombre,
         apellido,
@@ -1550,39 +1344,28 @@ app.get("/api/students/:id", async (req, res) => {
           nombre
         )
       `)
-      .eq("id", id)
-      .eq("organizacion_id", req.user.organizationId)
-      .maybeSingle();
+        .eq("id", id)
+        .eq("organizacion_id", req.user.organizationId)
+        .maybeSingle(),
+      supabase
+        .from("asistencias")
+        .select("id", { count: "exact", head: true })
+        .eq("pibe_id", id)
+        .eq("organizacion_id", req.user.organizationId),
+      supabase
+        .from("asistencias")
+        .select("fecha")
+        .eq("pibe_id", id)
+        .eq("organizacion_id", req.user.organizationId)
+        .order("fecha", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
     if (error) throw error;
     if (!pibe) return res.status(404).json({ error: "Pibe no encontrado" });
-
-    const { count, error: visitError } = await supabase
-      .from("asistencias")
-      .select("*", {
-        count: "exact",
-        head: true
-      })
-      .eq("pibe_id", id)
-      .eq("organizacion_id", req.user.organizationId);
-
     if (visitError) throw visitError;
-
-const {
-  data: ultimaAsistencia,
-  error: ultimaAsistenciaError
-} = await supabase
-  .from("asistencias")
-  .select("fecha")
-  .eq("pibe_id", id)
-  .eq("organizacion_id", req.user.organizationId)
-  .order("fecha", { ascending: false })
-  .limit(1)
-  .maybeSingle();
-
-if (ultimaAsistenciaError) {
-  throw ultimaAsistenciaError;
-}
+    if (ultimaAsistenciaError) throw ultimaAsistenciaError;
 
     res.json({
       id: pibe.id,
@@ -1737,46 +1520,20 @@ app.get(
         new Date().getFullYear();
 
 
-      const desde =
-        `${year}-01-01T00:00:00.000Z`;
-
-
-      const hasta =
-        `${year + 1}-01-01T00:00:00.000Z`;
-
-
+      // La base ya devuelve una fila por día (ver asistencia_fechas en
+      // supabase/migrations/20261115000000_historial_asistencia_agrupado.sql).
       const {
         data,
         error,
-      } = await supabase
-
-        .from("asistencias")
-
-        .select(
-          "fecha, pibe_id"
-        )
-
-        .eq(
-          "organizacion_id",
-          req.user.organizationId
-        )
-
-        .gte(
-          "fecha",
-          desde
-        )
-
-        .lt(
-          "fecha",
-          hasta
-        )
-
-        .order(
-          "fecha",
-          {
-            ascending: false,
-          }
-        );
+      } = await supabase.rpc(
+        "asistencia_fechas",
+        {
+          p_org:
+            req.user.organizationId,
+          p_anio:
+            year,
+        }
+      );
 
 
       if (error) {
@@ -1784,86 +1541,15 @@ app.get(
       }
 
 
-      // Agrupamos las asistencias por día
-      const fechas = {};
-
-
-      for (
-        const asistencia
-        of data || []
-      ) {
-
-        if (
-          !asistencia.fecha
-        ) {
-          continue;
-        }
-
-
-        const fecha =
-          String(
-            asistencia.fecha
-          ).slice(
-            0,
-            10
-          );
-
-
-        if (
-          !fechas[fecha]
-        ) {
-
-          fechas[fecha] = {
-
-            fecha,
-
-            total: 0,
-
-            pibes:
-              new Set(),
-
-          };
-        }
-
-
-        // Evita contar dos veces
-        // al mismo chico el mismo día
-        if (
-          asistencia.pibe_id
-        ) {
-
-          fechas[
-            fecha
-          ].pibes.add(
-            asistencia.pibe_id
-          );
-        }
-      }
-
-
       const resultado =
-        Object.values(
-          fechas
-        )
-
-          .map(
-            (item) => ({
-
-              fecha:
-                item.fecha,
-
-              total:
-                item.pibes.size,
-
-            })
-          )
-
-          .sort(
-            (a, b) =>
-              b.fecha.localeCompare(
-                a.fecha
-              )
-          );
+        (data || []).map(
+          (row) => ({
+            fecha:
+              String(row.fecha).slice(0, 10),
+            total:
+              Number(row.total) || 0,
+          })
+        );
 
 
       res.json(
@@ -1895,72 +1581,25 @@ app.get("/api/attendance/top", async (req, res) => {
       Number(req.query.year) ||
       new Date().getFullYear();
 
-    const desde =
-      `${year}-01-01T00:00:00.000Z`;
-
-    const hasta =
-      `${year + 1}-01-01T00:00:00.000Z`;
-
-    const { data, error } = await supabase
-      .from("asistencias")
-      .select(`
-        fecha,
-        pibe_id,
-        pibes (
-          id,
-          nombre,
-          apellido
-        )
-      `)
-      .eq("organizacion_id", req.user.organizationId)
-      .gte("fecha", desde)
-      .lt("fecha", hasta);
+    // La base cuenta los días distintos por pibe y devuelve los del podio
+    // (con empatados); acá sólo se desempata por nombre.
+    const { data, error } = await supabase.rpc("asistencia_top", {
+      p_org: req.user.organizationId,
+      p_anio: year,
+    });
 
     if (error) throw error;
 
-    const contador = {};
-
-    // Evitamos contar dos veces al mismo chico
-    // el mismo día si hubiera una asistencia duplicada.
-    const asistenciasUnicas = new Set();
-
-    for (const row of data || []) {
-      if (!row.pibe_id || !row.fecha) continue;
-
-      const fecha = String(row.fecha).slice(0, 10);
-
-      const clave =
-        `${row.pibe_id}-${fecha}`;
-
-      if (asistenciasUnicas.has(clave)) {
-        continue;
-      }
-
-      asistenciasUnicas.add(clave);
-
-      const pibe =
-        Array.isArray(row.pibes)
-          ? row.pibes[0]
-          : row.pibes;
-
-      if (!pibe) continue;
-
-      if (!contador[pibe.id]) {
-        contador[pibe.id] = {
+    const top3 =
+      (data || [])
+        .map((pibe) => ({
           id: pibe.id,
           nombre: pibe.nombre,
           apellido: pibe.apellido,
           nombreCompleto:
             `${pibe.nombre} ${pibe.apellido}`,
-          total: 0
-        };
-      }
-
-      contador[pibe.id].total++;
-    }
-
-    const top3 =
-      Object.values(contador)
+          total: Number(pibe.total) || 0,
+        }))
         .sort((a, b) => {
           if (b.total !== a.total) {
             return b.total - a.total;

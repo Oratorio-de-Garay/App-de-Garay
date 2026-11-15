@@ -60,6 +60,25 @@ async function loadBuffet() {
   renderBudgets();
 }
 
+// Una venta sólo cambia el stock de los productos, los totales de los eventos y
+// la lista de ventas: se recargan esos 3 endpoints en vez de los 6 de loadBuffet.
+async function refreshAfterSale() {
+  const eventId = buffetState.currentEvent?.id;
+  const [products, events, sales] = await Promise.all([
+    apiGet("/api/buffet/products"),
+    apiGet("/api/buffet/events"),
+    eventId ? apiGet(`/api/buffet/sales?event_id=${encodeURIComponent(eventId)}`) : Promise.resolve({}),
+  ]);
+  buffetState.products = products || [];
+  buffetState.events = events || [];
+  buffetState.sales = sales.sales || [];
+  buffetState.salesSummary = sales.summary || { sales_count: 0, total_amount: 0 };
+  if (eventId) buffetState.currentEvent = buffetState.events.find((e) => e.id === eventId) || null;
+  renderDashboard();
+  renderProducts();
+  renderSales();
+}
+
 async function apiGet(path, options = {}) {
   const res = await window.apiFetch(path, options);
   if (!res.ok) throw new Error(await res.text());
@@ -490,7 +509,7 @@ function deleteEvent(id) {
 
 function deleteSale(id) {
   if (!confirm("¿Eliminar esta venta? Se devolverá el stock descontado.")) return;
-  apiSend(`/api/buffet/sales/${id}`, "DELETE", {}).then(loadBuffet).catch((e) => alert(e.message));
+  apiSend(`/api/buffet/sales/${id}`, "DELETE", {}).then(refreshAfterSale).catch((e) => alert(e.message));
 }
 
 function openSaleForm(evento, venta = null) {
@@ -688,7 +707,7 @@ function openSaleForm(evento, venta = null) {
       };
       if (venta) await apiSend(`/api/buffet/sales/${venta.id}`, "PATCH", payload);
       else await apiSend("/api/buffet/sales", "POST", { ...payload, event_id: evento.id });
-      await loadBuffet();
+      await refreshAfterSale();
     },
   });
 }
