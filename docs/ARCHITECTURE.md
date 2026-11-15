@@ -33,6 +33,8 @@ frontend/
   manifest.json / icon.svg ← PWA mínima (requerida por iOS para recibir push)
   index.js / buffet.js / admin.js ← lógica de UI de cada página
   base.css (+ buffet.css, admin.css)
+  utils/paginacion.js ← listados paginados reutilizables (crearListadoPaginado) + inicialesDe()
+  utils/tabla.css     ← estilo de tablas/tarjetas responsive y del paginador
 supabase/
   migrations/  ← migraciones versionadas (fuente de verdad del schema, ver DATABASE.md)
   templates/   ← plantilla del mail con el código de login
@@ -80,6 +82,17 @@ Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El o
 - **Guard de carreras**: `renderRequestId` (contador incremental) + `AbortController` (`activeSearchController`) descartan respuestas de búsquedas viejas si el usuario siguió tipeando o disparó otra acción mientras la request estaba en vuelo.
 - **Backend "gordo", frontend "tonto"**: toda lógica de negocio (armar el label de grado, contar visitas, evitar asistencias duplicadas el mismo día, rankings) vive en `backend/api/index.js`. El frontend sólo pide datos ya resueltos y los pinta.
 - **Forma de respuesta consistente para un "pibe"**: los distintos endpoints que devuelven personas (`/api/students/search`, `/api/students/:id`, `/api/attendance/by-date`) devuelven la misma forma de objeto (`id, nombre, apellido, nombreCompleto, grado_id, grado, edad_id, edad, ficha, obs, telefono, ...`). Si agregás un endpoint nuevo que devuelve pibes, mantené esa forma.
+
+## Listados y paginación
+
+Todos los listados (búsqueda y presentes por fecha en Registro; productos, eventos, ventas, combos y presupuestos en Buffet; usuarios, solicitudes, roles, organizaciones, envíos, dispositivos y actividad en Admin) usan `crearListadoPaginado()` de `frontend/utils/paginacion.js`. **Los listados nuevos también deben usarlo**, no armar su propio `array.map(...).join("")`.
+
+- **Librería:** [tui-pagination](https://github.com/nhn/tui.pagination) 3.4.1 (sólo el control de páginas), cargada desde jsDelivr con versión fija y SRI, con `usageStatistics: false` (por defecto envía el hostname a Google Analytics). El HTML de las filas es nuestro.
+- **Paginación del lado del cliente:** cada pantalla ya tiene el array completo en memoria (`buffetState`, `adminState`, respuesta de la búsqueda), así que cambiar de página o de tamaño no hace requests y sólo se pinta el `<tbody>` de la página visible. Ese estado en memoria es la caché; no se agregó caché HTTP. Si algún listado llegara a tener miles de filas habría que pasar a paginación en el servidor (`limit/offset` o keyset).
+- **Tamaños:** 10, 25, 50, 100 y 200 (por defecto 25), recordado por listado en `localStorage` (`paginacion:<clave>`). Controles arriba y abajo de la tabla, sincronizados; las flechas quedan grises en la primera y última página.
+- **Responsive:** tabla en desktop; bajo 640 px cada fila pasa a tarjeta con la etiqueta de cada columna (`data-label`).
+- **Acciones por delegación:** `acciones: { "[data-x]": (el, item) => ... }` y `onFila` reciben el ítem, no el DOM; no hace falta enganchar listeners por botón.
+- **Conservar página:** `setItems(items, { mantenerPagina: true })` mantiene la última página vista de esa `clave` (útil cuando el panel se repinta tras editar o borrar); sin la opción se vuelve a la página 1 (filtros).
 
 ## Convenciones de código
 

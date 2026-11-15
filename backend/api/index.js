@@ -799,7 +799,7 @@ app.get(
           p_fecha:
             fecha,
           p_limite:
-            30,
+            100,
         }
       );
 

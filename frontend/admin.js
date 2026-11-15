@@ -190,8 +190,39 @@ function renderUsuarios() {
         </select>` : ""}
       <button class="admin-btn admin-btn-primary" id="btn-alta" type="button">+ Dar de alta</button>
     </div>
-    <div class="admin-list" id="usuarios-list"></div>
+    <div id="usuarios-list"></div>
   `;
+
+  listaUsuarios = crearListadoPaginado({
+    contenedor: document.getElementById("usuarios-list"),
+    clave: "admin-usuarios",
+    columnas: [
+      { titulo: "Usuario" },
+      { titulo: "Roles" },
+      { titulo: "Organizaciones" },
+      { titulo: "", clase: "acciones" },
+    ],
+    renderFila: (u) => [
+      celdaPersona(u.nombre || u.email, u.nombre ? u.email : ""),
+      u.roles.map(rolBadgeHtml).join("") || '<span class="field-hint">Sin roles</span>',
+      u.organizaciones.length
+        ? u.organizaciones.map((o) => `<span class="org-chip">${escapeHtml(o.nombre)}</span>`).join("")
+        : '<span class="field-hint">Sin organizaciones</span>',
+      u.editable ? `
+        <button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-editar>Editar</button>
+        ${u.organizaciones.length ? '<button class="admin-icon-btn danger" type="button" data-quitar>Quitar acceso</button>' : ""}
+      ` : `
+        <span class="lock-note" title="Sólo un superadmin puede modificar a un administrador">${ICONOS.candado} Sólo superadmin</span>
+      `,
+    ],
+    vacio: () => adminState.usuarios.length
+      ? estadoVacio(ICONOS.buscar, "Sin resultados", "Ningún usuario coincide con la búsqueda.")
+      : estadoVacio(ICONOS.usuarios, "Todavía no hay usuarios", "Dá de alta el primer email para que esa persona pueda entrar con su cuenta de Google."),
+    acciones: {
+      "[data-editar]": (_el, u) => abrirFormUsuario(u),
+      "[data-quitar]": (_el, u) => confirmarQuitarAcceso(u),
+    },
+  });
 
   // Sólo se repinta la lista: repintar el panel entero le sacaría el foco al buscador.
   document.getElementById("usuarios-q").addEventListener("input", (e) => {
@@ -204,8 +235,10 @@ function renderUsuarios() {
   });
   document.getElementById("btn-alta").addEventListener("click", () => abrirFormUsuario(null));
 
-  renderListaUsuarios();
+  renderListaUsuarios({ mantenerPagina: true });
 }
+
+let listaUsuarios = null;
 
 function usuariosFiltrados() {
   const q = normalizarBusqueda(adminState.filtro.q);
@@ -217,51 +250,8 @@ function usuariosFiltrados() {
   });
 }
 
-function renderListaUsuarios() {
-  const lista = document.getElementById("usuarios-list");
-  const usuarios = usuariosFiltrados();
-
-  if (!adminState.usuarios.length) {
-    lista.innerHTML = estadoVacio(ICONOS.usuarios, "Todavía no hay usuarios", "Dá de alta el primer email para que esa persona pueda entrar con su cuenta de Google.");
-    return;
-  }
-  if (!usuarios.length) {
-    lista.innerHTML = estadoVacio(ICONOS.buscar, "Sin resultados", "Ningún usuario coincide con la búsqueda.");
-    return;
-  }
-
-  lista.innerHTML = usuarios.map((u) => `
-    <article class="admin-card admin-row">
-      ${avatarHtml(u.nombre || u.email, u.email)}
-      <div class="row-main">
-        <div class="row-title">
-          <span>${escapeHtml(u.nombre || u.email)}</span>
-          ${u.roles.map(rolBadgeHtml).join("")}
-        </div>
-        ${u.nombre ? `<div class="row-sub">${escapeHtml(u.email)}</div>` : ""}
-        <div class="row-tags">
-          ${u.organizaciones.length
-            ? u.organizaciones.map((o) => `<span class="org-chip">${escapeHtml(o.nombre)}</span>`).join("")
-            : '<span class="field-hint">Sin organizaciones</span>'}
-        </div>
-      </div>
-      <div class="row-actions">
-        ${u.editable ? `
-          <button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-editar="${u.id}">Editar</button>
-          ${u.organizaciones.length ? `<button class="admin-icon-btn danger" type="button" data-quitar="${u.id}">Quitar acceso</button>` : ""}
-        ` : `
-          <span class="lock-note" title="Sólo un superadmin puede modificar a un administrador">${ICONOS.candado} Sólo superadmin</span>
-        `}
-      </div>
-    </article>
-  `).join("");
-
-  lista.querySelectorAll("[data-editar]").forEach((btn) => {
-    btn.addEventListener("click", () => abrirFormUsuario(usuarioPorId(btn.dataset.editar)));
-  });
-  lista.querySelectorAll("[data-quitar]").forEach((btn) => {
-    btn.addEventListener("click", () => confirmarQuitarAcceso(usuarioPorId(btn.dataset.quitar)));
-  });
+function renderListaUsuarios({ mantenerPagina = false } = {}) {
+  listaUsuarios.setItems(usuariosFiltrados(), { mantenerPagina });
 }
 
 /** Alta (usuario = null) o edición de un usuario. */
@@ -371,7 +361,7 @@ const ESTADOS_SOLICITUD = {
   cancelada: { nombre: "Cancelada", plural: "Canceladas" },
 };
 
-function renderSolicitudes() {
+function renderSolicitudes({ reiniciar = false } = {}) {
   const panel = document.getElementById("panel-solicitudes");
   const pendientes = adminState.solicitudes.filter((s) => s.estado === "pendiente").length;
 
@@ -394,57 +384,54 @@ function renderSolicitudes() {
         <option value=""${adminState.filtroSolicitudes === "" ? " selected" : ""}>Todas (${cuenta("")})</option>
       </select>
     </div>
-    <div class="admin-list" id="solicitudes-list"></div>
+    <div id="solicitudes-list"></div>
   `;
 
+  listaSolicitudes = crearListadoPaginado({
+    contenedor: document.getElementById("solicitudes-list"),
+    clave: "admin-solicitudes",
+    columnas: [
+      { titulo: "Solicitante" },
+      { titulo: "Pedido" },
+      { titulo: "Estado" },
+      { titulo: "", clase: "acciones" },
+    ],
+    renderFila: (s) => {
+      const pendiente = s.estado === "pendiente";
+      const mia = s.aprobador_email === adminState.me.email;
+      return [
+        celdaPersona(s.solicitante_nombre, `${s.solicitante_email} · #${s.numero} · ${formatearFecha(s.created_at)}`, s.solicitante_email),
+        `<div class="solicitud-pedido">${pedidoSolicitudHtml(s)}</div>${aprobadorSolicitudHtml(s)}`,
+        estadoSolicitudHtml(s.estado),
+        `${pendiente && !mia ? `<button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-tomar>${s.aprobador_id ? "Reasignarme" : "Tomar"}</button>` : ""}
+         <button class="admin-btn ${pendiente ? "admin-btn-primary" : "admin-btn-ghost"} admin-btn-sm" type="button" data-revisar>${pendiente ? "Revisar" : "Ver"}</button>`,
+      ];
+    },
+    vacio: () => adminState.filtroSolicitudes === "pendiente"
+      ? estadoVacio(ICONOS.bandeja, "No hay solicitudes pendientes", "Cuando alguien se registre y pida sumarse, te llega un mail y aparece acá.")
+      : estadoVacio(ICONOS.bandeja, "Sin solicitudes", "No hay solicitudes en este estado."),
+    acciones: {
+      "[data-tomar]": (btn, s) => tomarSolicitud(s, btn),
+      "[data-revisar]": (_el, s) => abrirSolicitud(s),
+    },
+  });
+
+  // Al cambiar el filtro se repinta el panel (cambian los contadores) y se vuelve a la página 1.
   panel.querySelector("#solicitudes-estado").addEventListener("change", (e) => {
     adminState.filtroSolicitudes = e.target.value;
-    renderSolicitudes();
+    renderSolicitudes({ reiniciar: true });
   });
-  renderListaSolicitudes();
+  renderListaSolicitudes({ mantenerPagina: !reiniciar });
 }
 
-function renderListaSolicitudes() {
-  const lista = document.getElementById("solicitudes-list");
+let listaSolicitudes = null;
+
+function renderListaSolicitudes({ mantenerPagina = false } = {}) {
   const filtro = adminState.filtroSolicitudes;
-  const solicitudes = adminState.solicitudes.filter((s) => !filtro || s.estado === filtro);
-
-  if (!solicitudes.length) {
-    lista.innerHTML = filtro === "pendiente"
-      ? estadoVacio(ICONOS.bandeja, "No hay solicitudes pendientes", "Cuando alguien se registre y pida sumarse, te llega un mail y aparece acá.")
-      : estadoVacio(ICONOS.bandeja, "Sin solicitudes", "No hay solicitudes en este estado.");
-    return;
-  }
-
-  lista.innerHTML = solicitudes.map((s) => {
-    const pendiente = s.estado === "pendiente";
-    const mia = s.aprobador_email === adminState.me.email;
-    return `
-      <article class="admin-card admin-row solicitud-row">
-        ${avatarHtml(s.solicitante_nombre, s.solicitante_email)}
-        <div class="row-main">
-          <div class="row-title">
-            <span>${escapeHtml(s.solicitante_nombre)}</span>
-            ${estadoSolicitudHtml(s.estado)}
-          </div>
-          <div class="row-sub">${escapeHtml(s.solicitante_email)} · #${escapeHtml(s.numero)} · ${escapeHtml(formatearFecha(s.created_at))}</div>
-          <div class="solicitud-pedido">${pedidoSolicitudHtml(s)}</div>
-          ${aprobadorSolicitudHtml(s)}
-        </div>
-        <div class="row-actions">
-          ${pendiente && !mia ? `<button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-tomar="${s.id}">${s.aprobador_id ? "Reasignarme" : "Tomar"}</button>` : ""}
-          <button class="admin-btn ${pendiente ? "admin-btn-primary" : "admin-btn-ghost"} admin-btn-sm" type="button" data-revisar="${s.id}">${pendiente ? "Revisar" : "Ver"}</button>
-        </div>
-      </article>
-    `;
-  }).join("");
-
-  lista.querySelectorAll("[data-tomar]").forEach((btn) => {
-    btn.addEventListener("click", () => tomarSolicitud(solicitudPorId(btn.dataset.tomar), btn));
-  });
-  lista.querySelectorAll("[data-revisar]").forEach((btn) => {
-    btn.addEventListener("click", () => abrirSolicitud(solicitudPorId(btn.dataset.revisar)));
-  });
+  listaSolicitudes.setItems(
+    adminState.solicitudes.filter((s) => !filtro || s.estado === filtro),
+    { mantenerPagina }
+  );
 }
 
 function estadoSolicitudHtml(estado) {
@@ -625,21 +612,30 @@ function renderRoles() {
       `).join("")}
     </div>
 
-    <div class="admin-list" id="roles-list">
-      ${conRoles.length ? conRoles.map(filaRolesHtml).join("") : estadoVacio(ICONOS.escudo, "Todavía no hay roles asignados", "Asigná el rol de administrador para que alguien pueda dar de alta usuarios en su organización.")}
-    </div>
+    <div id="roles-list"></div>
   `;
 
   panel.querySelector("#btn-asignar-rol").addEventListener("click", () => abrirFormRol(null, null));
-  panel.querySelectorAll("[data-editar-rol]").forEach((btn) => {
-    btn.addEventListener("click", () => abrirFormRol(usuarioPorId(btn.dataset.usuario), btn.dataset.editarRol));
-  });
-  panel.querySelectorAll("[data-quitar-rol]").forEach((btn) => {
-    btn.addEventListener("click", () => confirmarQuitarRol(usuarioPorId(btn.dataset.usuario), btn.dataset.quitarRol));
-  });
+  crearListadoPaginado({
+    contenedor: panel.querySelector("#roles-list"),
+    clave: "admin-roles",
+    columnas: [
+      { titulo: "Usuario" },
+      { titulo: "Roles" },
+    ],
+    renderFila: (usuario) => [
+      celdaPersona(usuario.nombre || usuario.email, usuario.nombre ? usuario.email : ""),
+      rolesDeUsuarioHtml(usuario),
+    ],
+    vacio: estadoVacio(ICONOS.escudo, "Todavía no hay roles asignados", "Asigná el rol de administrador para que alguien pueda dar de alta usuarios en su organización."),
+    acciones: {
+      "[data-editar-rol]": (btn, usuario) => abrirFormRol(usuario, btn.dataset.editarRol),
+      "[data-quitar-rol]": (btn, usuario) => confirmarQuitarRol(usuario, btn.dataset.quitarRol),
+    },
+  }).setItems(conRoles, { mantenerPagina: true });
 }
 
-function filaRolesHtml(usuario) {
+function rolesDeUsuarioHtml(usuario) {
   // Agrupa las filas de usuario_roles por rol: "Admin → Org A, Org B".
   const grupos = new Map();
   usuario.roles.forEach((r) => {
@@ -648,28 +644,21 @@ function filaRolesHtml(usuario) {
   });
 
   return `
-    <article class="admin-card admin-row">
-      ${avatarHtml(usuario.nombre || usuario.email, usuario.email)}
-      <div class="row-main">
-        <div class="row-title">${escapeHtml(usuario.nombre || usuario.email)}</div>
-        ${usuario.nombre ? `<div class="row-sub">${escapeHtml(usuario.email)}</div>` : ""}
-        <div class="role-groups">
-          ${[...grupos.values()].map((g) => {
-            const asignable = catalogoRol(g.rol)?.asignable_desde_panel;
-            return `
-              <div class="role-group">
-                ${rolBadgeHtml(g)}
-                ${g.orgs.map((o) => `<span class="org-chip">${escapeHtml(o)}</span>`).join("")}
-                ${asignable ? `
-                  <div class="role-group-actions">
-                    <button class="admin-icon-btn" type="button" data-usuario="${usuario.id}" data-editar-rol="${escapeHtml(g.rol)}">Editar</button>
-                    <button class="admin-icon-btn danger" type="button" data-usuario="${usuario.id}" data-quitar-rol="${escapeHtml(g.rol)}">Quitar</button>
-                  </div>` : ""}
-              </div>`;
-          }).join("")}
-        </div>
-      </div>
-    </article>
+    <div class="role-groups">
+      ${[...grupos.values()].map((g) => {
+        const asignable = catalogoRol(g.rol)?.asignable_desde_panel;
+        return `
+          <div class="role-group">
+            ${rolBadgeHtml(g)}
+            ${g.orgs.map((o) => `<span class="org-chip">${escapeHtml(o)}</span>`).join("")}
+            ${asignable ? `
+              <div class="role-group-actions">
+                <button class="admin-icon-btn" type="button" data-editar-rol="${escapeHtml(g.rol)}">Editar</button>
+                <button class="admin-icon-btn danger" type="button" data-quitar-rol="${escapeHtml(g.rol)}">Quitar</button>
+              </div>` : ""}
+          </div>`;
+      }).join("")}
+    </div>
   `;
 }
 
@@ -802,26 +791,28 @@ function renderOrganizaciones() {
       </div>
       <button class="admin-btn admin-btn-primary" id="btn-nueva-org" type="button">+ Nueva organización</button>
     </div>
-    <div class="admin-list">
-      ${adminState.organizaciones.length ? adminState.organizaciones.map((o) => `
-        <article class="admin-card admin-row">
-          ${avatarHtml(o.nombre, o.id, "avatar-org")}
-          <div class="row-main">
-            <div class="row-title">${escapeHtml(o.nombre)}</div>
-            <div class="row-sub">${o.miembros} ${o.miembros === 1 ? "miembro" : "miembros"} · ${o.admins} ${o.admins === 1 ? "admin" : "admins"}</div>
-          </div>
-          <div class="row-actions">
-            <button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-renombrar="${o.id}">Renombrar</button>
-          </div>
-        </article>
-      `).join("") : estadoVacio(ICONOS.usuarios, "No hay organizaciones", "Creá la primera para poder asignarle usuarios.")}
-    </div>
+    <div id="organizaciones-list"></div>
   `;
 
   panel.querySelector("#btn-nueva-org").addEventListener("click", () => abrirFormOrganizacion(null));
-  panel.querySelectorAll("[data-renombrar]").forEach((btn) => {
-    btn.addEventListener("click", () => abrirFormOrganizacion(adminState.organizaciones.find((o) => o.id === btn.dataset.renombrar)));
-  });
+  crearListadoPaginado({
+    contenedor: panel.querySelector("#organizaciones-list"),
+    clave: "admin-organizaciones",
+    columnas: [
+      { titulo: "Organización" },
+      { titulo: "Miembros", clase: "num" },
+      { titulo: "Admins", clase: "num" },
+      { titulo: "", clase: "acciones" },
+    ],
+    renderFila: (o) => [
+      celdaPersona(o.nombre, "", o.id, "avatar-org"),
+      o.miembros,
+      o.admins,
+      '<button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-renombrar>Renombrar</button>',
+    ],
+    vacio: estadoVacio(ICONOS.usuarios, "No hay organizaciones", "Creá la primera para poder asignarle usuarios."),
+    acciones: { "[data-renombrar]": (_el, o) => abrirFormOrganizacion(o) },
+  }).setItems(adminState.organizaciones, { mantenerPagina: true });
 }
 
 function abrirFormOrganizacion(org) {
@@ -937,15 +928,32 @@ function setSubtabNotif(sub) {
 
 function renderEnvios() {
   const contenido = document.getElementById("notif-contenido");
-  const filas = adminState.notificaciones || [];
-  contenido.innerHTML = `
-    <div class="admin-list">
-      ${filas.length ? filas.map(notificacionHtml).join("")
-        : estadoVacio(ICONOS.bandeja, "Todavía no enviaste notificaciones", "Las que mandes aparecen acá con su resultado.")}
-    </div>
-  `;
-  contenido.querySelectorAll("[data-cancelar]").forEach((boton) =>
-    boton.addEventListener("click", () => cancelarNotificacion(boton.dataset.cancelar)));
+  contenido.innerHTML = '<div id="envios-list"></div>';
+  crearListadoPaginado({
+    contenedor: contenido.querySelector("#envios-list"),
+    clave: "admin-envios",
+    columnas: [
+      { titulo: "Destinatario" },
+      { titulo: "Notificación" },
+      { titulo: "Estado" },
+      { titulo: "Resultado" },
+      { titulo: "", clase: "acciones" },
+    ],
+    renderFila: (n) => [
+      celdaPersona(n.destinatario_nombre || n.destinatario_email, n.destinatario_nombre ? n.destinatario_email : "", n.destinatario_email),
+      `<strong>${escapeHtml(n.titulo)}</strong>
+       <div class="solicitud-pedido">${escapeHtml(n.texto)}</div>
+       <div class="row-tags"><span class="org-chip">${escapeHtml(n.organizacion_nombre)}</span></div>
+       <div class="field-hint">Creada el ${escapeHtml(formatearFecha(n.created_at))} · por ${escapeHtml(n.remitente_email)}</div>`,
+      `<span class="estado-badge estado-notif-${escapeHtml(n.estado)}">${escapeHtml(ESTADOS_NOTIFICACION[n.estado] || n.estado)}</span>`,
+      escapeHtml(resultadoNotificacion(n)),
+      n.estado === "programada"
+        ? '<button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-cancelar>Cancelar</button>'
+        : "",
+    ],
+    vacio: estadoVacio(ICONOS.bandeja, "Todavía no enviaste notificaciones", "Las que mandes aparecen acá con su resultado."),
+    acciones: { "[data-cancelar]": (_el, n) => cancelarNotificacion(n.id) },
+  }).setItems(adminState.notificaciones || [], { mantenerPagina: true });
 }
 
 async function cargarDispositivos() {
@@ -977,32 +985,31 @@ function descripcionDispositivo(ua) {
   return [navegador, sistema].filter(Boolean).join(" · ") || "Dispositivo";
 }
 
-function usuarioDispositivosHtml(u) {
-  const quien = u.nombre || u.email;
+/** Columnas y fila de la tabla de dispositivos por usuario. */
+const COLUMNAS_DISPOSITIVOS = [
+  { titulo: "Usuario" },
+  { titulo: "Estado" },
+  { titulo: "Organizaciones" },
+  { titulo: "Dispositivos" },
+];
+
+function filaDispositivosUsuario(u) {
   const cantidad = u.dispositivos.filter((d) => !d.desactivado_at).length;
   const desactivados = u.dispositivos.length - cantidad;
-  return `
-    <article class="admin-card admin-row">
-      ${avatarHtml(quien, u.email)}
-      <div class="row-main">
-        <div class="row-title">
-          <span>${escapeHtml(quien)}</span>
-          ${cantidad
-            ? `<span class="estado-badge estado-notif-enviada">${cantidad} ${cantidad === 1 ? "dispositivo" : "dispositivos"}</span>`
-            : desactivados
-              ? `<span class="estado-badge estado-notif-cancelada">Notificaciones desactivadas</span>`
-              : `<span class="estado-badge estado-notif-sin_dispositivos">Sin notificaciones activadas</span>`}
-        </div>
-        ${u.nombre ? `<div class="row-sub">${escapeHtml(u.email)}</div>` : ""}
-        <div class="row-tags">${u.organizaciones.map((o) => `<span class="org-chip">${escapeHtml(o.nombre)}</span>`).join("")}</div>
-        ${u.dispositivos.length ? `<ul class="dispositivos-lista">${u.dispositivos.map((d) => `
-          <li${d.desactivado_at ? ' class="dispositivo-desactivado"' : ""}>
-            <strong>${escapeHtml(descripcionDispositivo(d.user_agent))}</strong>
-            <span class="field-hint">${d.servicio ? `${escapeHtml(d.servicio)} · ` : ""}Activado el ${escapeHtml(formatearFecha(d.created_at))}${d.ultimo_uso_at ? ` · Último uso ${escapeHtml(formatearFecha(d.ultimo_uso_at))}` : ""}${d.desactivado_at ? ` · Desactivado el ${escapeHtml(formatearFecha(d.desactivado_at))}` : ""}</span>
-          </li>`).join("")}</ul>` : ""}
-      </div>
-    </article>
-  `;
+  return [
+    celdaPersona(u.nombre || u.email, u.nombre ? u.email : ""),
+    cantidad
+      ? `<span class="estado-badge estado-notif-enviada">${cantidad} ${cantidad === 1 ? "dispositivo" : "dispositivos"}</span>`
+      : desactivados
+        ? '<span class="estado-badge estado-notif-cancelada">Notificaciones desactivadas</span>'
+        : '<span class="estado-badge estado-notif-sin_dispositivos">Sin notificaciones activadas</span>',
+    u.organizaciones.map((o) => `<span class="org-chip">${escapeHtml(o.nombre)}</span>`).join(""),
+    u.dispositivos.length ? `<ul class="dispositivos-lista">${u.dispositivos.map((d) => `
+      <li${d.desactivado_at ? ' class="dispositivo-desactivado"' : ""}>
+        <strong>${escapeHtml(descripcionDispositivo(d.user_agent))}</strong>
+        <span class="field-hint">${d.servicio ? `${escapeHtml(d.servicio)} · ` : ""}Activado el ${escapeHtml(formatearFecha(d.created_at))}${d.ultimo_uso_at ? ` · Último uso ${escapeHtml(formatearFecha(d.ultimo_uso_at))}` : ""}${d.desactivado_at ? ` · Desactivado el ${escapeHtml(formatearFecha(d.desactivado_at))}` : ""}</span>
+      </li>`).join("")}</ul>` : "—",
+  ];
 }
 
 function renderDispositivos() {
@@ -1021,11 +1028,15 @@ function renderDispositivos() {
           ${orgs.map((o) => `<option value="${escapeHtml(o.id)}"${o.id === adminState.filtroDispositivosOrg ? " selected" : ""}>${escapeHtml(o.nombre)}</option>`).join("")}
         </select>` : ""}
     </div>
-    <div class="admin-list">
-      ${usuarios.length ? usuarios.map(usuarioDispositivosHtml).join("")
-        : estadoVacio(ICONOS.bandeja, "No hay usuarios", "Los usuarios de la organización aparecen acá con sus dispositivos.")}
-    </div>
+    <div id="dispositivos-list"></div>
   `;
+  crearListadoPaginado({
+    contenedor: contenido.querySelector("#dispositivos-list"),
+    clave: "admin-dispositivos",
+    columnas: COLUMNAS_DISPOSITIVOS,
+    renderFila: filaDispositivosUsuario,
+    vacio: estadoVacio(ICONOS.bandeja, "No hay usuarios", "Los usuarios de la organización aparecen acá con sus dispositivos."),
+  }).setItems(usuarios, { mantenerPagina: true });
   const filtro = contenido.querySelector("#filtro-disp-org");
   if (filtro) {
     filtro.addEventListener("change", () => {
@@ -1054,33 +1065,13 @@ function cancelarNotificacion(id) {
   });
 }
 
-function notificacionHtml(n) {
-  const programada = n.estado === "programada" || n.estado === "enviando";
-  const resultado = n.estado === "programada" ? `Se envía el ${formatearFecha(n.programada_para)}`
-    : n.estado === "enviando" ? "Enviándose ahora"
-    : n.estado === "cancelada" ? "No se envió"
-    : n.dispositivos_total
-      ? `${n.enviados} de ${n.dispositivos_total} ${n.dispositivos_total === 1 ? "dispositivo" : "dispositivos"}`
-      : n.motivo || "Ningún dispositivo activado";
-  return `
-    <article class="admin-card admin-row">
-      ${avatarHtml(n.destinatario_nombre || n.destinatario_email, n.destinatario_email)}
-      <div class="row-main">
-        <div class="row-title">
-          <span>${escapeHtml(n.titulo)}</span>
-          <span class="estado-badge estado-notif-${escapeHtml(n.estado)}">${escapeHtml(ESTADOS_NOTIFICACION[n.estado] || n.estado)}</span>
-        </div>
-        <div class="solicitud-pedido">${escapeHtml(n.texto)}</div>
-        <div class="row-sub">Para ${escapeHtml(n.destinatario_nombre || n.destinatario_email)} · ${escapeHtml(resultado)}</div>
-        <div class="row-tags"><span class="org-chip">${escapeHtml(n.organizacion_nombre)}</span></div>
-        <div class="field-hint">Creada el ${escapeHtml(formatearFecha(n.created_at))} · por ${escapeHtml(n.remitente_email)}</div>
-      </div>
-      ${n.estado === "programada" ? `
-        <div class="row-actions">
-          <button class="admin-btn admin-btn-ghost admin-btn-sm" type="button" data-cancelar="${escapeHtml(n.id)}">Cancelar</button>
-        </div>` : ""}
-    </article>
-  `;
+function resultadoNotificacion(n) {
+  if (n.estado === "programada") return `Se envía el ${formatearFecha(n.programada_para)}`;
+  if (n.estado === "enviando") return "Enviándose ahora";
+  if (n.estado === "cancelada") return "No se envió";
+  return n.dispositivos_total
+    ? `${n.enviados} de ${n.dispositivos_total} ${n.dispositivos_total === 1 ? "dispositivo" : "dispositivos"}`
+    : n.motivo || "Ningún dispositivo activado";
 }
 
 async function abrirFormNotificacion() {
@@ -1283,15 +1274,31 @@ function renderActividad() {
       </div>
       <button class="admin-btn admin-btn-ghost" id="btn-refrescar-actividad" type="button">Actualizar</button>
     </div>
-    <div class="admin-card">
-      ${filas.length ? `<ol class="activity-list">${filas.map(actividadHtml).join("")}</ol>`
-        : estadoVacio(ICONOS.reloj, "Sin actividad todavía", "Acá vas a ver cada alta, cambio de acceso y asignación de roles.")}
-    </div>
+    <div id="actividad-list"></div>
   `;
   panel.querySelector("#btn-refrescar-actividad").addEventListener("click", cargarAuditoria);
+
+  crearListadoPaginado({
+    contenedor: panel.querySelector("#actividad-list"),
+    clave: "admin-actividad",
+    columnas: [
+      { titulo: "Cuándo" },
+      { titulo: "Actividad" },
+      { titulo: "Por" },
+    ],
+    renderFila: (a) => {
+      const { texto, clase } = actividadTexto(a);
+      return {
+        clase,
+        celdas: [escapeHtml(formatearFecha(a.created_at)), texto, escapeHtml(a.actor_email)],
+      };
+    },
+    vacio: estadoVacio(ICONOS.reloj, "Sin actividad todavía", "Acá vas a ver cada alta, cambio de acceso y asignación de roles."),
+  }).setItems(filas, { mantenerPagina: true });
 }
 
-function actividadHtml(a) {
+/** Texto (HTML) y clase de color de una entrada de la auditoría. */
+function actividadTexto(a) {
   const b = (t) => `<strong>${escapeHtml(t ?? "")}</strong>`;
   const quien = b(a.objetivo_email);
   const org = a.organizacion_nombre ? b(a.organizacion_nombre) : "una organización eliminada";
@@ -1319,16 +1326,7 @@ function actividadHtml(a) {
     notificacion_cancelada: [`Se canceló la notificación “${escapeHtml(d.titulo)}” para ${quien} en ${org}`, "activity-quita"],
   };
   const [texto, clase] = textos[a.accion] || [escapeHtml(a.accion), ""];
-
-  return `
-    <li class="activity-item ${clase}">
-      <span class="activity-dot"></span>
-      <div>
-        <div class="activity-text">${texto}</div>
-        <div class="activity-meta">${escapeHtml(formatearFecha(a.created_at))} · por ${escapeHtml(a.actor_email)}</div>
-      </div>
-    </li>
-  `;
+  return { texto, clase };
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1378,6 +1376,14 @@ function avatarHtml(texto, semilla, claseExtra = "") {
   let hash = 0;
   for (const c of String(semilla)) hash = (hash * 31 + c.charCodeAt(0)) % 360;
   return `<div class="avatar ${claseExtra}" style="--hue:${hash}" aria-hidden="true">${escapeHtml(iniciales)}</div>`;
+}
+
+/** Celda de tabla con avatar + nombre y, opcionalmente, una línea secundaria. */
+function celdaPersona(nombre, secundario = "", semilla = secundario || nombre, claseAvatar = "") {
+  return `<div class="celda-pibe">
+    ${avatarHtml(nombre, semilla, claseAvatar)}
+    <div><strong>${escapeHtml(nombre)}</strong>${secundario ? `<br><small>${escapeHtml(secundario)}</small>` : ""}</div>
+  </div>`;
 }
 
 function estadoVacio(icono, titulo, texto) {
