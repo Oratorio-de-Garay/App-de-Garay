@@ -153,8 +153,8 @@
 
   <div class="content" id="contenido"></div>
   </main>
-</div>
 
+  <!-- Dentro del shell: sin acceso verificado, esto no está en el DOM visible. -->
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal">
     <div class="modal-title">Editar datos</div>
@@ -223,13 +223,13 @@
     </div>
 
   </div>
-
+</div>
 
 <!-- Configuración de Supabase según el entorno (la sirve el backend). -->
   <script src="config.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tui-pagination@3.4.1/dist/tui-pagination.min.js" integrity="sha384-K4nYC7nPNh5gdve+T6ZUT1FfGb6NKbOVyrT/LzL5yClVzBdng17KMXBKvgN89OEQ" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/tui-pagination@3.4.1/dist/tui-pagination.min.js" integrity="sha384-K4nYC7nPNh5gdve+T6ZUT1FfGb6NKbOVyrT/LzL5yClVzBdng17KMXBKvgN89OEQ" crossorigin="anonymous" defer></script>
   <script src="utils/paginacion.js" defer></script>
   <script src="registro.js" defer></script>
 <script src="auth.js" defer></script>
