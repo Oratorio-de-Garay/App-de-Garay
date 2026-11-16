@@ -1,6 +1,6 @@
 # Base de datos
 
-Postgres gestionado por Supabase. Acceso desde el backend vía `@supabase/supabase-js`, con la **service role key** en los dos clientes (`backend/api/index.js` y `backend/api/auth.js`). La service role bypassea RLS, así que:
+Postgres gestionado por Supabase. Acceso desde el backend vía `@supabase/supabase-js`, con la **service role key** en un único cliente (`apps/api/src/lib/supabase.ts`). La service role bypassea RLS, así que:
 
 - **Aislamiento entre organizaciones:** se aplica a mano en cada query con `.eq("organizacion_id", req.user.organizationId)`.
 - **Administración (usuarios, roles, organizaciones):** se aplica dentro de las funciones SQL del panel. Ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md).
@@ -30,7 +30,7 @@ Niveles educativos (ej: "Primario", "Secundario").
 | created_at | timestamptz | |
 
 ### `grados_pibes`
-Un grado concreto = nivel + número (ej: nivel "Primario" + grado 3 → se muestra como **"Primario 3°"**, ver `gradoLabel()` en `backend/api/index.js`).
+Un grado concreto = nivel + número (ej: nivel "Primario" + grado 3 → se muestra como **"Primario 3°"**, ver `etiquetaDeGrado()` en `apps/api/src/modules/pibes/mappers.ts`).
 | Columna | Tipo | Notas |
 |---|---|---|
 | id | int8 identity | PK |
@@ -84,7 +84,7 @@ Emails de Google habilitados para loguearse. Se renombró en `20260926000000_rol
 | created_at / updated_at | timestamptz | `updated_at` por trigger |
 | created_by | text | email de quien lo dio de alta (`'migracion'` / `'sql'` si no fue desde el panel) |
 
-**Se administra desde el panel** (`admin.html`). Invariante: un usuario sin organizaciones y sin rol global se borra solo.
+**Se administra desde el panel** (`/admin`). Invariante: un usuario sin organizaciones y sin rol global se borra solo.
 
 ### `organizacion_miembros`
 Membresía: el usuario puede ver y operar los datos de esa organización.
@@ -195,7 +195,7 @@ Columnas relevantes de `buffet_sales`: `event_id` (FK → `buffet_eventos.id`, O
 
 `buffet_sale_items` guarda `description` (snapshot del nombre del producto/combo), `quantity`, `unit_price` y `line_total`. Las columnas son `numeric(12,2)` pero **el backend redondea cantidades y precios a enteros**: no se venden medias porciones ni se cobran centavos.
 
-Los totales los recalcula siempre el servidor (`normalizeSaleItems` en `backend/api/index.js`); lo que manda el cliente no se toma como fuente de verdad.
+Los totales los recalcula siempre el servidor (`normalizarItemsVenta` en `packages/shared/src/buffet-ventas.ts`, que también usa el carrito de la app para mostrar el mismo total); lo que manda el cliente no se toma como fuente de verdad.
 
 ## Relaciones
 
@@ -316,7 +316,7 @@ Antes de poder crear un pibe hace falta que existan filas en las tablas de looku
 
 ## Credenciales
 
-- `SUPABASE_URL` / `SUPABASE_KEY` (anon/publishable): en las variables de entorno del backend (`backend/.env.local`, `backend/.env.production` o Vercel). El frontend las recibe de `GET /config.js` (son públicas por diseño, el control de acceso real pasa por RLS + backend).
-- `SUPABASE_SERVICE_ROLE_KEY`: sólo en las variables de entorno del backend, **nunca** al frontend.
+- `SUPABASE_URL` / `SUPABASE_KEY` (anon/publishable): en las variables de entorno (`.env.local`, `.env.production` o Vercel). Son públicas por diseño y se incluyen en la app al compilarla (ver [SETUP.md](SETUP.md#variables-de-entorno)).
+- `SUPABASE_SERVICE_ROLE_KEY`: sólo la lee la API, **nunca** llega al navegador (`apps/web/vite.config.ts` elige una por una las variables que entran a la app, y ésta no está).
 
 Ver [SETUP.md](SETUP.md) para dónde conseguir cada una.

@@ -2,137 +2,151 @@
 
 ## Resumen
 
-App de registro de ingreso/asistencia de un oratorio (grupo juvenil parroquial). Monolito simple, sin build step: **un único proyecto Vercel** sirve tanto la API (Express) como el frontend estático (HTML/CSS/JS vanilla), desde el mismo origen. **Supabase** (Postgres) es la única base de datos y también resuelve la autenticación (Google o código por mail).
+App de registro de ingreso/asistencia y buffet de un oratorio (grupo juvenil parroquial). Es un **monolito modular**: un solo repositorio y **un único proyecto Vercel** que sirve, desde el mismo origen, la aplicación (React) y la API (Hono). **Supabase** (Postgres) es la única base de datos y también resuelve la autenticación (Google o código por mail).
 
-No hay framework de frontend, no hay ORM, no hay TypeScript, no hay tests automatizados. Es intencional: el proyecto es chico y lo mantiene un grupo de voluntarios, no un equipo dedicado.
+Todo el código es TypeScript estricto y cada cambio se verifica con un comando (`npm run check`) y tres niveles de tests. El porqué de este stack está en [adr/0001-migracion-framework.md](adr/0001-migracion-framework.md); cómo se llegó, en [MIGRACION.md](MIGRACION.md).
 
 ## Estructura del repo
 
 ```
-backend/
-  api/
-    index.js   ← app Express: todas las rutas /api/* y /config.js (en local también sirve frontend/ como estático)
-    auth.js    ← middleware: valida sesión Supabase, resuelve usuario/organización/roles + guards
-    admin.js   ← router /api/admin/* (panel de administración)
-    registro.js← router /api/registro/* (quien todavía no tiene acceso pide sumarse a un espacio)
-    rpc.js     ← llamadas a las funciones SQL y traducción de sus errores a HTTP
-    mail.js    ← avisos por mail de las solicitudes (nodemailer + SMTP)
-    push.js    ← notificaciones push (Web Push/VAPID): router /api/push/* y envío (enviarPush)
-  package.json
-  scripts/copiar-frontend.mjs ← en el build de Vercel copia ../frontend a public/ (artefacto, no se commitea)
-  vercel.json  ← única config de deploy (estáticos desde la CDN; /api/* y /config.js → api/index.js)
-frontend/
-  index.html   ← Registro (asistencias)
-  buffet.html  ← Buffet
-  admin.html   ← panel de administración (sólo admins/superadmins)
-  auth.js      ← login (Google o código por mail) vía Supabase Auth; expone window.apiFetch() y window.currentUser
-  registro.js  ← pantalla "Espacios" para pedir acceso (se carga antes que auth.js)
-  nav.js       ← sidebar desplegable en mobile
-  push.js      ← activar las notificaciones push del dispositivo (aviso; se desactivan desde el navegador)
-  sw.js        ← service worker: recibe y muestra las notificaciones (se sirve desde la raíz)
-  manifest.json / icon.svg ← PWA mínima (requerida por iOS para recibir push)
-  index.js / buffet.js / admin.js ← lógica de UI de cada página
-  base.css (+ buffet.css, admin.css)
-  utils/paginacion.js ← listados paginados reutilizables (crearListadoPaginado) + inicialesDe()
-  utils/tabla.css     ← estilo de tablas/tarjetas responsive y del paginador
+apps/
+  api/                 ← la API (Hono)
+    src/
+      app.ts           ← monta los módulos y declara qué exige cada grupo de rutas
+      env.ts           ← variables de entorno validadas; sin las obligatorias no arranca
+      middleware/auth.ts ← sesión, usuario, organización activa y roles
+      lib/             ← errores, cliente de Supabase, validación, mails, push, caché
+      modules/<dominio>/routes.ts ← buffet, pibes, asistencia, admin, registro, push
+      server.ts        ← servidor local
+      vercel.ts        ← entrada de la función de Vercel
+    test/              ← tests de integración contra la base local
+  web/                 ← la aplicación (React + Vite)
+    public/            ← sw.js, manifest.json, icon.svg (se sirven desde la raíz)
+    src/
+      styles/app.css   ← Tailwind y TODOS los colores, como tokens
+      components/ui/   ← piezas base (botón, campos, diálogo, pestañas…)
+      components/      ← Listado, DialogoDeFormulario, useConfirmar, Stepper, Shell
+      features/<dominio>/ ← auth, asistencia, buffet, admin, push
+      lib/             ← cliente de la API, sesión, formato, storage
+      router.tsx       ← rutas
+packages/
+  shared/              ← lo que usan la API y la app: esquemas Zod, tipos, fechas,
+                         cálculo de ventas y los tipos generados de la base
+e2e/                   ← tests de punta a punta (Playwright)
+scripts/
+  vercel-build.mjs     ← build de producción (Build Output API de Vercel)
 supabase/
-  migrations/  ← migraciones versionadas (fuente de verdad del schema, ver DATABASE.md)
-  templates/   ← plantilla del mail con el código de login
-docs/          ← esta documentación
+  migrations/          ← migraciones versionadas (fuente de verdad del schema)
+  tests/               ← tests pgTAP de las reglas que viven en SQL
+  templates/           ← plantilla del mail con el código de login
+docs/                  ← esta documentación
 ```
 
-Cada archivo `.js` del frontend se sirve tal cual al browser (sin bundler). El orden de carga en `index.html` importa: `supabase-js` (UMD, CDN) → `auth.js` → `index.js`.
+## Cómo se reparte la responsabilidad
 
-## Despliegue (Vercel)
+| Capa | Hace | No hace |
+|---|---|---|
+| **Base (funciones SQL)** | Las reglas que no se pueden saltear: permisos, scope por organización, auditoría, stock de una venta. Cada operación en una transacción | — |
+| **API** | Autenticar, validar la forma del pedido, elegir la organización activa, llamar a la base, traducir errores a HTTP, mandar mails y push | Reglas de permisos finos (están en SQL) |
+| **App** | Mostrar, navegar, validar formularios con los mismos esquemas, guardar datos en caché | Decidir permisos: lo que oculta es comodidad, el control real es de la API |
 
-- Un solo proyecto Vercel, configurado en [`backend/vercel.json`](../backend/vercel.json).
-- **Estáticos desde la CDN:** el build (`@vercel/static-build`, script `vercel-build` de `backend/package.json`) copia `frontend/` a `backend/public/` y Vercel lo sirve desde su CDN, con compresión y sin pasar por la función (sin cold start).
-- **La función `backend/api/index.js` sólo atiende `/api/*` y `/config.js`** (dinámico: depende de las variables de entorno, por eso no se copia a `public/`). Cualquier otra ruta que no sea un archivo cae también a Express (404).
-- Sigue siendo el mismo origen, por eso el frontend usa `API_URL = ""` en vez de una URL absoluta — ver `frontend/index.html`.
-- **En local** (`npm run dev`) no hay build: Express sigue sirviendo `frontend/` con `express.static`, así que no hace falta copiar nada.
-- El build necesita que Vercel tenga activado *Include source files outside of the Root Directory* (Settings → General), porque `frontend/` está fuera de `backend/`.
-- Variables de entorno se configuran en el dashboard de Vercel (Project → Settings → Environment Variables). Ver [SETUP.md](SETUP.md) para la lista completa.
-- Cada push genera un **deploy preview** con URL única (`app-de-garay-<hash>-<team>.vercel.app`); `app-de-garay.vercel.app` es el alias estable de producción. Esto tiene implicancias directas en la configuración de OAuth (ver más abajo y SETUP.md).
+**La API es "gorda" y la app "tonta":** armar la etiqueta de un grado, contar visitas, evitar un presente duplicado o calcular el total de una venta se hace en el servidor. La app pide datos ya resueltos y los muestra.
+
+## La API (`apps/api`)
+
+- **Un módulo por dominio.** Cada `modules/<dominio>/routes.ts` define sus rutas encadenadas (`new Hono().get(...).post(...)`): así el tipo `ApiRoutes` que exporta `app.ts` describe toda la API y el frontend lo usa para tipar sus llamadas.
+- **Quién entra a qué se declara al montar** cada grupo en `app.ts`, no ruta por ruta:
+
+  | Rutas | Exigen |
+  |---|---|
+  | `/api/health` | nada |
+  | `/api/registro/*` | sesión válida (quien todavía no tiene acceso) |
+  | `/api/push/despachar` | el secreto compartido con `pg_cron` |
+  | `/api/auth/me`, `/api/push/suscripciones` | usuario registrado |
+  | `/api/admin/*` | usuario registrado + administrar algo |
+  | el resto | usuario registrado + organización activa |
+
+- **Las rutas no arman errores: lanzan.** `ErrorHttp` para lo esperable; lo que devuelve Supabase sale como `ErrorDeBase` y `manejarError` lo traduce por SQLSTATE. Un `500` nunca muestra el mensaje interno.
+- **Validación con Zod** (`validar("json", esquema)`): el handler recibe el valor ya tipado y transformado. Los esquemas viven en `packages/shared` para que los formularios usen las mismas reglas.
+- **Toda consulta a una tabla con `organizacion_id` filtra por ella.** El cliente usa la service role key (saltea RLS), así que ese filtro es la barrera real; RLS queda como defensa en profundidad.
+- **Forma común de un "pibe":** todos los endpoints que devuelven personas usan el tipo `Pibe` de `packages/shared`, armado por `modules/pibes/mappers.ts`. Un endpoint nuevo que devuelva pibes usa ese mapper.
+
+## La app (`apps/web`)
+
+- **Una sola aplicación.** Rutas `/`, `/buffet` y `/admin` (TanStack Router); cada pantalla se baja recién cuando se entra. Las direcciones anteriores (`/admin.html?...`) redirigen.
+- **Lo que se ve sale de la URL:** la ficha abierta, el día del historial, la pestaña, el evento. El botón "atrás" del celular funciona y un link lleva a esa vista.
+- **Datos con TanStack Query.** Cada dominio tiene su `consultas.ts` con las lecturas (`useQuery`) y los cambios (`useMutation`). Un cambio invalida sólo lo que tocó. Las claves empiezan con la organización, así al cambiarla no se mezcla nada.
+- **Cliente tipado:** `pedir(api.buffet.products.$get())`. Si cambia un endpoint, la app deja de compilar donde lo usa.
+- **Componentes compartidos.** Todo listado usa `Listado`; todo alta o edición, `DialogoDeFormulario`; toda confirmación, `useConfirmar`; todo aviso, `toast` de `sonner`. No se usan `alert()` ni `confirm()`.
+- **Lógica fuera de los componentes** cuando se puede: `features/buffet/carrito.ts` o `features/admin/textos.ts` son funciones puras con sus tests.
+- **Estilos:** clases de Tailwind sobre los tokens de `styles/app.css` (`bg-primary`, `text-muted-foreground`). Ningún color suelto en un componente.
+- **Nada se arma como HTML a mano:** React escapa lo que escribió el usuario.
+- **Los datos no se guardan en el dispositivo.** Viven en memoria y se borran al cerrar sesión: son datos de menores y los teléfonos a veces se comparten. En `localStorage` sólo quedan la sesión de Supabase y comodidades (organización elegida, tamaño de página).
 
 ## Autenticación y autorización
 
-- **Login**: manejado enteramente por Supabase Auth, con dos caminos. No hay backend propio de sesión ni cookies — el estado de sesión vive en el cliente Supabase del browser.
-  - Google OAuth (`signInWithOAuth`).
-  - Si alguien abre un link sin sesión (ej: el de una solicitud en un mail), al terminar el login vuelve a ese link, sea cual sea el camino (ver [SETUP.md](SETUP.md#autenticación-google--supabase)).
-  - Mail + código de 6 dígitos (`signInWithOtp` + `verifyOtp`), sin contraseña. Es el mismo flujo para crear la cuenta y para entrar. Supabase manda el código por el SMTP configurado (Gmail, ver [SETUP.md](SETUP.md#mails)).
-- **Registro abierto con aprobación:** cualquiera puede crear una cuenta, pero sin acceso a nada. Si su email no está en `usuarios`, ve la pantalla de registro (`frontend/registro.js`) y pide sumarse a un espacio o crear uno. Un admin o superadmin acepta o rechaza la solicitud desde el panel. Ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#registro-y-solicitudes).
-- `frontend/auth.js` guarda la sesión y expone `window.apiFetch(path, options)`, un wrapper de `fetch` que agrega `Authorization: Bearer <access_token>` a cada llamada a `/api/*`. **Todo el código nuevo debe usar `apiFetch`, no `fetch` directo**, para no romper la autenticación.
-- `backend/api/auth.js` valida ese token **localmente** con `supabaseAdmin.auth.getClaims(token)`: verifica la firma (ES256) y el vencimiento contra las claves públicas del proyecto (JWKS, que el cliente baja una vez por instancia y cachea), sin viaje a Auth. Si la verificación local falla (claves no disponibles, error transitorio), cae a `auth.getUser(token)`, que es la fuente de verdad. El cliente usa el **service role key** (bypassea RLS, nunca se expone al frontend). Después llama a `contexto_usuario(email)`, que devuelve si el email está en `usuarios`, sus organizaciones y sus roles, y deja todo en `req.user`.
-- **Autorización:** hay tres niveles, miembro (tener la organización), `admin` (por organización) y `superadmin` (global). El modelo completo, la matriz de permisos y dónde se aplica cada regla están en **[ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md)**. Los usuarios se dan de alta desde el panel `admin.html`, ya no por SQL.
-- **Middlewares globales** en `backend/api/index.js`:
-  - `/api/health` es la única ruta pública (uptime monitoring).
-  - `/api/registro/*` exige sólo una sesión válida (`requireSession`): es para quien todavía no está registrado.
-  - Todo lo demás bajo `/api/*` exige sesión válida y usuario registrado (`requireAllowedUser`).
-  - Las rutas de datos exigen además una organización activa (`requireOrganization`). `/api/auth/me` y `/api/admin/*` no la exigen, para que un superadmin sin organizaciones pueda entrar al panel.
-- **Lógica del panel:** el router `/api/admin` (`backend/api/admin.js`) sólo aplica los guards `requireAdmin` / `requireSuperadmin`. Las reglas de scope viven en funciones SQL que reciben al actor y hacen cada operación en una transacción con su auditoría.
-- El flujo de OAuth con múltiples URLs de Vercel (producción + previews) requiere configuración específica en Supabase (Site URL vs. Redirect URLs con wildcard). Ver [SETUP.md](SETUP.md#autenticación-google--supabase).
+- **Login:** lo maneja Supabase Auth en el navegador (`features/auth/`), sin backend propio de sesión ni cookies.
+  - Google OAuth (`signInWithOAuth`), que siempre vuelve a la raíz del sitio.
+  - Mail + código de 6 dígitos (`signInWithOtp` + `verifyOtp`), sin contraseña. Es el mismo flujo para crear la cuenta y para entrar.
+  - Si alguien abre un link sin sesión (ej: el de una solicitud en un mail), al terminar el login vuelve a ese link (`lib/almacen.ts`; sólo acepta rutas del mismo sitio).
+- **Estados de sesión** (`features/auth/sesion.tsx`): sin sesión → login; con sesión pero sin acceso → pantalla para pedirlo; con acceso → la app. Hasta que la API confirma el acceso no se monta nada de la app.
+- **Registro abierto con aprobación:** cualquiera puede crear una cuenta, pero sin acceso a nada. Pide sumarse a un espacio o crear uno, y un admin o superadmin lo acepta o rechaza desde el panel. Ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md#registro-y-solicitudes).
+- **Cada pedido a la API** lleva `Authorization: Bearer <access_token>` y `X-Organization-Id` (los agrega `lib/api.ts`).
+- **La API valida el token localmente** con `getClaims` (firma ES256 y vencimiento contra las claves públicas del proyecto), sin viaje a Auth; si falla, cae a `getUser`. Después llama a `contexto_usuario(email)`, que devuelve si está registrado, sus organizaciones y sus roles. Las dos cosas se cachean 30 s en memoria.
+- **Tres niveles:** miembro (tener la organización), `admin` (por organización) y `superadmin` (global). El modelo completo está en **[ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md)**.
+- **Panel:** la API sólo decide quién entra a cada endpoint. Las reglas de scope viven en funciones SQL que reciben al actor y hacen cada operación en una transacción con su auditoría.
 
-## Patrones usados en el frontend
+## Despliegue (Vercel)
 
-- **Sin módulos ES, sin bundler**: todo son globals cargados por `<script>` en orden. `auth.js` corre primero y define `window.apiFetch`; `index.js` arranca recién cuando `auth.js` confirma sesión válida (`window.onAuthenticated = init`).
-- **Render manual por `innerHTML`**: no hay virtual DOM ni templates. `agregarHTML()` / `limpiarContenido()` inyectan strings de HTML directamente en `#contenido`. **Todo dato dinámico debe pasar por `escapeHtml()`** antes de interpolarse — es la única defensa contra XSS en el proyecto.
-- **Dos modos de búsqueda**:
-  - *Asistida*: mientras el usuario tipea (debounce 250ms), sólo sugiere resultados, nunca dispara el alta de un chico nuevo.
-  - *Explícita*: Enter o botón "Buscar" — si no hay resultados, ofrece el formulario de alta.
-- **Guard de carreras**: `renderRequestId` (contador incremental) + `AbortController` (`activeSearchController`) descartan respuestas de búsquedas viejas si el usuario siguió tipeando o disparó otra acción mientras la request estaba en vuelo.
-- **Backend "gordo", frontend "tonto"**: toda lógica de negocio (armar el label de grado, contar visitas, evitar asistencias duplicadas el mismo día, rankings) vive en `backend/api/index.js`. El frontend sólo pide datos ya resueltos y los pinta.
-- **Forma de respuesta consistente para un "pibe"**: los distintos endpoints que devuelven personas (`/api/students/search`, `/api/students/:id`, `/api/attendance/by-date`) devuelven la misma forma de objeto (`id, nombre, apellido, nombreCompleto, grado_id, grado, edad_id, edad, ficha, obs, telefono, ...`). Si agregás un endpoint nuevo que devuelve pibes, mantené esa forma.
-
-## Listados y paginación
-
-Todos los listados (búsqueda y presentes por fecha en Registro; productos, eventos, ventas, combos y presupuestos en Buffet; usuarios, solicitudes, roles, organizaciones, envíos, dispositivos y actividad en Admin) usan `crearListadoPaginado()` de `frontend/utils/paginacion.js`. **Los listados nuevos también deben usarlo**, no armar su propio `array.map(...).join("")`.
-
-- **Librería:** [tui-pagination](https://github.com/nhn/tui.pagination) 3.4.1 (sólo el control de páginas), cargada desde jsDelivr con versión fija y SRI, con `usageStatistics: false` (por defecto envía el hostname a Google Analytics). El HTML de las filas es nuestro.
-- **Paginación del lado del cliente:** cada pantalla ya tiene el array completo en memoria (`buffetState`, `adminState`, respuesta de la búsqueda), así que cambiar de página o de tamaño no hace requests y sólo se pinta el `<tbody>` de la página visible. Ese estado en memoria es la caché; no se agregó caché HTTP. Si algún listado llegara a tener miles de filas habría que pasar a paginación en el servidor (`limit/offset` o keyset).
-- **Tamaños:** 10, 25, 50, 100 y 200 (por defecto 25), recordado por listado en `localStorage` (`paginacion:<clave>`). Controles arriba y abajo de la tabla, sincronizados; las flechas quedan grises en la primera y última página.
-- **Responsive:** tabla en desktop; bajo 640 px cada fila pasa a tarjeta con la etiqueta de cada columna (`data-label`).
-- **Acciones por delegación:** `acciones: { "[data-x]": (el, item) => ... }` y `onFila` reciben el ítem, no el DOM; no hace falta enganchar listeners por botón.
-- **Conservar página:** `setItems(items, { mantenerPagina: true })` mantiene la última página vista de esa `clave` (útil cuando el panel se repinta tras editar o borrar); sin la opción se vuelve a la página 1 (filtros).
+- Un solo proyecto, con *Root Directory* en la raíz del repo. El comando de build es `npm run vercel-build` ([`scripts/vercel-build.mjs`](../scripts/vercel-build.mjs)), que escribe `.vercel/output` con la [Build Output API](https://vercel.com/docs/build-output-api):
+  - `static/`: la app compilada. La sirve el CDN, sin pasar por la función.
+  - `functions/api.func/`: **toda la API en una sola función**, empaquetada con esbuild, en la región `gru1` (al lado de la base, `sa-east-1`).
+  - `config.json`: `/api/*` va a la función; los archivos de `/assets` se cachean para siempre (llevan hash); cualquier otra dirección devuelve `index.html`.
+- **Mismas variables para la API y la app.** `SUPABASE_URL`, `SUPABASE_KEY` y `VAPID_PUBLIC_KEY` se leen también al compilar la app (`apps/web/vite.config.ts` elige una por una las que pueden viajar al navegador). Por eso **cambiar una de esas tres exige un redeploy**.
+- Cada push genera un **deploy preview** con URL propia; `app-de-garay.vercel.app` es el alias de producción. Esto condiciona la configuración de OAuth (ver [SETUP.md](SETUP.md#autenticación-google--supabase)).
+- El detalle, y cómo probar el build en una PC, está en [SETUP.md](SETUP.md#deploy-vercel).
 
 ## Convenciones de código
 
+- **Nombres y comentarios en español** (el dominio habla de "pibes", "ficha", "presente"). Los comentarios explican el porqué, no lo que el código ya dice.
+- **Antes de dar por terminado un cambio:** `npm run check`, y `npm run e2e` si tocó algo visible o un endpoint. Ver [TESTING.md](TESTING.md).
+- **Endpoint nuevo:** esquema en `packages/shared`, ruta en el módulo de su dominio, test de integración, y [API.md](API.md).
+- **Pantalla o listado nuevo:** componer con lo que hay en `components/`; si falta una pieza base, se agrega en `components/ui/`.
+- **Cambio de schema:** siempre con una migración nueva en `supabase/migrations/`, y después `npm run db:types`.
 - Registrar los cambios relevantes en [CHANGELOG.md](../CHANGELOG.md) (sección *Sin publicar*).
-- Comentarios y nombres de variables/funciones en **español** (dominio: "pibes", "ficha", "presente", "asistencias"). Mantener esa convención al extender el código.
-- Cada handler de Express sigue el mismo esqueleto: `try { ... } catch (error) { console.error("<Contexto> error:", error); res.status(500).json({ error: error.message }); }`.
-- El frontend usa nombres de función en español (`buscar`, `agregarNuevo`, `mostrarResultado`, etc.) — seguir la misma convención.
 
-## Deuda técnica / cosas a tener en cuenta antes de tocar el proyecto
+## Pendientes y cosas a tener en cuenta
 
-1. **Backend y frontend sin tests automatizados.**
-   - La base sí tiene tests (pgTAP en `supabase/tests/`, corren en CI).
-   - El backend y el frontend se verifican corriendo `npm run dev` y probando a mano.
-   - El paso siguiente natural es testear el router `/api/admin` con la base local.
-2. **Google no funciona en local:** en local se entra con el código por mail, que llega a Mailpit (ver [SETUP.md](SETUP.md#app-completa-en-local-sin-tocar-producción)). Para probar el flujo real de Google en local hay que cargar credenciales en `[auth.external.google]` de `supabase/config.toml`.
-3. **Cambios de schema:** siempre con una migración nueva. Nunca a mano en el SQL Editor de Supabase, porque así se había desincronizado el repo (ver el historial en el CHANGELOG).
-4. No hay control de concurrencia más allá de un chequeo puntual ("¿ya tiene presente hoy?") en `/api/attendance/mark`.
-5. `/api/students/search` devuelve como máximo 30 resultados (sin paginación): alcanza para buscar por nombre, a tener en cuenta si el padrón crece mucho.
-   - **Rendimiento:** la latencia dominante es la cantidad de viajes backend↔Supabase por request (base en `sa-east-1`, función fijada a `gru1` en `backend/vercel.json`). Regla: evitar loops con `await` sobre consultas; preferir una RPC o un select embebido. La auth cachea 30 s en memoria y valida el JWT localmente. **Compromiso:** un access token sigue valiendo hasta que vence (`jwt_expiry`, 1 h) aunque se cierre la sesión en otro dispositivo; antes `getUser` lo rechazaba apenas se revocaba. Si el proyecto pasara a la clave de firma legacy (HS256), `getClaims` cae solo a `getUser` y se pierde la ganancia, no la seguridad. Los estáticos salen de la CDN de Vercel, no de la función.
-6. Los lookups (`grados_pibes`, `edades`) siguen sin UI: se editan por SQL. Usuarios, roles y organizaciones ya se administran desde `admin.html`.
-7. `admin.js` copia los helpers de modal y API de `buffet.js` (`openModal`, `apiGet`, `apiSend`, `escapeHtml`), y `registro.js` repite el patrón de llamadas a la API. Conviene moverlos a un `frontend/ui.js` compartido.
-8. Antes de un `supabase db push`, correr `supabase migration list --linked` y `supabase db push --linked --dry-run` para ver exactamente qué se va a aplicar. El historial remoto ya está sincronizado; se reparó en septiembre de 2026, cuando las migraciones de agosto figuraban como no aplicadas.
-9. **Mails best-effort:** los avisos de solicitudes se mandan en el mismo request, después de guardar. Si el SMTP falla, la solicitud queda igual (se loguea y la respuesta trae `notificados: 0`), pero no hay reintento. Si se vuelve un problema, el paso siguiente es una tabla de mails pendientes.
-
-10. **Notificaciones push (Web Push, no FCM):** se eligió el estándar Web Push con claves VAPID y la librería `web-push` porque el proyecto no usa Firebase ni tiene app nativa: no hace falta un proyecto externo ni un SDK en el frontend. Cosas a tener en cuenta:
-    - **Serverless:** la función se congela al responder, así que el envío se espera dentro del request (`Promise.allSettled`, timeout de 8 s por dispositivo). Está bien para los dispositivos de uno o unos pocos usuarios (hasta 50 por envío); los programados se despachan aparte (ver abajo).
-    - **SSRF:** el server hace un POST a la URL que manda el navegador, por eso `endpointPermitido()` sólo acepta hosts de servicios push conocidos. Si aparece un servicio nuevo, se agrega a la lista.
-    - **iOS** (16.4+) sólo recibe push con la app instalada en la pantalla de inicio. El `manifest.json` sólo tiene un ícono SVG: para iOS conviene sumar un PNG 180×180 (`apple-touch-icon`). En `notificationclick` (`frontend/sw.js`) `focus()` puede rechazar en iOS con una ventana suspendida: se captura y se cae a `openWindow`, si no el toque no hace nada.
-    - **Aviso para activarlas:** `frontend/push.js` observa `#app-shell` (visible sólo con sesión y acceso) y, en cualquier página, muestra un aviso si el permiso está en `default` o está concedido pero sin suscripción. Preferencias en `localStorage` de ese dispositivo: `oratorio.push.pospuesto` (7 días) y `oratorio.push.desactivado`. Con el permiso `denied` no se pregunta.
-    - **Sin reintentos:** un dispositivo que falla (que no sea 404/410) queda como fallido; no se reintenta. Los 404/410 se borran.
-    - **Programación (cola en la base, sin worker propio):** en Vercel no hay un proceso permanente donde correr un `setInterval`, ni se justifica un worker en otro servidor. La tabla `notificaciones_push` es la cola: programar inserta filas `programada` con `programada_para`; `pg_cron` corre cada minuto `despachar_notificaciones_programadas()` **dentro de la base** y, **sólo si hay algo vencido**, llama con `pg_net` a `POST /api/push/despachar` (mismo origen, mismo Express). Sin notificaciones por salir no hay requests al backend. El endpoint se autentica con `CRON_SECRET`, toma las vencidas con `for update skip locked` (dos despachos simultáneos no envían dos veces), envía y cierra. Una `enviando` abandonada (la función murió a mitad) vuelve a la cola a los 10 minutos. Salen con hasta ~1 minuto de demora y se despachan de a 20 por llamada (si hay más, el cron vuelve a llamar al minuto siguiente). Alternativas al disparador si no se usa `pg_cron`: Vercel Cron (por minuto sólo en plan Pro) o un pinger externo; el endpoint es el mismo.
-    - **Varios destinatarios:** una fila por destinatario (mismo `lote_id`), cada una con su resultado; el máximo es 50 por envío para mantener el envío inmediato dentro del tiempo de la función serverless.
-
-11. **Íconos de la app instalable:** el `manifest.json` sólo declara `/icon.svg` (`sizes: "any"`). Los Chrome recientes lo aceptan para ofrecer "Instalar como app", pero no está verificado en todos los dispositivos, y iOS no usa SVG para el ícono de la pantalla de inicio. Pendiente: generar PNG de 192×192 y 512×512 (más una variante `maskable`) y declararlos en el manifest, y un `apple-touch-icon` de 180×180 en los `<head>`. Mismo ícono que usan las notificaciones push (`sw.js`).
+1. **Sin verificar en un deploy real:** la configuración nueva de Vercel se probó en una PC (el build y la función empaquetada), no en Vercel. Tampoco se pudieron probar en local el login con Google, las notificaciones push ni la instalación como app. Ver la lista de comprobación en [SETUP.md](SETUP.md#deploy-vercel).
+2. **Google no funciona en local:** se entra con el código por mail, que llega a Mailpit. Para probar Google hay que cargar credenciales en `[auth.external.google]` de `supabase/config.toml`.
+3. **Mejoras de rendimiento que necesitan una migración:**
+   - `GET /api/buffet/events` suma las ventas de cada evento en JavaScript; debería agregarse en SQL.
+   - `POST /api/students` hace dos inserts sin transacción (el pibe y su presente).
+   - Las ventas de un evento no tienen paginación del lado del servidor.
+4. **Paginación del lado del cliente:** cada listado trae todos sus datos y `Listado` muestra una página. Si alguno llegara a miles de filas habría que paginar en el servidor.
+5. **`/api/students/search` devuelve como máximo 100 resultados.**
+6. **Rendimiento:** la latencia la domina la cantidad de viajes API↔Supabase por pedido. Regla: evitar loops con `await` sobre consultas; preferir una RPC o un select embebido. **Compromiso de la validación local del token:** un access token sigue valiendo hasta que vence (1 h) aunque la sesión se cierre en otro dispositivo.
+7. **Tamaño del bundle:** las librerías pesan 241 KB gzip. El candidato a achicar es `supabase-js` (56 KB), del que sólo se usa la sesión; hay que poder probar el login con Google antes de tocarlo.
+8. **No hay control de concurrencia** más allá del chequeo "¿ya tiene presente hoy?" al marcar.
+9. **Los catálogos (`grados_pibes`, `edades`) no tienen pantalla:** se editan por SQL.
+10. **Mails best-effort:** los avisos de solicitudes se mandan en el mismo pedido, después de guardar. Si el SMTP falla, la solicitud queda igual (la respuesta trae `notificados: 0`) y no hay reintento.
+11. **Antes de un `supabase db push`:** `supabase migration list --linked` y `supabase db push --linked --dry-run` para ver qué se va a aplicar.
+12. **Notificaciones push (Web Push, no FCM):** estándar Web Push con claves VAPID y la librería `web-push`; no hace falta Firebase.
+    - **Serverless:** la función se congela al responder, así que el envío se espera dentro del pedido (timeout de 8 s por dispositivo, hasta 50 destinatarios por envío).
+    - **SSRF:** el servidor hace un POST a la URL que manda el navegador, por eso `endpointPermitido()` sólo acepta los servicios push conocidos.
+    - **iOS** (16.4+) sólo recibe push con la app instalada en la pantalla de inicio.
+    - **Aviso para activarlas:** `features/push/avisos.tsx`, dentro de la app. Preferencias en `localStorage`: `oratorio.push.pospuesto` (7 días) y `oratorio.push.desactivado`.
+    - **Sin reintentos:** un dispositivo que falla queda como fallido; los 404/410 se borran.
+    - **Programadas (cola en la base):** `pg_cron` corre cada minuto y, sólo si hay algo vencido, llama con `pg_net` a `POST /api/push/despachar`, que toma las vencidas con `for update skip locked`, envía y cierra. Salen con hasta ~1 minuto de demora.
+13. **Íconos de la app instalable:** el `manifest.json` sólo declara un SVG. Falta generar PNG de 192 y 512 (más una variante `maskable`) y un `apple-touch-icon` de 180.
 
 ## Ver también
 
+- [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md) — levantar todo en una PC, paso a paso.
+- [TESTING.md](TESTING.md) — qué se prueba en cada nivel y cómo escribir un test.
+- [API.md](API.md) — referencia de endpoints.
 - [DATABASE.md](DATABASE.md) — schema, relaciones, RLS.
 - [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md) — roles, scope de organizaciones, auditoría.
+- [SETUP.md](SETUP.md) — variables de entorno, deploy, configuración de auth.
 - [CHANGELOG.md](../CHANGELOG.md) — registro de cambios.
-- [API.md](API.md) — referencia de endpoints.
-- [SETUP.md](SETUP.md) — variables de entorno, desarrollo local, deploy, configuración de auth.
-- [legacy/](legacy/) — documentación de la versión anterior (Google Apps Script + Sheets), sólo como contexto histórico.
+- [legacy/](legacy/) — documentación de la primera versión (Google Apps Script + Sheets), sólo como contexto histórico.

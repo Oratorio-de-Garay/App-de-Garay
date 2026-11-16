@@ -1,0 +1,93 @@
+# Calidad de la aplicación: lint, formato, tipos y tests unitarios en cada PR,
+# y tests de integración y de punta a punta contra una base local efímera
+# dentro del runner (no toca producción).
+name: Aplicación
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  calidad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Formato
+        run: npm run format:check
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Tests unitarios
+        run: npm test
+
+  integracion-y-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: calidad
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+
+      - run: npm ci
+
+      # Postgres, Auth, PostgREST y Mailpit, con todas las migraciones y seed.sql.
+      - name: Levantar Supabase local
+        run: supabase start
+
+      # Mismo archivo que se usa en desarrollo, armado con las claves de la
+      # base efímera del runner.
+      - name: Variables de entorno
+        run: |
+          supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          set -a && . "$RUNNER_TEMP/supabase.env" && set +a
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "SMTP_HOST=127.0.0.1"
+            echo "SMTP_PORT=54325"
+            echo "MAIL_FROM=Oratorio de Garay <no-responder@local.test>"
+            echo "APP_URL=http://localhost:3100"
+          } > .env.local
+
+      - name: Tests de integración de la API
+        run: npm run test:integration
+
+      - name: Navegador de Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Tests de punta a punta
+        run: npm run e2e
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

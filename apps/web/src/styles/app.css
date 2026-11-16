@@ -1,0 +1,151 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Sistema de diseño. Todos los colores de la app salen de estos tokens: en los
+ * componentes se usan por nombre (bg-primary, text-muted-foreground, …), nunca
+ * un color suelto. Para cambiar la identidad visual se toca sólo este archivo.
+ */
+:root {
+  /* Verde del oratorio (el del ícono de la app) y su escala. */
+  --brand-950: #0c2118;
+  --brand-900: #10261d;
+  --brand-800: #17402d;
+  --brand-700: #1f5b3d;
+  --brand-600: #27774f;
+  --brand-500: #349663;
+  --brand-400: #57b684;
+  --brand-200: #bfe5cf;
+  --brand-100: #dcf2e5;
+  --brand-50: #eff9f3;
+
+  --background: #f5f7f5;
+  --foreground: #17211c;
+  --card: #ffffff;
+  --card-foreground: #17211c;
+  --primary: var(--brand-700);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-50);
+  --secondary-foreground: var(--brand-800);
+  --muted: #eef1ee;
+  --muted-foreground: #5f6d65;
+  --accent: var(--brand-100);
+  --accent-foreground: var(--brand-800);
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --border: #dfe5e0;
+  --input: #cfd8d2;
+  --ring: var(--brand-500);
+
+  /* Estados (fondo suave, texto y borde). */
+  --success: #166b40;
+  --success-soft: #e4f6ea;
+  --warning: #8a5a00;
+  --warning-soft: #fff5d6;
+  --danger: #a3271b;
+  --danger-soft: #fdecea;
+  --info: #1d4f8f;
+  --info-soft: #e7f0fb;
+
+  --sidebar: var(--brand-900);
+  --sidebar-foreground: #dcebe2;
+  --sidebar-muted: #8fb09d;
+  --sidebar-accent: #1c4733;
+
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(16 38 29 / 0.05), 0 4px 16px -6px rgb(16 38 29 / 0.1);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    min-height: 100dvh;
+  }
+
+  /* En iOS un campo con letra menor a 16px hace zoom al enfocarlo. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  @media (min-width: 768px) {
+    input,
+    select,
+    textarea {
+      font-size: 0.875rem;
+    }
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

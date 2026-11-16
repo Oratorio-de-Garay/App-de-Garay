@@ -1,0 +1,11 @@
+# Generados o ajenos al formateador
+supabase/
+package-lock.json
+playwright-report/
+test-results/
+dist/
+.vercel/
+.claude/
+
+# La documentación se escribe a mano
+*.md

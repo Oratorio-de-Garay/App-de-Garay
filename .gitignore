@@ -8,8 +8,12 @@
 
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
 
 # IDE
 .vscode/
@@ -34,5 +38,5 @@ yarn-debug.log*
 # OS
 Thumbs.db
 
-# Artefacto de build de Vercel (copia de frontend/)
-backend/public/
+# Restos de pruebas locales
+*.tsbuildinfo

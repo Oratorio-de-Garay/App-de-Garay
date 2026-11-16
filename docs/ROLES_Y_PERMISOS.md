@@ -7,14 +7,15 @@ Cómo se decide quién entra a la app, qué datos ve y quién puede administrar 
   - [`supabase/migrations/20260928000000_solicitudes.sql`](../supabase/migrations/20260928000000_solicitudes.sql): registro abierto y solicitudes.
   - [`supabase/migrations/20261106000000_notificaciones_push.sql`](../supabase/migrations/20261106000000_notificaciones_push.sql): dispositivos y notificaciones push.
 - **Backend:**
-  - [`backend/api/auth.js`](../backend/api/auth.js): middleware de sesión y guards.
-  - [`backend/api/admin.js`](../backend/api/admin.js): endpoints del panel.
-  - [`backend/api/registro.js`](../backend/api/registro.js): pantalla de registro (quien todavía no tiene acceso).
-  - [`backend/api/mail.js`](../backend/api/mail.js): avisos por mail de las solicitudes.
+  - [`apps/api/src/app.ts`](../apps/api/src/app.ts): qué exige cada grupo de rutas.
+  - [`apps/api/src/middleware/auth.ts`](../apps/api/src/middleware/auth.ts): sesión, usuario, organización activa y guards.
+  - [`apps/api/src/modules/admin/routes.ts`](../apps/api/src/modules/admin/routes.ts): endpoints del panel.
+  - [`apps/api/src/modules/registro/routes.ts`](../apps/api/src/modules/registro/routes.ts): quien todavía no tiene acceso.
+  - [`apps/api/src/lib/mail.ts`](../apps/api/src/lib/mail.ts): avisos por mail de las solicitudes.
 - **Frontend:**
-  - [`frontend/admin.html`](../frontend/admin.html) y [`admin.js`](../frontend/admin.js): panel de administración.
-  - [`frontend/auth.js`](../frontend/auth.js): login (Google o código por mail), link al panel y redirecciones.
-  - [`frontend/registro.js`](../frontend/registro.js): pantalla para pedir acceso a un espacio.
+  - [`apps/web/src/features/admin/`](../apps/web/src/features/admin/): panel de administración.
+  - [`apps/web/src/features/auth/`](../apps/web/src/features/auth/): sesión, login (Google o código por mail) y pantalla para pedir acceso.
+  - [`apps/web/src/router.tsx`](../apps/web/src/router.tsx): qué se muestra según la sesión, y las redirecciones.
 
 ## Conceptos
 
@@ -103,7 +104,7 @@ Un admin envía un título y un texto a todos los dispositivos de uno o varios u
 - El destinatario tiene que ser **miembro de esa organización** (`P0002`: fuera de ella se informa como inexistente). Un usuario de varias organizaciones recibe en todos sus dispositivos aunque lo notifique el admin de una sola.
 - Cada usuario gestiona sólo sus dispositivos: el email sale del token, nunca del body.
 - Los dispositivos desactivados (`desactivado_at`, el servicio push respondió 404/410) no reciben envíos ni cuentan como "con notificaciones"; se conservan para que el admin vea que las tenían.
-- Sólo se envía a servicios push conocidos (lista de hosts en `backend/api/push.js`), para que el server no pueda usarse para hacer pedidos a URLs arbitrarias.
+- Sólo se envía a servicios push conocidos (lista de hosts en `apps/api/src/lib/push.ts`), para que el server no pueda usarse para hacer pedidos a URLs arbitrarias.
 - Con varios destinatarios, cada uno se valida por separado: los que no son miembros se rechazan sin abortar el lote y sin revelar si existen; si ninguno es válido, `P0002`.
 - La fecha de una programada tiene que ser **posterior a ahora**: lo valida la función SQL (el formulario sólo lo anticipa). Máximo 50 destinatarios por envío.
 - Las programadas las envía el despachador (`push_tomar_vencidas` / `push_cerrar_programada`), que corre con el backend (service role) y **sin actor**: sólo puede enviar lo que ya se validó al programar y **re-valida la membresía** al enviar. Se autentica con `CRON_SECRET`; esas funciones y el cron no los ejecuta `anon` ni `authenticated`.
@@ -138,7 +139,7 @@ Estas reglas están cubiertas por los tests pgTAP de [`supabase/tests/roles_y_pe
 
 ### Errores de las funciones
 
-Las funciones levantan SQLSTATE específicos y el backend los traduce a HTTP (`responderRpc` en `admin.js`). El mensaje llega tal cual al usuario:
+Las funciones levantan SQLSTATE específicos y la API los traduce a HTTP (`manejarError` en `apps/api/src/lib/errores.ts`, para todas las rutas). El mensaje llega tal cual al usuario:
 
 | SQLSTATE | HTTP | Cuándo |
 |---|---|---|
@@ -196,6 +197,6 @@ Para quitarlo: `delete from public.usuario_roles where email = '...' and rol = '
 
 1. Crear una migración que inserte la fila en `public.roles` con su `alcance` (`global` u `organizacion`). El panel lo va a ofrecer automáticamente en la pestaña Roles si `asignable_desde_panel = true`, y va a exigir organizaciones si el alcance es `organizacion`.
 2. Definir qué habilita el rol:
-   - **En el backend:** leer `req.user.roles` (array de `{ rol, organizacion_id }`) y agregar un guard, siguiendo el modelo de `requireAdmin`.
+   - **En el backend:** leer `c.var.usuario.roles` (array de `{ rol, organizacion_id }`) y agregar un guard en `apps/api/src/middleware/auth.ts`, siguiendo el modelo de `requiereAdmin`.
    - **Si debe poder administrar usuarios como un admin:** extender `organizaciones_administradas()` en una migración nueva.
 3. Documentarlo en este archivo (tabla de roles y matriz) y en el [CHANGELOG](../CHANGELOG.md).
