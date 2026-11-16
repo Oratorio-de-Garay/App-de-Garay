@@ -9,7 +9,8 @@ Acá queda **qué se hizo en cada fase, cómo se verificó y qué quedó pendien
 | 1 | Monorepo, TypeScript, lint, tests unitarios y CI | Hecha |
 | 2 | Backend a Hono con el mismo contrato HTTP | Hecha |
 | 3 | Frontend a React + Tailwind + shadcn/ui | Hecha |
-| 4 | Despliegue, limpieza del código viejo y documentación | Hecha (falta validar el primer deploy) |
+| 4 | Despliegue, limpieza del código viejo y documentación | Hecha |
+| — | Publicación en producción | Hecha el 16/11/2026 (PR #37) |
 
 ## Fase 0 — Red de seguridad
 
@@ -86,9 +87,10 @@ comando, antes de escribir código nuevo de la aplicación.
 **Verificación:** `npm run check` en verde (lint, formato, tipos, 13 tests
 unitarios) y `npm run e2e` 13 de 13.
 
-**Sin verificar:** el workflow `app.yml` no corrió todavía en GitHub (la rama
-no se subió). En particular, el paso que arma `backend/.env.local` a partir de
-`supabase status -o env` hay que mirarlo en la primera corrida.
+**Sin verificar en esta fase:** el workflow `app.yml` no corrió en GitHub hasta
+el PR de la migración. Ahí pasó a la primera, incluido el paso que arma el
+archivo de variables a partir de `supabase status -o env` (ver
+[Publicación](#publicación)).
 
 ## Fase 2 — Backend a Hono
 
@@ -321,9 +323,9 @@ Esa prueba ya encontró un error: el repo es `"type": "module"`, así que el paq
 - **`index.html` y `sw.js` se revalidan siempre; `/assets/*` se cachea para siempre** (los nombres llevan hash).
 - **No se agregaron variables de entorno:** la app toma al compilar las mismas `SUPABASE_URL`, `SUPABASE_KEY` y `VAPID_PUBLIC_KEY` que ya estaban cargadas en Vercel.
 
-**Paso manual que queda**
+**Paso manual**
 
-Cambiar el *Root Directory* del proyecto de Vercel de `backend` a la raíz, justo antes de mergear. El orden y la lista de qué revisar están en [SETUP.md](SETUP.md#deploy-vercel).
+Cambiar el *Root Directory* del proyecto de Vercel de `backend` a la raíz, justo antes de mergear (ver [Publicación](#publicación)).
 
 **Verificación (en una PC)**
 - `npm run check`: lint, formato, tipos y 167 unitarios.
@@ -333,7 +335,20 @@ Cambiar el *Root Directory* del proyecto de Vercel de `backend` a la raíz, just
 - `npm run vercel-build:probar`: el build de Vercel termina y la función empaquetada responde bien a 4 pedidos.
 - `npm run dev`: la app en Vite y la API detrás del proxy responden (probado en puertos alternativos, porque el 3000 estaba ocupado).
 
-**Sin verificar**
-- **El deploy en Vercel.** Lo más incierto es que Vercel tome `.vercel/output` tal como lo escribe el script (formato de la función y rutas). Se siguió la documentación, pero no se desplegó.
-- **Login con Google, notificaciones push e instalación como app,** que no se pueden probar en local.
-- **El workflow `app.yml` en GitHub:** la rama no se subió.
+Lo que en una PC no se podía probar (el deploy en Vercel, el CI en GitHub, el
+login con Google, push e instalación como app) se verificó al publicar.
+
+## Publicación
+
+16/11/2026, PR #37.
+
+1. **CI en GitHub:** pasaron los dos jobs del workflow nuevo a la primera
+   (`calidad` y `integracion-y-e2e`, con Supabase dentro del runner).
+2. **Corte en Vercel:** *Root Directory* de `backend` a la raíz y Node.js 22.x
+   (el *Framework Preset* ya estaba en *Other*).
+3. **Preview:** redeploy y revisión manual con la lista de
+   [SETUP.md](SETUP.md#deploy-vercel); el deploy de Vercel pasó.
+4. **Merge a `main`** y revisión manual en producción: funciona.
+
+El primer deploy del PR, antes del corte, falló como se esperaba: el proyecto
+seguía construyendo desde `backend/`, que ya no existía.

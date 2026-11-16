@@ -221,18 +221,13 @@ npm run vercel-build:probar
 
 Compila (contra la base local) y le hace pedidos reales a la función empaquetada, cargándola como un módulo que exporta `(req, res)`.
 
-### Publicar la migración a React + Hono (una sola vez)
+### Cómo se publicó la migración (hecho el 16/11/2026)
 
-El proyecto venía con *Root Directory* `backend`. Ese ajuste es de todo el proyecto, no de una rama, así que **los previews de la rama de la migración no construyen hasta cambiarlo**, y una vez cambiado `main` tampoco construye hasta mergear. Orden:
+Hasta la migración a React + Hono el proyecto tenía *Root Directory* `backend`. Se pasó a la raíz con el PR de la migración listo, se revisó el preview con la lista de abajo y recién después se mergeó (PR #37). Queda como referencia por si alguna vez hay que repetir un corte así: ese ajuste es de todo el proyecto, no de una rama, así que mientras dure el cambio los deploys de las otras ramas fallan.
 
-1. Con el PR listo y sin otros cambios por entrar a `main`: en Vercel, cambiar **Root Directory** a la raíz, **Framework Preset** a *Other* y **Node.js Version** a 22.x.
-2. Redeploy del preview de la rama (o un push vacío) y revisar la lista de abajo.
-3. Si está bien: mergear a `main`.
-4. Si no: volver *Root Directory* a `backend`. Producción no se tocó en ningún momento: los deploys ya publicados no cambian.
+### Qué revisar en un preview
 
-Las variables de entorno son las mismas de siempre; no hay que agregar ninguna.
-
-### Qué revisar en el preview
+Sirve después de cualquier cambio en el build, en `vercel.json` o en `scripts/vercel-build.mjs`.
 
 Los previews están protegidos por el login de Vercel (a `curl` responden 302): hay que iniciar sesión en el navegador (pidiéndoselo al usuario si lo hace un agente).
 
@@ -244,7 +239,7 @@ Los previews están protegidos por el login de Vercel (a `curl` responden 302): 
 - [ ] En las herramientas del navegador: los archivos de `/assets/` vienen con `Cache-Control: … immutable` y `Content-Encoding: br`; los pedidos a `/api` muestran la región `gru1` en `x-vercel-id`.
 - [ ] Notificaciones push e "Instalar como app", en un celular. `VAPID_PUBLIC_KEY` suele estar vacía en el entorno **Preview**: sin ella el push no se puede probar ahí.
 
-Nada de esto se pudo verificar antes de publicar: en una PC se probó el build y la función, no Vercel. Lo más incierto es que Vercel tome `.vercel/output` tal como lo escribe el script (formato de la función y rutas); si el primer deploy falla, el log del build y `scripts/vercel-build.mjs` son el lugar donde mirar.
+Si un deploy falla en el build, el log de Vercel y `scripts/vercel-build.mjs` son el lugar donde mirar; antes de subir un cambio así, `npm run vercel-build:probar` reproduce el build en una PC.
 
 ### Para tener en cuenta
 

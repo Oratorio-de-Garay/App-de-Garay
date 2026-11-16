@@ -117,28 +117,27 @@ docs/                  ← esta documentación
 
 ## Pendientes y cosas a tener en cuenta
 
-1. **Sin verificar en un deploy real:** la configuración nueva de Vercel se probó en una PC (el build y la función empaquetada), no en Vercel. Tampoco se pudieron probar en local el login con Google, las notificaciones push ni la instalación como app. Ver la lista de comprobación en [SETUP.md](SETUP.md#deploy-vercel).
-2. **Google no funciona en local:** se entra con el código por mail, que llega a Mailpit. Para probar Google hay que cargar credenciales en `[auth.external.google]` de `supabase/config.toml`.
-3. **Mejoras de rendimiento que necesitan una migración:**
+1. **Google no funciona en local:** se entra con el código por mail, que llega a Mailpit. Para probar Google hay que cargar credenciales en `[auth.external.google]` de `supabase/config.toml`.
+2. **Mejoras de rendimiento que necesitan una migración:**
    - `GET /api/buffet/events` suma las ventas de cada evento en JavaScript; debería agregarse en SQL.
    - `POST /api/students` hace dos inserts sin transacción (el pibe y su presente).
    - Las ventas de un evento no tienen paginación del lado del servidor.
-4. **Paginación del lado del cliente:** cada listado trae todos sus datos y `Listado` muestra una página. Si alguno llegara a miles de filas habría que paginar en el servidor.
-5. **`/api/students/search` devuelve como máximo 100 resultados.**
-6. **Rendimiento:** la latencia la domina la cantidad de viajes API↔Supabase por pedido. Regla: evitar loops con `await` sobre consultas; preferir una RPC o un select embebido. **Compromiso de la validación local del token:** un access token sigue valiendo hasta que vence (1 h) aunque la sesión se cierre en otro dispositivo.
-7. **Tamaño del bundle:** las librerías pesan 241 KB gzip. El candidato a achicar es `supabase-js` (56 KB), del que sólo se usa la sesión; hay que poder probar el login con Google antes de tocarlo.
-8. **No hay control de concurrencia** más allá del chequeo "¿ya tiene presente hoy?" al marcar.
-9. **Los catálogos (`grados_pibes`, `edades`) no tienen pantalla:** se editan por SQL.
-10. **Mails best-effort:** los avisos de solicitudes se mandan en el mismo pedido, después de guardar. Si el SMTP falla, la solicitud queda igual (la respuesta trae `notificados: 0`) y no hay reintento.
-11. **Antes de un `supabase db push`:** `supabase migration list --linked` y `supabase db push --linked --dry-run` para ver qué se va a aplicar.
-12. **Notificaciones push (Web Push, no FCM):** estándar Web Push con claves VAPID y la librería `web-push`; no hace falta Firebase.
+3. **Paginación del lado del cliente:** cada listado trae todos sus datos y `Listado` muestra una página. Si alguno llegara a miles de filas habría que paginar en el servidor.
+4. **`/api/students/search` devuelve como máximo 100 resultados.**
+5. **Rendimiento:** la latencia la domina la cantidad de viajes API↔Supabase por pedido. Regla: evitar loops con `await` sobre consultas; preferir una RPC o un select embebido. **Compromiso de la validación local del token:** un access token sigue valiendo hasta que vence (1 h) aunque la sesión se cierre en otro dispositivo.
+6. **Tamaño del bundle:** las librerías pesan 241 KB gzip. El candidato a achicar es `supabase-js` (56 KB), del que sólo se usa la sesión; hay que poder probar el login con Google antes de tocarlo.
+7. **No hay control de concurrencia** más allá del chequeo "¿ya tiene presente hoy?" al marcar.
+8. **Los catálogos (`grados_pibes`, `edades`) no tienen pantalla:** se editan por SQL.
+9. **Mails best-effort:** los avisos de solicitudes se mandan en el mismo pedido, después de guardar. Si el SMTP falla, la solicitud queda igual (la respuesta trae `notificados: 0`) y no hay reintento.
+10. **Antes de un `supabase db push`:** `supabase migration list --linked` y `supabase db push --linked --dry-run` para ver qué se va a aplicar.
+11. **Notificaciones push (Web Push, no FCM):** estándar Web Push con claves VAPID y la librería `web-push`; no hace falta Firebase.
     - **Serverless:** la función se congela al responder, así que el envío se espera dentro del pedido (timeout de 8 s por dispositivo, hasta 50 destinatarios por envío).
     - **SSRF:** el servidor hace un POST a la URL que manda el navegador, por eso `endpointPermitido()` sólo acepta los servicios push conocidos.
     - **iOS** (16.4+) sólo recibe push con la app instalada en la pantalla de inicio.
     - **Aviso para activarlas:** `features/push/avisos.tsx`, dentro de la app. Preferencias en `localStorage`: `oratorio.push.pospuesto` (7 días) y `oratorio.push.desactivado`.
     - **Sin reintentos:** un dispositivo que falla queda como fallido; los 404/410 se borran.
     - **Programadas (cola en la base):** `pg_cron` corre cada minuto y, sólo si hay algo vencido, llama con `pg_net` a `POST /api/push/despachar`, que toma las vencidas con `for update skip locked`, envía y cierra. Salen con hasta ~1 minuto de demora.
-13. **Íconos de la app instalable:** el `manifest.json` sólo declara un SVG. Falta generar PNG de 192 y 512 (más una variante `maskable`) y un `apple-touch-icon` de 180.
+12. **Íconos de la app instalable:** el `manifest.json` sólo declara un SVG. Falta generar PNG de 192 y 512 (más una variante `maskable`) y un `apple-touch-icon` de 180.
 
 ## Ver también
 

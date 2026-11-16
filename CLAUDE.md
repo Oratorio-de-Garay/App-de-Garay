@@ -58,9 +58,8 @@ Todo desde la raíz del repo. Requiere Node 22.12+ y Docker (guía completa en `
 | Contra la base de producción (a propósito) | `npm run dev:prod` |
 
 ## Estado actual
-- Noviembre de 2026: migración a React + Vite + Hono en la rama `feat/migracion-framework` (bitácora en `docs/MIGRACION.md`).
-- Pendiente de esa migración: cambiar el *Root Directory* del proyecto en Vercel y validar el primer deploy (lista en `docs/SETUP.md#deploy-vercel`). Sin verificar todavía en un entorno real: login con Google, notificaciones push e instalación como app.
-- El resto de los pendientes está en `docs/ARCHITECTURE.md`.
+- 16/11/2026: la migración a React + Vite + Hono está en producción (PR #37). El proceso y las decisiones están en `docs/MIGRACION.md` y `docs/adr/0001-migracion-framework.md`.
+- Los pendientes están en `docs/ARCHITECTURE.md` ("Pendientes y cosas a tener en cuenta").
 
 ## Reglas para agentes
 - Antes de tocar cualquier cosa, correr `Get-Location` y `git status`. Confirmar que estás en la raíz del repo (donde está el `.git`), NO en la carpeta padre `IT/`.
