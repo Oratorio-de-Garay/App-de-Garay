@@ -6,15 +6,11 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    // backend/ y frontend/ son el código anterior a la migración: se borran en
-    // la fase 4 y no vale la pena adaptarlos al linter.
     ignores: [
       "**/node_modules/**",
       "**/dist/**",
-      "playwright-report/**",
       ".claude/**",
-      "backend/**",
-      "frontend/**",
+      ".vercel/**",
       "supabase/**",
       "playwright-report/**",
       "test-results/**",

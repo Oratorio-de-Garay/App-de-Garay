@@ -74,7 +74,7 @@ jobs:
             echo "SMTP_PORT=54325"
             echo "MAIL_FROM=Oratorio de Garay <no-responder@local.test>"
             echo "APP_URL=http://localhost:3100"
-          } > backend/.env.local
+          } > .env.local
 
       - name: Tests de integración de la API
         run: npm run test:integration

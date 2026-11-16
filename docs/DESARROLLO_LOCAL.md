@@ -6,7 +6,7 @@ Al terminar vas a tener:
 
 | Qué | Dónde |
 |---|---|
-| La app (frontend + API) | <http://localhost:3000> |
+| La app | <http://localhost:3000> |
 | Mailpit: los mails que manda la app | <http://127.0.0.1:54324> |
 | Postgres: ver y editar los datos (ver [Ver los datos](#ver-los-datos)) | `postgresql://postgres:postgres@127.0.0.1:54322/postgres` |
 
@@ -21,7 +21,7 @@ Hacen falta tres programas. Se instalan una sola vez:
 | Programa | Para qué | Versión |
 |---|---|---|
 | **Git** | Bajar el código | cualquiera reciente |
-| **Node.js** (trae `npm` y `npx`) | Correr el backend y el CLI de Supabase | **20.6 o más nueva**; recomendada, la LTS |
+| **Node.js** (trae `npm` y `npx`) | Correr la app, la API, los tests y el CLI de Supabase | **22.12 o más nueva**; recomendada, la LTS |
 | **Docker Desktop** | Correr Supabase local (Postgres, Auth, Mailpit) en contenedores | reciente |
 
 **No hace falta instalar:**
@@ -34,9 +34,7 @@ Hacen falta tres programas. Se instalan una sola vez:
 
 - Conviene tener **8 GB de RAM o más**: Docker Desktop y sus contenedores corren en una máquina virtual.
 - Hacen falta **unos 3 GB libres** de disco: Docker Desktop, más unos 2,2 GB para las imágenes de Supabase (ver [Servicios](#servicios-de-supabase-que-se-levantan)).
-- Hace falta **internet**:
-  - la primera vez, para bajar todo;
-  - mientras usás la app, porque el frontend carga `supabase-js` desde un CDN.
+- Hace falta **internet** la primera vez, para bajar todo. Después la app funciona sin conexión a internet (todo corre en tu PC).
 
 Seguí la sección de tu sistema operativo y después [comprobá que esté todo](#14-comprobar-que-está-todo).
 
@@ -164,14 +162,14 @@ En una terminal nueva:
 
 ```bash
 git --version             # ej: git version 2.4x...
-node --version            # tiene que ser v20.6 o más (ej: v22.x, v24.x)
+node --version            # tiene que ser v22.12 o más (ej: v22.x, v24.x)
 npm --version             # cualquier número
 docker --version          # ej: Docker version 2x...
 docker run --rm hello-world
 ```
 
 - El último comando tiene que imprimir **"Hello from Docker!"**: confirma que Docker está andando, no sólo instalado.
-- Si `node --version` muestra algo menor a `v20.6`, actualizá Node: el script `npm run dev` usa `node --env-file`, que antes no existía, y falla con `bad option: --env-file`.
+- Si `node --version` muestra algo menor a `v22.12`, actualizá Node: las herramientas del proyecto (Vite, Vitest) lo exigen.
 - Si algún comando dice *"no se reconoce"* o *"command not found"*: cerrá y abrí la terminal. Si sigue, reiniciá la PC.
 - Si `docker run` dice que no se puede conectar: Docker Desktop no está abierto, o todavía no dice *Engine running*.
 
@@ -193,16 +191,12 @@ Elegí una carpeta donde guardarlo, abrí una terminal ahí y corré:
 ```bash
 git clone https://github.com/Oratorio-de-Garay/App-de-Garay.git
 cd App-de-Garay
-cd backend
 npm install
-cd ..
 ```
 
-> **Ojo con las carpetas.** En esta guía:
-> - los comandos `npx supabase ...` se corren desde la **raíz del repo** (donde está la carpeta `supabase/`);
-> - los comandos `npm ...` se corren desde **`backend/`**.
->
-> Corrido desde otra carpeta, `supabase` no encuentra el proyecto y `npm` no encuentra el `package.json`.
+`npm install` se corre **una sola vez y en la raíz**: instala lo de la API, la app y los tests (es un monorepo con *workspaces*).
+
+> **Todos los comandos de esta guía se corren desde la raíz del repo** (donde están `package.json` y la carpeta `supabase/`). Corridos desde otra carpeta, `supabase` no encuentra el proyecto y `npm` no encuentra los scripts.
 
 ---
 
@@ -228,8 +222,8 @@ Supabase local trae más servicios de los que la app usa. Los que no hacen falta
 |---|---|---|---|
 | Postgres | 1,7 GB | ✅ prendido | La base |
 | Auth (GoTrue) | 90 MB | ✅ prendido | Login con código por mail |
-| PostgREST | 30 MB | ✅ prendido | Todas las consultas del backend (`.from()`, `.rpc()`) |
-| Kong | 200 MB | ✅ prendido | La puerta de entrada `http://127.0.0.1:54321` que usan backend y frontend |
+| PostgREST | 30 MB | ✅ prendido | Todas las consultas de la API (`.from()`, `.rpc()`) |
+| Kong | 200 MB | ✅ prendido | La puerta de entrada `http://127.0.0.1:54321` que usan la API y la app |
 | Mailpit | 50 MB | ✅ prendido | Recibe los mails |
 | Studio + postgres-meta | 2,2 GB | ⛔ apagado | Panel web para ver datos: no lo necesita la app (ver [Ver los datos](#ver-los-datos)) |
 | Storage + imgproxy | 1,4 GB | ⛔ apagado | La app no guarda archivos |
@@ -282,11 +276,11 @@ Para borrarlas, con Supabase levantado, corré **`docker image prune -a`**: borr
 
 ---
 
-## 4. Configurar el backend para la base local
+## 4. Configurar las variables para la base local
 
 ### De dónde salen las claves
 
-`SUPABASE_KEY` y `SUPABASE_SERVICE_ROLE_KEY` tienen que ser las claves **de la base local que acabás de levantar**. **No** son las del dashboard de supabase.com ni las de `backend/.env.production`: esas son de producción.
+`SUPABASE_KEY` y `SUPABASE_SERVICE_ROLE_KEY` tienen que ser las claves **de la base local que acabás de levantar**. **No** son las del dashboard de supabase.com ni las de `.env.production`: esas son de producción.
 
 Las genera el propio Supabase local, y se ven con este comando, desde la raíz del repo y con Supabase levantado:
 
@@ -316,21 +310,21 @@ Sobre estas claves:
 - Sólo sirven contra el Supabase de tu PC: no dan acceso a producción y no son secretas.
 - Si `supabase status` da error, Supabase local no está levantado: volvé al [paso 3](#3-levantar-supabase-local).
 
-### Crear `backend/.env.local`
+### Crear `.env.local`
 
-Copiá el archivo de ejemplo:
+Copiá el archivo de ejemplo, en la raíz del repo:
 
 ```bash
 # Git Bash / macOS / Linux
-cp backend/.env.local.example backend/.env.local
+cp .env.local.example .env.local
 ```
 
 ```powershell
 # PowerShell
-Copy-Item backend/.env.local.example backend/.env.local
+Copy-Item .env.local.example .env.local
 ```
 
-Abrí `backend/.env.local` y completá las dos claves con los valores locales de la tabla de arriba:
+Abrí `.env.local` y completá las dos claves con los valores locales de la tabla de arriba:
 
 - `SUPABASE_KEY=` con la **Publishable** de `npx supabase status`.
 - `SUPABASE_SERVICE_ROLE_KEY=` con la **Secret** de `npx supabase status`.
@@ -350,49 +344,70 @@ APP_URL=http://localhost:3000
 
 Cosas a tener en cuenta:
 
-- `backend/.env.local` está en `.gitignore`: **nunca** se commitea.
-- **Nunca** pongas ahí claves de producción.
-- `npm run dev` lee **sólo** `backend/.env.local`. Si tenés las claves de producción en `backend/.env.production`, ese archivo lo usa únicamente `npm run dev:prod` (ver [paso 5](#5-levantar-la-app)). Un `backend/.env` no lo lee ningún script.
+- Este único archivo lo usan la API, la app y los tests.
+- `.env.local` está en `.gitignore`: **nunca** se commitea.
+- **Nunca** pongas ahí claves de producción. Si igual pasara, la app no compila: se niega a armarse contra una base que no sea la local.
+- Las claves de producción van en `.env.production`, que usa únicamente `npm run dev:prod` (ver [paso 5](#5-levantar-la-app)). Un `.env` a secas no lo lee ningún script.
 
 ---
 
 ## 5. Levantar la app
 
-Desde `backend/`:
-
 ```bash
 npm run dev
 ```
 
-Tiene que decir:
+Levanta dos procesos a la vez, y la terminal muestra los dos:
 
 ```
-API server running on http://localhost:3000
-Base de datos: LOCAL (http://127.0.0.1:54321)
+[api] API en http://localhost:3001 (la app: http://localhost:3000)
+[api] Base de datos: LOCAL (http://127.0.0.1:54321)
+[web]   ➜  Local:   http://localhost:3000/
 ```
 
-Se reinicia solo cuando cambiás un archivo del backend. Los cambios del frontend (`frontend/`) se ven recargando la página.
+| Proceso | Puerto | Qué hace |
+|---|---|---|
+| `web` (Vite) | **3000** | Sirve la app. Al guardar un archivo de `apps/web/`, el cambio aparece solo, sin recargar. Le reenvía `/api` a la API. |
+| `api` | 3001 | La API. Se reinicia sola al guardar un archivo de `apps/api/` o `packages/shared/`. |
 
 Abrí **<http://localhost:3000>**.
 
-- Usá siempre `localhost:3000`, no `127.0.0.1:3000`: para el navegador son sitios distintos y la sesión de uno no vale en el otro.
-- No abras `frontend/index.html` con doble clic ni con otro servidor (Live Server, `http-server`, etc.): el backend es el que sirve el frontend y le pasa la configuración por `/config.js`.
+- Usá siempre `localhost:3000`, no `127.0.0.1:3000` ni el 3001: para el navegador son sitios distintos, la sesión de uno no vale en el otro, y el login de Supabase local sólo sabe volver a `localhost:3000`.
+- Si el puerto 3000 está ocupado, `npm run dev` falla en vez de usar otro. Cerrá lo que lo esté usando.
+
+### Probarla como en producción
+
+```bash
+npm run start
+```
+
+Compila la app y la sirve junto con la API **en un solo puerto** (el `PORT` de `.env.local`), sin recarga automática. Es como corre en Vercel, y es lo que usan los tests de punta a punta. Sirve para una última mirada antes de subir un cambio.
+
+### Verificar un cambio
+
+```bash
+npm run check             # lint, formato, tipos y tests unitarios
+npm run test:integration  # la API contra la base local
+npm run e2e               # recorridos completos en un navegador
+```
+
+El detalle de cada uno está en [TESTING.md](TESTING.md).
 
 ### Correr contra producción (sólo a propósito)
 
 `npm run dev` siempre usa la base local. Para apuntar la app de tu PC a la base de **producción** existe un comando aparte:
 
 ```bash
-npm run dev:prod   # lee backend/.env.production
+npm run dev:prod   # lee .env.production
 ```
 
-- `backend/.env.production` lleva las mismas variables que `.env.local`, con los valores de producción (ver [SETUP.md](SETUP.md#variables-de-entorno)). Está en `.gitignore`.
+- `.env.production` (en la raíz) lleva las mismas variables que `.env.local`, con los valores de producción (ver [SETUP.md](SETUP.md#variables-de-entorno)). Está en `.gitignore`.
 - Con este comando, **todo lo que hagas en la app modifica datos reales**. Para que no pase desapercibido:
   - la terminal muestra `⚠️ Base de datos: PRODUCCIÓN (...)`;
   - la app muestra una franja roja arriba de todo.
-- El backend no tiene valores por defecto: si falta alguna variable, no arranca. Nunca va a producción "sin querer".
+- No hay valores por defecto: si falta alguna variable, nada arranca. Y `npm run dev`, `npm run start` y `npm run build` **nunca** leen `.env.production`: a producción sólo se llega con `dev:prod`.
 
-Para comprobar que el backend responde: <http://localhost:3000/api/health> tiene que devolver `{"status":"ok"}`.
+Para comprobar que la API responde: <http://localhost:3000/api/health> tiene que devolver `{"status":"ok"}`.
 
 ---
 
@@ -408,7 +423,7 @@ Ningún mail sale a internet: todos quedan en Mailpit, así que podés usar dire
 
 | Mail | Qué puede hacer |
 |---|---|
-| `oratoriogarayy@gmail.com` | **Superadmin**: todo, incluido `admin.html` |
+| `oratoriogarayy@gmail.com` | **Superadmin**: el panel de administración completo (`/admin`) |
 | `admin@local.test` | Admin de *Oratorio de Garay* |
 | `miembro@local.test` | Miembro de *Oratorio de Garay* y *Escuadra 3* |
 | `nuevo@local.test` | Sin acceso; tiene una solicitud pendiente para *Oratorio de Garay* |
@@ -425,7 +440,7 @@ El seed también carga niveles, grados, edades y un pibe de ejemplo por organiza
 Hay dos tipos de mails, y en local los dos van a Mailpit:
 
 - **Códigos de login:** los manda Supabase Auth. No requiere configuración.
-- **Avisos de solicitudes** (a los aprobadores cuando hay una nueva, y al solicitante cuando se resuelve): los manda el backend (`backend/api/mail.js`) por SMTP a `127.0.0.1:54325`, gracias a `SMTP_HOST`/`SMTP_PORT` de `.env.local`.
+- **Avisos de solicitudes** (a los aprobadores cuando hay una nueva, y al solicitante cuando se resuelve): los manda la API (`apps/api/src/lib/mail.ts`) por SMTP a `127.0.0.1:54325`, gracias a `SMTP_HOST`/`SMTP_PORT` de `.env.local`.
 
 Para probar el circuito completo:
 
@@ -434,19 +449,21 @@ Para probar el circuito completo:
 3. Entrá como `admin@local.test` o el superadmin, y aceptala o rechazala desde la pestaña Solicitudes.
 4. En Mailpit aparece el aviso al solicitante.
 
-Si un aviso no sale, el panel muestra el motivo (ej: falta `SMTP_HOST`), y la terminal del backend también lo loguea.
+Si un aviso no sale, el panel muestra el motivo (ej: falta `SMTP_HOST`), y la terminal (líneas `[api]`) también lo loguea.
 
 ---
 
 ## 8. Comandos del día a día
 
-Todos desde la raíz del repo, salvo los de `npm`:
+Todos desde la raíz del repo:
 
 | Para | Comando |
 |---|---|
 | Levantar Supabase local | `npx supabase start` |
 | Ver URLs y claves | `npx supabase status` |
-| Levantar la app (desde `backend/`) | `npm run dev` |
+| Levantar la app | `npm run dev` |
+| Verificar un cambio | `npm run check` |
+| Después de cambiar el schema: regenerar los tipos | `npm run db:types` |
 | Aplicar migraciones nuevas **sin borrar datos** | `npx supabase migration up` |
 | Volver la base a cero (migraciones + seed) — **borra tus datos locales** | `npx supabase db reset --local` |
 | Correr los tests de la base (pgTAP) | `npx supabase test db` |
@@ -464,7 +481,8 @@ Después de un `db reset`, las sesiones abiertas en el navegador dejan de valer:
 1. Creá la migración: `npx supabase migration new <nombre>`, y escribí el SQL en el archivo que genera en `supabase/migrations/`.
 2. Aplicala desde cero: `npx supabase db reset --local`.
 3. Corré los tests: `npx supabase test db`. El CI corre lo mismo en cada PR que toca `supabase/`.
-4. Actualizá [DATABASE.md](DATABASE.md) y el [CHANGELOG](../CHANGELOG.md).
+4. Regenerá los tipos de TypeScript: `npm run db:types` (actualiza `packages/shared/src/database.types.ts`).
+5. Actualizá [DATABASE.md](DATABASE.md) y el [CHANGELOG](../CHANGELOG.md).
 
 ---
 
@@ -503,28 +521,34 @@ net start winnat
 y volvé a correr `npx supabase start`.
 
 **`port is already allocated` / `address already in use`**
-Otro proyecto de Supabase (u otro programa) ya está usando esos puertos. Apagalo (`npx supabase stop --project-id <otro>` o desde Docker Desktop) y volvé a probar. Si es el puerto 3000, cerrá el otro servidor o cambiá `PORT` y `APP_URL` en `.env.local`.
+Otro proyecto de Supabase (u otro programa) ya está usando esos puertos. Apagalo (`npx supabase stop --project-id <otro>` o desde Docker Desktop) y volvé a probar. Si es el puerto 3000 o el 3001, cerrá el otro servidor.
 
 **`supabase start` dice que ya está corriendo**
 Está bien: ya estaba levantado. Usá `npx supabase status` para ver las claves.
 
 **`npm run dev` falla con `.env.local: not found`**
-Falta `backend/.env.local`: crealo (paso 4). Ojo que tiene que estar dentro de `backend/`, no en la raíz del repo.
+Falta `.env.local`: crealo (paso 4). Tiene que estar en la **raíz del repo**. (Antes de noviembre de 2026 vivía en `backend/`; si lo tenés ahí, movelo.)
 
-**El backend no arranca: `Faltan variables de entorno: ...`**
-A `backend/.env.local` le falta alguna de las variables que nombra el error: completala (paso 4).
+**No arranca: `Variables de entorno faltantes o inválidas: ...` o `Faltan SUPABASE_URL y SUPABASE_KEY`**
+A `.env.local` le falta alguna de las variables que nombra el error: completala (paso 4).
+
+**`El frontend se iba a armar apuntando a una base que no es la local`**
+El `SUPABASE_URL` de `.env.local` no es `http://127.0.0.1:54321`. Es una protección: corregilo. Para usar la base real a propósito está `npm run dev:prod`.
 
 **El login o la API fallan con `Invalid API key`, `invalid JWT` o `401` apenas arrancás**
-Alguna clave de `backend/.env.local` no es la de tu Supabase local; por ejemplo, copiaste una de producción. Volvé a copiarlas de `npx supabase status` (paso 4) y reiniciá `npm run dev`.
+Alguna clave de `.env.local` no es la de tu Supabase local; por ejemplo, copiaste una de producción. Volvé a copiarlas de `npx supabase status` (paso 4) y reiniciá `npm run dev`.
 
 **La terminal dice `Base de datos: PRODUCCIÓN` o la app muestra la franja roja**
-Estás contra la base real. Cortá el server (Ctrl+C). Si fue con `npm run dev`, el `SUPABASE_URL` de `backend/.env.local` no es `http://127.0.0.1:54321`: corregilo.
+Estás contra la base real: levantaste con `npm run dev:prod`. Cortá (Ctrl+C) y usá `npm run dev`.
 
-**`bad option: --env-file`**
-Tu Node es anterior a 20.6. Actualizalo.
+**`Port 3000 is already in use`**
+Hay otro servidor en el 3000 (por ejemplo, un `npm run dev` que quedó abierto en otra terminal). Cerralo.
 
-**`Cannot find module 'express'` (o cualquier otro paquete)**
-Falta `npm install` dentro de `backend/`.
+**`Cannot find module ...` o `vite` / `tsx` no se reconoce**
+Falta `npm install` en la raíz del repo.
+
+**Cambié algo de `.env.local` y la app no se entera**
+Las variables se leen al arrancar: cortá `npm run dev` y volvé a levantarlo.
 
 **Pide el código pero no llega nada a Mailpit**
 - Fijate que estés en <http://127.0.0.1:54324> y que Supabase siga levantado (`npx supabase status`).
@@ -536,5 +560,5 @@ Es lo que ve cualquier mail que no está dado de alta. Usá uno de los [usuarios
 **Errores raros después de `db reset` (`invalid JWT`, `user not found`, quedarse cargando)**
 La sesión del navegador era de la base anterior. Cerrá sesión; si no se puede, borrá los datos del sitio (DevTools → Application → Storage → *Clear site data*) y recargá.
 
-**La página carga pero no hace nada, con `supabase is not defined` en la consola**
-El navegador no pudo bajar `supabase-js` del CDN (`cdn.jsdelivr.net`). Revisá la conexión a internet o un bloqueador.
+**La app quedó en blanco después de actualizar el código**
+Recargá la página. Si sigue, cortá `npm run dev`, corré `npm install` (puede haber dependencias nuevas) y volvé a levantarlo.

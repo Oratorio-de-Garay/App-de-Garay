@@ -24,7 +24,10 @@
     "dev": "concurrently -k -n api,web -c green,cyan \"npm run dev -w @garay/api\" \"npm run dev -w @garay/web\"",
     "build": "npm run build -w @garay/web",
     "start": "npm run build && npm run start -w @garay/api",
-    "capturas": "node -e \"process.env.CAPTURAS='1';require('child_process').execSync('npx playwright test capturas --project=escritorio',{stdio:'inherit'})\""
+    "capturas": "node -e \"process.env.CAPTURAS='1';require('child_process').execSync('npx playwright test capturas --project=escritorio',{stdio:'inherit'})\"",
+    "dev:prod": "concurrently -k -n api,web -c red,red \"npm run dev:prod -w @garay/api\" \"npm run dev:prod -w @garay/web\"",
+    "vercel-build": "node scripts/vercel-build.mjs",
+    "vercel-build:probar": "npm run vercel-build && node --env-file=.env.local scripts/probar-funcion.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -40,6 +43,7 @@
     "vitest": "^5.1.0",
     "concurrently": "^10.0.7",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "@vitejs/plugin-react": "^6.3.0"
+    "@vitejs/plugin-react": "^6.3.0",
+    "esbuild": "^0.28.2"
   }
 }

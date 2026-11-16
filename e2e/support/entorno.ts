@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 // Variables de la base LOCAL. Se leen del mismo archivo que usa el server.
-const ENV_FILE = path.resolve(process.cwd(), "backend/.env.local");
+const ENV_FILE = path.resolve(process.cwd(), ".env.local");
 if (!process.env.SUPABASE_URL && existsSync(ENV_FILE)) {
   process.loadEnvFile(ENV_FILE);
 }
@@ -10,7 +10,7 @@ if (!process.env.SUPABASE_URL && existsSync(ENV_FILE)) {
 function requerida(nombre: string): string {
   const valor = process.env[nombre];
   if (!valor) {
-    throw new Error(`Falta ${nombre}. Los e2e leen backend/.env.local (ver docs/TESTING.md).`);
+    throw new Error(`Falta ${nombre}. Los tests leen .env.local (ver docs/TESTING.md).`);
   }
   return valor;
 }

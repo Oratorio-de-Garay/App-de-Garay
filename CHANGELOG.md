@@ -11,6 +11,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 - **Migración, fase 1: herramientas.** Monorepo con npm workspaces, TypeScript estricto, ESLint, Prettier y Vitest; paquete `packages/shared` con los tipos de la base generados (`npm run db:types`) y utilidades comunes; workflow `.github/workflows/app.yml` (lint, formato, tipos, unitarios y e2e en cada PR). Un solo comando para verificar: `npm run check`. Guía en `docs/TESTING.md`.
 - **Migración, fase 2: API en Hono + TypeScript** (`apps/api/`). Mismas rutas y respuestas que el backend Express, ahora por módulos (`buffet`, `pibes`, `asistencia`, `admin`, `registro`, `push`), con validación Zod compartida con el frontend (`packages/shared/src/schemas/`), un único manejo de errores y permisos declarados al montar cada grupo de rutas. 94 tests unitarios y 42 de integración contra la base local (`npm run test:integration`). `docs/API.md` suma los endpoints del catálogo de buffet y `PATCH /api/buffet/sales/:id`, que no estaban documentados. No requiere migración de base.
 - **Migración, fase 3: frontend en React + Vite + TypeScript** (`apps/web/`), con Tailwind CSS v4 y componentes al estilo shadcn/ui. Una sola aplicación con direcciones limpias (`/`, `/buffet`, `/admin`; las `*.html` anteriores redirigen), navegación sin recargar, datos en caché con TanStack Query y un diseño nuevo pensado primero para el celular. Formularios validados con los mismos esquemas que la API. 73 tests unitarios de frontend y 16 e2e; `npm run capturas` saca una imagen de cada pantalla. Detalle y decisiones en `docs/MIGRACION.md`.
+- **Migración, fase 4: despliegue y limpieza.** Se borraron `backend/` y `frontend/`. El build de Vercel pasa a `npm run vercel-build` (`scripts/vercel-build.mjs`, Build Output API): la app desde el CDN y toda la API empaquetada en una sola función en `gru1`. `npm run vercel-build:probar` lo ejercita en una PC. **Requiere un cambio manual en Vercel antes de mergear:** *Root Directory* de `backend` a la raíz (pasos en `docs/SETUP.md#deploy-vercel`). No requiere variables nuevas ni migración de base.
 
 ### Corregido
 - **XSS en la pantalla de registro:** el nombre de un chico y los mensajes de error se insertaban como HTML sin escapar (`mostrarMensaje`). La interfaz nueva no arma HTML a mano.
@@ -24,7 +25,11 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 - **Se quitó `cors()` abierto a cualquier origen:** la app y la API comparten origen.
 
 ### Cambiado
-- **`npm run dev` (desde la raíz) levanta la API nueva.** El backend anterior queda en `backend/` hasta terminar la migración (`npm --prefix backend run dev`).
+- **Los archivos de variables pasan a la raíz:** `backend/.env.local` → `.env.local` y `backend/.env.production` → `.env.production` (ejemplo en `.env.local.example`). Los usan la API, la app y los tests.
+- **Todos los comandos se corren desde la raíz.** `npm run dev` levanta la app (Vite, puerto 3000) y la API (3001); `npm run start` compila y sirve todo junto como en producción; `npm run check` verifica un cambio. Node 22.12 o más nuevo.
+- **La app local nunca se arma contra producción por accidente:** el build usa siempre `.env.local` y falla si la base no es la local; a la base real sólo se llega con `npm run dev:prod`.
+- **Los links de los mails de solicitudes** apuntan a `/admin?tab=solicitudes…`. Los ya enviados (`/admin.html?…`) siguen funcionando.
+- **`/config.js` ya no existe:** la configuración pública de la app se resuelve al compilar. Cambiar `SUPABASE_URL`, `SUPABASE_KEY` o `VAPID_PUBLIC_KEY` en Vercel exige un redeploy.
 - **`package-lock.json` pasa a versionarse** (raíz y `backend/`): sin lockfile, cada build de Vercel podía resolver versiones distintas de las dependencias.
 
 ### Rendimiento

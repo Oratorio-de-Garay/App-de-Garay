@@ -39,7 +39,7 @@ servidor) con tokens reales de Supabase y contra la base local.
 
 ## Punta a punta (Playwright)
 
-Requisitos: `npx supabase start` y `backend/.env.local` completo (ver
+Requisitos: `npx supabase start` y `.env.local` completo (ver
 [`DESARROLLO_LOCAL.md`](DESARROLLO_LOCAL.md)). La primera vez:
 `npx playwright install chromium`.
 

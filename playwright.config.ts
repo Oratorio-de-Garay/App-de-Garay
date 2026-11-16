@@ -25,7 +25,7 @@ export default defineConfig({
   ],
   webServer: {
     // Compila la app y la sirve junto con la API en un solo puerto, como en producción.
-    command: "npm run build -w @garay/web && npx tsx --env-file=backend/.env.local apps/api/src/server.ts",
+    command: "npm run build -w @garay/web && npx tsx --env-file=.env.local apps/api/src/server.ts",
     url: `${E2E_URL}/api/health`,
     env: { PORT: String(E2E_PORT) },
     reuseExistingServer: !process.env.CI,

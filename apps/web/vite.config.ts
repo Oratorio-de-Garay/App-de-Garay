@@ -17,19 +17,20 @@ const raiz = path.resolve(aqui, "../..");
  * De dónde salen:
  *   - Vercel: de las variables del proyecto (process.env).
  *   - Local: SIEMPRE de .env.local (la base local), también al compilar.
- *   - Producción desde una PC: sólo pidiéndolo a propósito con
- *     ENTORNO=produccion (lo hace `npm run dev:prod`), que lee .env.production.
+ *   - Producción desde una PC: sólo pidiéndolo a propósito con el modo
+ *     "produccion" (`npm run dev:prod`) o ENTORNO=produccion: lee .env.production.
  *
  * El modo de Vite (development/production) NO elige la base: `vite build`
  * corre en modo production y antes eso alcanzaba para compilar una app local
  * apuntando a la base real.
  */
-function configPublica() {
-  const aProduccion = process.env.ENTORNO === "produccion";
+function configPublica(mode: string) {
+  // "produccion" (en castellano) es un modo propio y deliberado; el "production"
+  // de Vite es sólo "compilar optimizado" y no cuenta.
+  const aProduccion = mode === "produccion" || process.env.ENTORNO === "produccion";
   const nombre = aProduccion ? ".env.production" : ".env.local";
-  // TRANSITORIO: hasta la fase 4 el archivo vive en backend/.
-  const archivo = [raiz, path.join(raiz, "backend")].map((dir) => path.join(dir, nombre)).find(existsSync);
-  const delArchivo = archivo ? parseEnv(readFileSync(archivo, "utf8")) : {};
+  const archivo = path.join(raiz, nombre);
+  const delArchivo = existsSync(archivo) ? parseEnv(readFileSync(archivo, "utf8")) : {};
   const leer = (variable: string) => process.env[variable] ?? delArchivo[variable] ?? "";
 
   const supabaseUrl = leer("SUPABASE_URL");
@@ -43,7 +44,7 @@ function configPublica() {
   if (!baseLocal && !aProduccion && !process.env.VERCEL) {
     throw new Error(
       "El frontend se iba a armar apuntando a una base que no es la local. " +
-        "Si es a propósito, usá `npm run dev:prod` (ENTORNO=produccion).",
+        "Si es a propósito, usá `npm run dev:prod`.",
     );
   }
   return {
@@ -54,8 +55,8 @@ function configPublica() {
   };
 }
 
-export default defineConfig(() => {
-  const config = configPublica();
+export default defineConfig(({ mode }) => {
+  const config = configPublica(mode);
   const puertoApi = process.env.API_PORT ?? "3001";
 
   return {

@@ -131,7 +131,7 @@ function plantilla(mail: {
 
 /** Contenido del aviso a los aprobadores. Exportado para poder probarlo. */
 export function armarMailNuevaSolicitud(solicitud: Solicitud, appUrl: string) {
-  const link = `${appUrl}/admin.html?tab=solicitudes&solicitud=${encodeURIComponent(solicitud.id)}`;
+  const link = `${appUrl}/admin?tab=solicitudes&solicitud=${encodeURIComponent(solicitud.id)}`;
   const espacioNuevo = Boolean(solicitud.datos?.espacio_nuevo);
   const quien = `<strong>${escaparHtml(solicitud.solicitante_nombre)}</strong> (${escaparHtml(solicitud.solicitante_email)})`;
   const quiere = espacioNuevo

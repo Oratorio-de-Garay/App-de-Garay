@@ -10,7 +10,7 @@ Todas las rutas bajo `/api/*` **excepto `/api/health`** requieren:
 Authorization: Bearer <supabase_access_token>
 ```
 
-El token es el `access_token` de la sesión de Supabase Auth del usuario logueado (Google o código por mail), y además el email de esa sesión debe estar en la tabla `usuarios` (salvo en `/api/registro/*`, que es justamente para quien todavía no está). Usar siempre `window.apiFetch()` desde el frontend (definido en `frontend/auth.js`): arma este header y además `X-Organization-Id` con la organización activa.
+El token es el `access_token` de la sesión de Supabase Auth del usuario logueado (Google o código por mail), y además el email de esa sesión debe estar en la tabla `usuarios` (salvo en `/api/registro/*`, que es justamente para quien todavía no está). Desde la app se usa siempre el cliente de `apps/web/src/lib/api.ts` (`pedir(api.…)`): arma este header y además `X-Organization-Id` con la organización activa.
 
 Respuestas de error de auth:
 - `401`: no autenticado, o token inválido o expirado.
@@ -20,7 +20,7 @@ Respuestas de error de auth:
 
 ## Forma común de un "pibe"
 
-Varios endpoints devuelven personas con esta misma forma (ver `gradoLabel()` en el backend para el formato de `grado`):
+Varios endpoints devuelven personas con esta misma forma (tipo `Pibe` de `packages/shared/src/tipos.ts`; la arma `apps/api/src/modules/pibes/mappers.ts`):
 
 ```json
 {
@@ -246,7 +246,7 @@ Devuelve la sesión actual si el token es válido y el email está registrado. E
 
 ## Administración (`/api/admin/*`)
 
-Router en `backend/api/admin.js`. Todas las rutas exigen ser **admin de al menos una organización o superadmin** (`requireAdmin`); las marcadas con 🔒 exigen **superadmin**. Las reglas finas (scope, a quién se puede modificar) las aplica la base: ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md).
+Módulo `apps/api/src/modules/admin/routes.ts`. Todas las rutas exigen ser **admin de al menos una organización o superadmin** (`requiereAdmin`); las marcadas con 🔒 exigen **superadmin**. Las reglas finas (scope, a quién se puede modificar) las aplica la base: ver [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md).
 
 Los errores esperables devuelven `{ "error": "<mensaje en español>" }` con 400 (dato inválido), 403 (sin permiso), 404 (no encontrado o fuera de scope) o 409 (duplicado).
 
@@ -317,7 +317,7 @@ Se crea **una notificación por destinatario** (mismo `lote_id`), cada una con s
 
 #### `POST /api/push/despachar`
 
-Lo llama el cron de la base (`pg_cron` + `pg_net`) y **no usa sesión de usuario**: se autentica con `Authorization: Bearer <CRON_SECRET>` (comparación en tiempo constante) y no lee nada del body. Toma hasta 20 notificaciones vencidas, las envía y las cierra. `200 { procesadas }`, `401` si el secreto no coincide, `503` si falta `CRON_SECRET` o las claves VAPID. Es la única ruta de `/api` exceptuada de la sesión (ver `backend/api/index.js`).
+Lo llama el cron de la base (`pg_cron` + `pg_net`) y **no usa sesión de usuario**: se autentica con `Authorization: Bearer <CRON_SECRET>` (comparación en tiempo constante) y no lee nada del body. Toma hasta 20 notificaciones vencidas, las envía y las cierra. `200 { procesadas }`, `401` si el secreto no coincide, `503` si falta `CRON_SECRET` o las claves VAPID. Es la única ruta de `/api` que no usa sesión de usuario (ver `apps/api/src/modules/push/routes.ts`).
 
 ### Dispositivos push (`/api/push/*`)
 
@@ -332,7 +332,7 @@ Los usa cualquier usuario con sesión sobre **sí mismo** (el email sale del tok
 
 ## Registro (`/api/registro/*`)
 
-Router en `backend/api/registro.js`. Sólo exige una sesión válida (`requireSession`), no estar registrado: lo usa quien inició sesión pero todavía no tiene acceso. Todo se hace sobre el email de la sesión.
+Módulo `apps/api/src/modules/registro/routes.ts`. Sólo exige una sesión válida (`requiereSesion`), no estar registrado: lo usa quien inició sesión pero todavía no tiene acceso. Todo se hace sobre el email de la sesión.
 
 | Endpoint | Body | Respuesta |
 |---|---|---|

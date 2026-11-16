@@ -9,7 +9,7 @@ Acá queda **qué se hizo en cada fase, cómo se verificó y qué quedó pendien
 | 1 | Monorepo, TypeScript, lint, tests unitarios y CI | Hecha |
 | 2 | Backend a Hono con el mismo contrato HTTP | Hecha |
 | 3 | Frontend a React + Tailwind + shadcn/ui | Hecha |
-| 4 | Despliegue, limpieza del código viejo y documentación | Pendiente |
+| 4 | Despliegue, limpieza del código viejo y documentación | Hecha (falta validar el primer deploy) |
 
 ## Fase 0 — Red de seguridad
 
@@ -286,3 +286,54 @@ porque el login con Google no se puede probar en local.
   organizaciones): las pestañas se revisaron con capturas entrando como el
   superadmin local, y las rutas de la API tienen tests, pero los formularios no
   se enviaron desde la interfaz.
+
+## Fase 4 — Despliegue, limpieza y documentación
+
+**Objetivo:** que el repo quede sólo con el código nuevo, con un despliegue que se pueda probar en una PC y la documentación al día.
+
+**Qué cambió**
+
+| Tema | Antes | Ahora |
+|---|---|---|
+| Código anterior | `backend/` y `frontend/` | Borrados |
+| Variables de entorno | `backend/.env.local` y `backend/.env.production` | `.env.local` y `.env.production` en la raíz, un solo archivo para la API, la app y los tests |
+| Config de Vercel | `backend/vercel.json` con `builds` legacy, *Root Directory* `backend`, build que copiaba `frontend/` a `public/` | `vercel.json` en la raíz + `scripts/vercel-build.mjs` (Build Output API v3) |
+| Función | `backend/api/index.js` compilado por Vercel | La API empaquetada con esbuild en un solo archivo |
+| Config del frontend | `/config.js` servido por la función en cada carga | Resuelta al compilar |
+| Link de los mails | `/admin.html?tab=solicitudes…` | `/admin?tab=solicitudes…` (el viejo redirige) |
+
+**Por qué la Build Output API y no una carpeta `api/`**
+
+Lo documentado para Hono en Vercel es exportar la app desde `api/index.ts` y dejar que Vercel la compile. El problema es que esta API importa TypeScript de otro paquete del repo (`@garay/shared`), y no encontré garantía de que Vercel compile bien ese caso; tampoco hay forma de probarlo sin desplegar. Con la Build Output API el build arma todo:
+
+- la app, en `.vercel/output/static`;
+- la API, empaquetada con esbuild, en `.vercel/output/functions/api.func`;
+- las rutas, en `.vercel/output/config.json`.
+
+Así el resultado no depende de cómo Vercel trate un monorepo, y `npm run vercel-build:probar` lo ejercita en una PC: compila y le hace pedidos reales a la función, cargándola como un módulo que exporta `(req, res)`.
+
+Esa prueba ya encontró un error: el repo es `"type": "module"`, así que el paquete (CommonJS) fallaba al cargarse como ESM. Se resolvió escribiendo un `package.json` con `"type": "commonjs"` dentro de la función.
+
+**Decisiones**
+- **Una sola función para toda la API:** menos arranques en frío y una sola caché de sesión en memoria.
+- **Región `gru1`** en tres lugares (`vercel.json`, el script y los ajustes del proyecto), como antes.
+- **Los mapas de código de la app no se publican;** el de la función sí, para tener trazas legibles en los logs.
+- **`index.html` y `sw.js` se revalidan siempre; `/assets/*` se cachea para siempre** (los nombres llevan hash).
+- **No se agregaron variables de entorno:** la app toma al compilar las mismas `SUPABASE_URL`, `SUPABASE_KEY` y `VAPID_PUBLIC_KEY` que ya estaban cargadas en Vercel.
+
+**Paso manual que queda**
+
+Cambiar el *Root Directory* del proyecto de Vercel de `backend` a la raíz, justo antes de mergear. El orden y la lista de qué revisar están en [SETUP.md](SETUP.md#deploy-vercel).
+
+**Verificación (en una PC)**
+- `npm run check`: lint, formato, tipos y 167 unitarios.
+- `npm run test:integration`: 42 de 42.
+- `npm run e2e`: 16 de 16 contra la app compilada.
+- `npx supabase test db`: los tests pgTAP de la base, sin cambios.
+- `npm run vercel-build:probar`: el build de Vercel termina y la función empaquetada responde bien a 4 pedidos.
+- `npm run dev`: la app en Vite y la API detrás del proxy responden (probado en puertos alternativos, porque el 3000 estaba ocupado).
+
+**Sin verificar**
+- **El deploy en Vercel.** Lo más incierto es que Vercel tome `.vercel/output` tal como lo escribe el script (formato de la función y rutas). Se siguió la documentación, pero no se desplegó.
+- **Login con Google, notificaciones push e instalación como app,** que no se pueden probar en local.
+- **El workflow `app.yml` en GitHub:** la rama no se subió.

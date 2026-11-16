@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --env-file=../../backend/.env.local src/server.ts --solo-api",
-    "dev:prod": "tsx watch --env-file=../../backend/.env.production src/server.ts --solo-api",
-    "start": "tsx --env-file=../../backend/.env.local src/server.ts",
+    "dev": "tsx watch --env-file=../../.env.local src/server.ts --solo-api",
+    "dev:prod": "tsx watch --env-file=../../.env.production src/server.ts --solo-api",
+    "start": "tsx --env-file=../../.env.local src/server.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

@@ -2,45 +2,48 @@
 
 ## Variables de entorno
 
-Ningún script lee un `backend/.env`: cada uno usa su archivo, y el backend no arranca si falta alguna de las tres variables de Supabase (no hay valores por defecto, ver `backend/api/entorno.js`).
+Las mismas variables sirven a la API, a la app y a los tests. La API no arranca si falta alguna de las tres de Supabase (no hay valores por defecto, ver `apps/api/src/env.ts`).
 
 | Dónde | Archivo / lugar | Lo usa |
 |---|---|---|
-| Local, base local | `backend/.env.local` (ver `backend/.env.local.example`) | `npm run dev` |
-| Local, base de producción | `backend/.env.production` | `npm run dev:prod` |
-| Vercel | Project → Settings → Environment Variables | el deploy |
+| Local, base local | `.env.local` en la raíz (ver `.env.local.example`) | `npm run dev`, `npm run start`, los tests |
+| Local, base de producción | `.env.production` en la raíz | sólo `npm run dev:prod` |
+| Vercel | Project → Settings → Environment Variables | el build y la función |
 
 Los dos archivos están en `.gitignore`. Variables:
 
 | Variable | Dónde conseguirla | Uso |
 |---|---|---|
-| `SUPABASE_URL` | Supabase → Project Settings → **Data API** | Cliente anon y cliente admin |
-| `SUPABASE_KEY` | Supabase → Project Settings → Data API → **anon/publishable key** | Cliente anon (sujeto a RLS) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → Data API → **service_role key** | Cliente admin (`backend/api/auth.js`), bypassea RLS. **Secreto, sólo backend.** |
-| `PORT` | — | Puerto local del server Express (default 3000) |
-| `SMTP_HOST` / `SMTP_PORT` | Producción: `smtp.gmail.com` / `465`. Local: `127.0.0.1` / `54325` (Mailpit). | Avisos por mail de las solicitudes (`backend/api/mail.js`). Sin `SMTP_HOST` no se manda ningún aviso (la app funciona igual). |
+| `SUPABASE_URL` | Supabase → Project Settings → **Data API** | La API y la app. **Entra al bundle de la app.** |
+| `SUPABASE_KEY` | Supabase → Project Settings → Data API → **anon/publishable key** | La app (sesión de Supabase Auth). Es pública por diseño. **Entra al bundle de la app.** |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → Data API → **service_role key** | El cliente de la API (`apps/api/src/lib/supabase.ts`), saltea RLS. **Secreto: nunca llega al navegador.** |
+| `PORT` | — | Puerto de `npm run start` (la app compilada + la API). `npm run dev` usa el 3000 para la app y el 3001 para la API. |
+| `SMTP_HOST` / `SMTP_PORT` | Producción: `smtp.gmail.com` / `465`. Local: `127.0.0.1` / `54325` (Mailpit). | Avisos por mail de las solicitudes (`apps/api/src/lib/mail.ts`). Sin `SMTP_HOST` no se manda ningún aviso (la app funciona igual). |
 | `SMTP_USER` / `SMTP_PASS` | Producción: `oratoriogarayy@gmail.com` y su **contraseña de aplicación** (ver [Mails](#mails)). Local: vacías. | Idem. `SMTP_PASS` es **secreto**. |
 | `MAIL_FROM` | — | Remitente, ej: `Oratorio de Garay <oratoriogarayy@gmail.com>`. Con Gmail tiene que ser la misma cuenta que `SMTP_USER`. |
 | `APP_URL` | — | URL de la app para los links de los mails (`https://app-de-garay.vercel.app`). Sin ella se usa la del request, que en un preview de Vercel es la del preview. |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Generar el par **una vez** con `npx web-push generate-vapid-keys` y usar el mismo en cada entorno donde quieras push. | Notificaciones push (`backend/api/push.js`). Opcionales: sin ellas el push queda deshabilitado (503) y el resto funciona. La pública se entrega al frontend por `/config.js`. `VAPID_PRIVATE_KEY` es **secreta**. Si se cambia el par, los dispositivos ya suscriptos dejan de recibir y tienen que reactivar. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Generar el par **una vez** con `npx web-push generate-vapid-keys` y usar el mismo en cada entorno donde quieras push. | Notificaciones push (`apps/api/src/lib/push.ts`). Opcionales: sin ellas el push queda deshabilitado (503) y el resto funciona. La pública **entra al bundle de la app**. `VAPID_PRIVATE_KEY` es **secreta**. Si se cambia el par, los dispositivos ya suscriptos dejan de recibir y tienen que reactivar. |
 | `VAPID_SUBJECT` | `mailto:` de contacto, ej: `mailto:oratoriogarayy@gmail.com` (es el default) | Identifica al emisor ante los servicios push. |
 | `CRON_SECRET` | Generarlo con `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. El mismo valor va en Vercel y en Supabase Vault (`despacho_secreto`, ver [Notificaciones programadas](#notificaciones-programadas)). | Autentica a `POST /api/push/despachar`. Opcional: sin él las notificaciones programadas no se envían (503). **Secreto.** |
-| `GOOGLE_AUTH_CLIENT_ID` / `GOOGLE_AUTH_CLIENT_SECRET` | Google Cloud Console → Credentials | **Informativos únicamente** — el backend no los lee (`grep process.env` lo confirma). Se cargan directo en Supabase Auth → Providers → Google, no en el código. |
+| `GOOGLE_AUTH_CLIENT_ID` / `GOOGLE_AUTH_CLIENT_SECRET` | Google Cloud Console → Credentials | **Informativos únicamente** — la API no los lee. Se cargan directo en Supabase Auth → Providers → Google, no en el código. |
 
-El frontend no tiene `SUPABASE_URL` ni la publishable key hardcodeadas: las recibe del backend por `GET /config.js` (la "publishable/anon key" es pública por diseño — ver [ARCHITECTURE.md](ARCHITECTURE.md)).
+**Qué viaja al navegador.** La app necesita `SUPABASE_URL`, `SUPABASE_KEY` y `VAPID_PUBLIC_KEY`. Las tres son públicas por diseño y se incluyen **al compilar** (`apps/web/vite.config.ts` las elige una por una; ninguna otra variable entra al bundle). Consecuencias:
+
+- Cambiar una de esas tres en Vercel exige un **redeploy**.
+- **En una PC la app siempre se compila contra `.env.local`.** El build falla si `SUPABASE_URL` no es local, salvo que se pida la base real a propósito con `npm run dev:prod`. Así un `npm run build` no puede dejar una app local hablándole a producción.
 
 ## Desarrollo local
 
 **La guía completa, paso a paso y con problemas comunes, está en [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md).** Lo que sigue es un resumen.
 
 ```bash
-cd backend
-npm install
-npm run dev        # contra Supabase local (backend/.env.local)
-npm run dev:prod   # contra producción, a propósito (backend/.env.production)
+npm install        # una sola vez, en la raíz
+npm run dev        # contra Supabase local (.env.local) → http://localhost:3000
+npm run start      # compila y sirve todo junto, como en producción
+npm run dev:prod   # contra producción, a propósito (.env.production)
 ```
 
-No hay servidor de frontend separado: `backend/api/index.js` sirve `frontend/` como estático. Abrir `http://localhost:3000` directamente — no `frontend/index.html` a mano ni un `http-server` aparte, o `apiFetch`/CORS se comportan distinto.
+`npm run dev` levanta dos procesos: la app con Vite en el **3000** (recarga al guardar) y la API en el **3001**; Vite le reenvía `/api`. Abrir siempre `http://localhost:3000`: es la única dirección a la que el login de Supabase local sabe volver.
 
 ## Base de datos
 
@@ -66,13 +69,13 @@ La base local escucha en `postgresql://postgres:postgres@127.0.0.1:54322/postgre
 Resumen; el detalle está en [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md).
 
 1. `npx supabase start`: levanta base, auth, API y Mailpit. Aplica las migraciones y `seed.sql` la primera vez; después usá `db reset --local` para volver a sembrar.
-2. Copiá `backend/.env.local.example` a `backend/.env.local` y completalo con la *Publishable key* y la *Secret key* de `npx supabase status`. `.env.local` está en `.gitignore`.
-3. `cd backend && npm run dev`, y abrí `http://localhost:3000`.
+2. Copiá `.env.local.example` a `.env.local` (en la raíz) y completalo con la *Publishable key* y la *Secret key* de `npx supabase status`. `.env.local` está en `.gitignore`.
+3. `npm install` y `npm run dev` (en la raíz), y abrí `http://localhost:3000`.
 4. **Login:** con "o con tu mail". Escribís cualquier email y el código de 6 dígitos llega a **Mailpit** (`http://127.0.0.1:54324`). Los avisos de solicitudes también llegan ahí.
    - Usuarios del seed: `oratoriogarayy@gmail.com` (superadmin), `admin@local.test` (admin de Oratorio) y `miembro@local.test` (miembro de las dos organizaciones).
    - Cualquier otro email ve la pantalla de registro, para probar las solicitudes. El seed deja una pendiente de `nuevo@local.test` para Oratorio.
 
-**Cómo decide la app a qué base apuntar:** el frontend no tiene la configuración hardcodeada; la pide a `GET /config.js`, que el backend arma con `SUPABASE_URL`/`SUPABASE_KEY`. Si no están, el backend no arranca. Con `SUPABASE_URL` en `localhost`/`127.0.0.1` (`window.BASE_LOCAL`), la pantalla del código avisa que el mail llega a Mailpit. Si la app corre en `localhost` contra otra base, muestra una franja roja de "Base de PRODUCCIÓN", y la terminal lo avisa al arrancar. El botón de Google en local no funciona salvo que cargues credenciales en `[auth.external.google]` de `supabase/config.toml`.
+**Cómo decide la app a qué base apuntar:** por el archivo de variables con el que se levantó (`.env.local` siempre, salvo `npm run dev:prod`). Si falta alguna variable de Supabase, ni la API ni el build arrancan. Contra la base local, la pantalla del código avisa que el mail llega a Mailpit. Si la app corre en `localhost` contra otra base, muestra una franja roja de "Base de PRODUCCIÓN", y la terminal lo avisa al arrancar. El botón de Google en local no funciona salvo que cargues credenciales en `[auth.external.google]` de `supabase/config.toml`.
 
 ### Aplicar migraciones a producción
 
@@ -90,7 +93,7 @@ Resumen; el detalle está en [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md).
 1. `npx supabase link --project-ref <ref>` y `npx supabase db push`. Esto crea todo el schema, incluidas las tablas base.
 2. Cargar los lookups: niveles, grados y edades (ver `supabase/seed.sql` como referencia).
 3. La migración `20260926000000_roles_y_admin.sql` carga como **superadmin** a `oratoriogarayy@gmail.com`. Con esa cuenta:
-   - Entrás a `admin.html`.
+   - Entrás a `/admin`.
    - Creás o revisás las organizaciones.
    - Asignás admins.
    - Das de alta usuarios.
@@ -120,16 +123,16 @@ Resumen; el detalle está en [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md).
      ```
      El último par cubre los **deploy previews de Vercel** (`app-de-garay-<hash>-<team>.vercel.app`), que cambian en cada push. Sin la variante `/*`, un `redirectTo` con trailing slash no matchea y Supabase cae silenciosamente al Site URL — así se manifiesta: el login "funciona" pero siempre termina en producción en vez de en el preview desde el que arrancó.
 
-4. El frontend (`frontend/auth.js`) arma el `redirectTo` como `window.location.origin + "/"`: siempre la raíz del deploy desde el que se inició sesión. No hay nada que tocar ahí al agregar un preview nuevo, sólo mantener actualizada la allow list de Supabase.
-   - **Por qué la raíz y no la página actual:** en la allow list, `*` no abarca puntos ni barras, así que `/admin.html?...` no matchea `/*` y Supabase caería en el Site URL.
-   - **Volver al link original:** al empezar el login (Google o código), `auth.js` guarda en `localStorage` la ruta a la que quería ir el usuario (`oratorio.retorno`, vigente 30 minutos). Cuando la sesión queda confirmada, lo lleva ahí. Sólo acepta rutas del mismo sitio.
+4. La app (`apps/web/src/features/auth/login.tsx`) arma el `redirectTo` como `location.origin + "/"`: siempre la raíz del deploy desde el que se inició sesión. No hay nada que tocar ahí al agregar un preview nuevo, sólo mantener actualizada la allow list de Supabase.
+   - **Por qué la raíz y no la página actual:** es la única dirección que seguro matchea la allow list; con cualquier otra, si no matchea, Supabase cae en el Site URL.
+   - **Volver al link original:** al empezar el login (Google o código) se guarda en `localStorage` la ruta a la que quería ir el usuario (`oratorio.retorno`, vigente 30 minutos; `apps/web/src/lib/almacen.ts`). Cuando la sesión queda confirmada, lo lleva ahí. Sólo acepta rutas del mismo sitio.
 
 ## Mails
 
 Se mandan mails en dos lugares, y los dos salen por **Gmail** desde `oratoriogarayy@gmail.com`:
 
 - **Supabase Auth:** el código de 6 dígitos para entrar con el mail.
-- **Backend** (`backend/api/mail.js`): los avisos de solicitudes (a los aprobadores cuando hay una nueva, y al solicitante cuando se resuelve).
+- **La API** (`apps/api/src/lib/mail.ts`): los avisos de solicitudes (a los aprobadores cuando hay una nueva, y al solicitante cuando se resuelve).
 
 El SMTP que trae Supabase de fábrica **no sirve**: sólo manda a los miembros del equipo del proyecto y unos pocos mails por hora.
 
@@ -162,7 +165,7 @@ Cargar `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER`, `SMTP_PASS`, `M
 
 ## Notificaciones programadas
 
-Las notificaciones push programadas las dispara la base: `pg_cron` corre cada minuto `despachar_notificaciones_programadas()` y, **sólo si hay alguna vencida**, llama con `pg_net` a `POST /api/push/despachar` del backend. La migración `20261110000000_notificaciones_programadas.sql` activa `pg_cron` y `pg_net` y crea el job. Falta decirle **a qué URL llamar y con qué secreto**, que no viven en el repo sino en Supabase Vault. Una sola vez por entorno:
+Las notificaciones push programadas las dispara la base: `pg_cron` corre cada minuto `despachar_notificaciones_programadas()` y, **sólo si hay alguna vencida**, llama con `pg_net` a `POST /api/push/despachar`. La migración `20261110000000_notificaciones_programadas.sql` activa `pg_cron` y `pg_net` y crea el job. Falta decirle **a qué URL llamar y con qué secreto**, que no viven en el repo sino en Supabase Vault. Una sola vez por entorno:
 
 1. Generar el secreto (ver `CRON_SECRET` en [Variables de entorno](#variables-de-entorno)) y cargarlo como `CRON_SECRET` en Vercel (Production y, si se quiere probar ahí, Preview). Redeploy.
 2. En el SQL Editor de Supabase (es un dato de configuración, no un cambio de schema):
@@ -176,7 +179,7 @@ Las notificaciones push programadas las dispara la base: `pg_cron` corre cada mi
 
 Mientras falten, las programadas quedan en `programada` y la base avisa con un warning en cada pasada; las inmediatas no se ven afectadas. Para ver qué pasó: `select * from cron.job_run_details order by start_time desc limit 10;` y `select * from net._http_response order by created desc limit 10;`.
 
-**Local:** `pg_cron` no puede llamar a `localhost:3000` desde el contenedor sin configuración extra. Para probar se dispara a mano, con `CRON_SECRET` en `backend/.env.local`:
+**Local:** `pg_cron` no puede llamar a `localhost:3000` desde el contenedor sin configuración extra. Para probar se dispara a mano, con `CRON_SECRET` en `.env.local`:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/push/despachar
@@ -186,20 +189,73 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/p
 
 ## Deploy (Vercel)
 
-- Un solo proyecto Vercel con *Root Directory* `backend`, configurado por [`backend/vercel.json`](../backend/vercel.json). Tiene que estar activado *Include source files outside of the Root Directory* (Settings → General): el build copia `../frontend` a `public/` para servirlo desde la CDN.
-- Variables de entorno (las de la tabla de arriba) se cargan en Vercel → Project → Settings → Environment Variables.
-- Cada push a cualquier rama genera un **preview deployment** con URL propia; el deploy de la rama por defecto se alias a producción.
-- **Región de la función: `gru1` (São Paulo)**, cerca de la base (`sa-east-1`) y de los usuarios (Argentina). Está en `backend/vercel.json` y en Settings → Functions; si se cambia una, cambiar la otra.
-- **Se mantiene `builds` (config legacy) a propósito:** `backend/api/` tiene varios `.js` (auth, admin, push…) y sin `builds` Vercel publicaría cada uno como una función propia. Si se toca `vercel.json`, no pasar a la configuración moderna sin mover esos módulos fuera de `api/`.
-- **Verificar un preview:** los previews están protegidos por el login de Vercel (a `curl` responden 302). Para probarlos hay que iniciar sesión en el navegador (pidiéndoselo al usuario si lo hace un agente) y medir con `fetch` desde la propia página: los estáticos deben dar `X-Vercel-Cache: HIT` y `Content-Encoding: br`, y `/config.js` debe seguir dinámico (`no-store`). La URL del preview sale de `gh api repos/<owner>/<repo>/deployments/<id>/statuses`.
-- `VAPID_PUBLIC_KEY` suele estar vacía en el entorno **Preview**: el push no se puede probar ahí sin cargarla.
-- Después de cualquier cambio en las variables de entorno hace falta un **redeploy** para que tome efecto (Vercel no las recarga en caliente).
-- Ver la sección anterior para lo que hay que mantener sincronizado en Supabase cuando cambian las URLs de deploy.
+Un solo proyecto Vercel sirve la app y la API desde el mismo origen.
+
+### Configuración del proyecto
+
+| Ajuste (Settings → General / Build) | Valor |
+|---|---|
+| **Root Directory** | la raíz del repo (vacío). **No** `backend`, que ya no existe. |
+| Framework Preset | Other |
+| Build Command | `npm run vercel-build` (lo fija [`vercel.json`](../vercel.json)) |
+| Install Command | `npm ci` (lo fija `vercel.json`) |
+| Output Directory | sin completar: el build escribe `.vercel/output` |
+| Node.js Version | 22.x |
+| Functions → Region | `gru1` (São Paulo). También está en `vercel.json` y en `scripts/vercel-build.mjs`: si se cambia una, cambiar las otras. |
+
+Ya no hace falta *Include source files outside of the Root Directory*.
+
+### Cómo se arma
+
+`npm run vercel-build` corre [`scripts/vercel-build.mjs`](../scripts/vercel-build.mjs), que escribe `.vercel/output` con la [Build Output API v3](https://vercel.com/docs/build-output-api):
+
+- `static/`: la app compilada por Vite. La sirve el CDN, con compresión y sin pasar por la función.
+- `functions/api.func/`: **toda la API en una sola función**, empaquetada con esbuild (un archivo con sus dependencias adentro).
+- `config.json`: las rutas. `/api/*` → la función; `/assets/*` con caché para siempre (los nombres llevan hash); cualquier otra dirección → `index.html`, que resuelve el router de la app.
+
+**Por qué se empaqueta acá y no con una carpeta `api/`:** la API importa TypeScript de otro paquete del repo (`@garay/shared`). Empaquetándola en el build, el resultado no depende de cómo Vercel compile un monorepo, y **se puede probar en una PC**:
+
+```bash
+npm run vercel-build:probar
+```
+
+Compila (contra la base local) y le hace pedidos reales a la función empaquetada, cargándola como un módulo que exporta `(req, res)`.
+
+### Publicar la migración a React + Hono (una sola vez)
+
+El proyecto venía con *Root Directory* `backend`. Ese ajuste es de todo el proyecto, no de una rama, así que **los previews de la rama de la migración no construyen hasta cambiarlo**, y una vez cambiado `main` tampoco construye hasta mergear. Orden:
+
+1. Con el PR listo y sin otros cambios por entrar a `main`: en Vercel, cambiar **Root Directory** a la raíz, **Framework Preset** a *Other* y **Node.js Version** a 22.x.
+2. Redeploy del preview de la rama (o un push vacío) y revisar la lista de abajo.
+3. Si está bien: mergear a `main`.
+4. Si no: volver *Root Directory* a `backend`. Producción no se tocó en ningún momento: los deploys ya publicados no cambian.
+
+Las variables de entorno son las mismas de siempre; no hay que agregar ninguna.
+
+### Qué revisar en el preview
+
+Los previews están protegidos por el login de Vercel (a `curl` responden 302): hay que iniciar sesión en el navegador (pidiéndoselo al usuario si lo hace un agente).
+
+- [ ] La app carga, y `/admin` abierto directo en la barra de direcciones también (no da 404).
+- [ ] `/api/health` responde `{"status":"ok"}`.
+- [ ] Login con **Google** y con **código por mail**. Con Google, que vuelva al preview y no a producción (allow list de Supabase, ver arriba).
+- [ ] Un link viejo (`/admin.html?tab=solicitudes`) redirige a `/admin?tab=solicitudes`.
+- [ ] Buscar un chico, marcar y desmarcar un presente.
+- [ ] En las herramientas del navegador: los archivos de `/assets/` vienen con `Cache-Control: … immutable` y `Content-Encoding: br`; los pedidos a `/api` muestran la región `gru1` en `x-vercel-id`.
+- [ ] Notificaciones push e "Instalar como app", en un celular. `VAPID_PUBLIC_KEY` suele estar vacía en el entorno **Preview**: sin ella el push no se puede probar ahí.
+
+Nada de esto se pudo verificar antes de publicar: en una PC se probó el build y la función, no Vercel. Lo más incierto es que Vercel tome `.vercel/output` tal como lo escribe el script (formato de la función y rutas); si el primer deploy falla, el log del build y `scripts/vercel-build.mjs` son el lugar donde mirar.
+
+### Para tener en cuenta
+
+- Cada push a cualquier rama genera un **preview** con URL propia; el deploy de la rama por defecto queda como producción.
+- Después de cambiar variables de entorno hace falta un **redeploy**. Para `SUPABASE_URL`, `SUPABASE_KEY` y `VAPID_PUBLIC_KEY` es indispensable: están dentro del bundle de la app.
+- Ver la sección de autenticación para lo que hay que mantener sincronizado en Supabase cuando cambian las URLs de deploy.
 
 ## Checklist rápido para un agente nuevo
 
 1. Leer [ARCHITECTURE.md](ARCHITECTURE.md) completo, y [ROLES_Y_PERMISOS.md](ROLES_Y_PERMISOS.md) si vas a tocar autenticación o permisos.
 2. Leer [DATABASE.md](DATABASE.md) — especialmente la sección de deuda técnica sobre el schema no versionado.
-3. Levantar la app en local siguiendo [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md) y entrar con uno de los usuarios de prueba del seed.
+3. Levantar la app en local siguiendo [DESARROLLO_LOCAL.md](DESARROLLO_LOCAL.md) y entrar con uno de los usuarios de prueba del seed. Leer [TESTING.md](TESTING.md): `npm run check` antes de dar por terminado un cambio.
 4. Antes de tocar el schema de Supabase: confirmar el estado real con `supabase db pull` o revisando el SQL Editor, no asumir que `supabase/migrations/` está completo.
 5. Antes de agregar un endpoint nuevo: revisar [API.md](API.md) para mantener las convenciones de forma de respuesta y manejo de errores.

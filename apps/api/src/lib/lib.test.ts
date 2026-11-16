@@ -187,7 +187,7 @@ describe("mails", () => {
   it("el aviso a los aprobadores lleva el link a la solicitud", () => {
     const mail = armarMailNuevaSolicitud(solicitud, "https://app.test");
     expect(mail.subject).toBe("Solicitud #7: <b>Ana</b> quiere sumarse a Oratorio & Cía");
-    expect(mail.text).toContain("https://app.test/admin.html?tab=solicitudes&solicitud=id%20con%20espacios");
+    expect(mail.text).toContain("https://app.test/admin?tab=solicitudes&solicitud=id%20con%20espacios");
   });
 
   it("distingue pedir un espacio nuevo", () => {
