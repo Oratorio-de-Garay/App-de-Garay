@@ -1,6 +1,7 @@
-// Forma común de un pibe en TODAS las respuestas de la API (búsqueda, ficha,
-// asistencias por fecha). El frontend depende de que sea siempre la misma: si
-// se agrega un campo, se agrega acá.
+// Arma la forma común de un pibe (tipo `Pibe` de @garay/shared) a partir de
+// las filas de la base. El frontend depende de que sea siempre la misma.
+
+import type { Pibe, PibeConResumen } from "@garay/shared";
 
 export interface Grado {
   id: number;
@@ -17,21 +18,6 @@ export interface PibeDeLaBase {
   telefono_emergencia: number | null;
   grado: Grado | null;
   edad: { id: number; nombre: string } | null;
-}
-
-export interface Pibe {
-  id: string;
-  nombre: string;
-  apellido: string;
-  nombreCompleto: string;
-  grado_id: number | null;
-  /** Ej: "Primario 3°". */
-  grado: string | null;
-  edad_id: number | null;
-  edad: string | null;
-  ficha: boolean;
-  obs: string | null;
-  telefono: number | null;
 }
 
 export function etiquetaDeGrado(grado: Pick<Grado, "nivel" | "grado"> | null | undefined): string | null {
@@ -69,13 +55,6 @@ export interface FilaDeBusqueda {
   telefono_emergencia: number | null;
   visitas: number | string | null;
   ultima_asistencia: string | null;
-  marcado_hoy: boolean | null;
-}
-
-export interface PibeConResumen extends Pibe {
-  visitas: number;
-  ultima_asistencia: string | null;
-  /** null cuando no se pidió una fecha. */
   marcado_hoy: boolean | null;
 }
 

@@ -14,14 +14,17 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspaces --if-present",
-    "test": "vitest run --project shared --project api",
-    "test:watch": "vitest --project shared --project api",
+    "test": "vitest run --project shared --project api --project web",
+    "test:watch": "vitest --project shared --project api --project web",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
     "db:types": "supabase gen types typescript --schema public > packages/shared/src/database.types.ts && prettier --write packages/shared/src/database.types.ts",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm test",
     "test:integration": "vitest run --project integracion",
-    "dev": "npm run dev -w @garay/api"
+    "dev": "concurrently -k -n api,web -c green,cyan \"npm run dev -w @garay/api\" \"npm run dev -w @garay/web\"",
+    "build": "npm run build -w @garay/web",
+    "start": "npm run build && npm run start -w @garay/api",
+    "capturas": "node -e \"process.env.CAPTURAS='1';require('child_process').execSync('npx playwright test capturas --project=escritorio',{stdio:'inherit'})\""
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -34,6 +37,9 @@
     "prettier": "^3.10.1",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.2",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "concurrently": "^10.0.7",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "@vitejs/plugin-react": "^6.3.0"
   }
 }

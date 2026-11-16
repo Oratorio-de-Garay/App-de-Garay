@@ -14,7 +14,10 @@ unitarios) y, si tocaste algo que se ve en pantalla o un endpoint, `npm run e2e`
 
 - **pgTAP:** reglas que viven en SQL (permisos, scope por organización,
   auditoría, stock). Si la regla está en una función de la base, se prueba ahí.
-- **Unitarios:** funciones puras y componentes sueltos. Rápidos, sin red.
+- **Unitarios:** funciones puras y componentes sueltos. Rápidos, sin red. Los
+  del frontend (`apps/web/src/**/*.test.ts[x]`) corren en jsdom con Testing
+  Library; la lógica que se pueda sacar de un componente a una función pura
+  (como `features/buffet/carrito.ts`) se prueba ahí, que es más simple.
 - **Integración:** un endpoint contra la base real: autenticación, validación,
   códigos de estado y forma de la respuesta.
 - **Punta a punta:** los recorridos que hace una persona. Pocos y valiosos:
@@ -62,6 +65,13 @@ Requisitos: `npx supabase start` y `backend/.env.local` completo (ver
    segundo por mail.
 4. Nombrá con la marca lo que crees: `MARCA` + `marcaUnica()`.
 5. Un test etiquetado `@celular` en el título corre además en viewport móvil.
+
+### Capturas para revisar el diseño
+
+`npm run capturas` recorre todas las pantallas en escritorio (1280×800) y
+celular (390×844) y deja una imagen de cada una en `test-results/capturas/`.
+No verifica nada: sirve para mirar cómo quedó un cambio visual sin recorrer la
+app a mano. Usalo después de tocar estilos o componentes compartidos.
 
 ### Si falla
 

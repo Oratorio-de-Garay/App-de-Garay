@@ -24,10 +24,11 @@ export default defineConfig({
     { name: "celular", use: { ...devices["Pixel 7"] }, grep: /@celular/ },
   ],
   webServer: {
-    command: "npx tsx --env-file=backend/.env.local apps/api/src/server.ts",
+    // Compila la app y la sirve junto con la API en un solo puerto, como en producción.
+    command: "npm run build -w @garay/web && npx tsx --env-file=backend/.env.local apps/api/src/server.ts",
     url: `${E2E_URL}/api/health`,
     env: { PORT: String(E2E_PORT) },
     reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
+    timeout: 180_000,
   },
 });

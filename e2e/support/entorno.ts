@@ -33,6 +33,8 @@ export const USUARIOS = {
   admin: "admin@local.test",
   miembro: "miembro@local.test",
   sinAcceso: "nuevo@local.test",
+  /** Lo crean las migraciones. En local entra con código, como cualquiera. */
+  superadmin: "oratoriogarayy@gmail.com",
 } as const;
 
 // Todo lo que crean los tests lleva esta marca, para poder limpiarlo.

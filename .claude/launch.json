@@ -1,7 +1,13 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "api-local", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 },
+    {
+      "name": "app-compilada",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "-w", "@garay/api"],
+      "port": 3200
+    },
+    { "name": "app-dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 },
     {
       "name": "backend-anterior",
       "runtimeExecutable": "npm",

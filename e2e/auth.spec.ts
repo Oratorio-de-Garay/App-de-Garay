@@ -22,7 +22,7 @@ test.describe("acceso", () => {
 
     await expect(new Asistencia(page).buscador()).toBeVisible();
 
-    await page.getByRole("button", { name: "Salir" }).click();
+    await login.salir();
     await expect(login.mail()).toBeVisible();
   });
 
@@ -44,6 +44,7 @@ test.describe("acceso", () => {
 
   test("un miembro sin rol admin no entra al panel de administración", async ({ page }) => {
     await iniciarSesion(page, USUARIOS.miembro);
+    // La dirección de antes de la migración: tiene que seguir funcionando.
     await page.goto("/admin.html");
     await expect(page.getByText("No tenés permisos de administración.")).toBeVisible();
     await expect(new Asistencia(page).buscador()).toBeVisible();

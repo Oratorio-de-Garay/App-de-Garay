@@ -8,7 +8,7 @@ Acá queda **qué se hizo en cada fase, cómo se verificó y qué quedó pendien
 | 0 | Rama, ADR y tests e2e de caracterización sobre la app actual | Hecha |
 | 1 | Monorepo, TypeScript, lint, tests unitarios y CI | Hecha |
 | 2 | Backend a Hono con el mismo contrato HTTP | Hecha |
-| 3 | Frontend a React + Tailwind + shadcn/ui | Pendiente |
+| 3 | Frontend a React + Tailwind + shadcn/ui | Hecha |
 | 4 | Despliegue, limpieza del código viejo y documentación | Pendiente |
 
 ## Fase 0 — Red de seguridad
@@ -180,3 +180,109 @@ opcional (`entrego_ficha`, `organizaciones`) quedaba como obligatorio.
 - `backend/` sigue en el repo sin uso hasta la fase 4. `npm run dev` ya
   levanta la API nueva; el backend anterior se puede correr con
   `npm --prefix backend run dev` para comparar.
+
+## Fase 3 — Frontend a React
+
+**Objetivo:** reemplazar las tres páginas HTML por una sola aplicación con
+navegación sin recargas, componentes compartidos y un diseño nuevo, sin perder
+ninguna función.
+
+**Estructura** (`apps/web/src/`)
+
+| Carpeta | Qué hay |
+|---|---|
+| `styles/app.css` | Tailwind v4 y **todos** los colores de la app como tokens |
+| `components/ui/` | Piezas base al estilo shadcn/ui: botón, campos, diálogo, pestañas, tarjeta, insignia, alerta, avatar |
+| `components/` | `Listado` (tabla paginada que en el celular es una lista de tarjetas), `DialogoDeFormulario`, `useConfirmar`, `Stepper`, `Consulta`, `Shell` |
+| `features/<dominio>/` | `auth`, `asistencia`, `buffet`, `admin`, `push`: cada una con su `pagina.tsx`, sus `consultas.ts` y su lógica pura |
+| `lib/` | Cliente de la API tipado (`api.ts`), sesión de Supabase, formato y storage |
+| `router.tsx` | Rutas `/`, `/buffet`, `/admin` y redirecciones desde `*.html` |
+
+**Qué reemplaza a qué**
+
+| Antes | Ahora |
+|---|---|
+| Tres HTML con el encabezado y el menú copiados | `Shell` |
+| `crearListadoPaginado` + tui-pagination (CDN) | `Listado` |
+| Tres implementaciones de modal, `alert()` y `confirm()` | `DialogoDeFormulario`, `useConfirmar` y avisos (`sonner`) |
+| `escapeHtml` en 5 lugares e `innerHTML` | React escapa solo: desaparece el XSS de `mostrarMensaje` |
+| `apiFetch` + `apiGet`/`apiSend` por página | `api` + `pedir` (tipados con las rutas de la API) |
+| Variables globales y "recargar todo" tras guardar | TanStack Query: cada cambio invalida sólo lo suyo |
+| `/config.js` servido por la función en cada carga | Configuración resuelta al compilar |
+| `supabase-js` desde un CDN, sin versión fija | Dependencia versionada dentro del bundle |
+
+**Decisiones**
+- **Lo que se ve sale de la URL** (ficha abierta, historial, pestaña, evento):
+  el botón "atrás" del celular hace lo esperado y un link lleva a esa vista.
+- **Los formularios validan con los esquemas de `packages/shared`**, los
+  mismos que usa la API.
+- **Sin TanStack Table:** el plan lo mencionaba, pero la paginación es del
+  lado del cliente y `Listado` la resuelve en ~200 líneas. Se suma cuando haga
+  falta ordenar o filtrar por columna.
+- **Sin caché persistida en el dispositivo:** el plan la proponía para abrir
+  más rápido. Se descartó porque dejaría nombres y datos de menores guardados
+  en teléfonos que a veces son compartidos. Los datos viven en memoria y se
+  borran al cerrar sesión.
+- **`<select>` nativo** en vez del de Radix: en el celular abre el selector
+  del sistema, que es lo más cómodo con una mano.
+- **Componentes escritos a mano siguiendo a shadcn/ui** (mismas piezas de
+  Radix y misma estructura), sin usar su instalador: así quedan en español y
+  ajustados a esta app. Para sumar uno nuevo se puede copiar de shadcn/ui.
+- **Las direcciones viejas siguen funcionando** (`/admin.html?tab=…`): los
+  links de los mails ya enviados no se rompen.
+
+**Cambios que se notan al usar la app**
+- En la ficha, "Visitas este año" pasó a llamarse "Visitas": el número
+  siempre fue el total histórico.
+- "Editar datos" ahora abre con la ficha y las observaciones actuales (antes
+  abría siempre vacío y pisaba la observación).
+- Los presupuestos se pueden editar (antes sólo borrar).
+- Después de dar de alta un chico se abre su ficha.
+- Las confirmaciones y los avisos son de la app, no del navegador.
+- La ficha muestra el teléfono de emergencia, que antes no se veía.
+
+**Un error mío durante la fase (corregido)**
+La primera configuración de Vite elegía el archivo de variables según el modo
+de build, y `vite build` corre en modo *production*: el bundle local quedó
+apuntando a la base **real**. Con ese bundle se pidió un código de acceso para
+`admin@local.test` contra el Auth de producción (un solo pedido, sin datos).
+Ahora el modo de Vite no elige la base: en una PC se usa siempre `.env.local`,
+y el build falla si la URL no es local salvo que se pida con
+`ENTORNO=produccion`. Ver `apps/web/vite.config.ts`.
+
+**Tamaño**
+
+| | Antes | Ahora |
+|---|---|---|
+| JS propio | ~287 KB sin minificar, repartido en 8 scripts por página | 16 KB gzip de arranque + 6 a 11 KB gzip por pantalla |
+| Librerías | supabase-js y tui-pagination desde un CDN, en cada carga de página | 241 KB gzip en tres archivos con hash, que el navegador guarda entre deploys |
+| Al cambiar de pantalla | Recarga completa: se baja y ejecuta todo de nuevo y se vuelve a pedir `/api/auth/me` | Nada: sólo los datos de la pantalla, si no estaban ya en memoria |
+
+Las librerías pesan más que el código propio. El mayor candidato a achicar es
+`supabase-js` (56 KB gzip), del que sólo se usa la parte de sesión; no se tocó
+porque el login con Google no se puede probar en local.
+
+**Tests agregados**
+
+| Nivel | Cantidad | Qué cubren |
+|---|---|---|
+| Unitarios (frontend) | 73 | Formato, vuelta al link original sin redirecciones externas, cliente de la API, carrito de ventas, textos del panel, `Listado`, `Stepper`, diálogos y confirmación |
+| Punta a punta | 16 (antes 13) | Los mismos flujos de la fase 0 sobre la interfaz nueva, más una venta completa de buffet y la navegación por el menú sin recargar |
+
+`npm run capturas` saca una imagen de cada pantalla en escritorio y celular
+(`test-results/capturas/`) para revisar el diseño.
+
+**Verificación**
+- `npm run check`: lint, formato, tipos y 167 unitarios.
+- `npm run test:integration`: 42 de 42.
+- `npm run e2e`: 16 de 16 contra la app compilada, servida como en producción.
+- Capturas de las 16 pantallas revisadas en 1280×800 y 390×844.
+
+**Sin verificar**
+- **Login con Google:** no está configurado en local.
+- **Notificaciones push e instalación como app:** el código se portó tal cual,
+  pero necesitan un dispositivo real y claves VAPID válidas para su origen.
+- **Acciones de superadmin** (asignar y quitar roles, crear y renombrar
+  organizaciones): las pestañas se revisaron con capturas entrando como el
+  superadmin local, y las rutas de la API tienen tests, pero los formularios no
+  se enviaron desde la interfaz.

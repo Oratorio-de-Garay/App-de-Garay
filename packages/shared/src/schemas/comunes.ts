@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { es } from "zod/locales";
 import { esFechaISO } from "../fechas";
 
-// Mensajes de validación en español para todo lo que no tenga uno propio.
-z.config(z.locales.es());
+// Mensajes de validación en español para todo lo que no tenga uno propio. Se
+// importa sólo este idioma: `z.locales` arrastra todos al bundle del navegador.
+z.config(es());
 
 export const uuid = z.uuid("Identificador inválido.");
 

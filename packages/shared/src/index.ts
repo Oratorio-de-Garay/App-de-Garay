@@ -4,4 +4,5 @@ export * from "./schemas/comunes";
 export * from "./schemas/buffet";
 export * from "./schemas/pibes";
 export * from "./schemas/admin";
+export type * from "./tipos";
 export type { Database } from "./database.types";

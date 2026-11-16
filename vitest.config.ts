@@ -1,3 +1,5 @@
+import path from "node:path";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 // Dos clases de tests (ver docs/TESTING.md):
@@ -31,6 +33,25 @@ export default defineConfig({
             SMTP_HOST: "",
             APP_URL: "",
           },
+        },
+      },
+      {
+        plugins: [react()],
+        resolve: { alias: { "@": path.resolve("apps/web/src") } },
+        // La configuración pública que Vite inyecta al compilar (ver apps/web/vite.config.ts).
+        define: {
+          __CONFIG__: JSON.stringify({
+            supabaseUrl: "http://127.0.0.1:54321",
+            supabaseKey: "clave-publica-de-prueba",
+            vapidPublicKey: "",
+            baseLocal: true,
+          }),
+        },
+        test: {
+          name: "web",
+          include: ["apps/web/src/**/*.test.{ts,tsx}"],
+          environment: "jsdom",
+          setupFiles: ["apps/web/src/test/preparar.ts"],
         },
       },
       {
