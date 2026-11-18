@@ -11,6 +11,7 @@ import { Listado } from "@/components/listado";
 import { useEsAdminDeLaOrganizacion } from "@/features/auth/sesion";
 import { Stepper } from "@/components/stepper";
 import { Button } from "@/components/ui/button";
+import { AvisoDeDeshabilitado } from "@/components/ui/aviso";
 import { Campo, Input, Select } from "@/components/ui/campos";
 import { Badge, Card, EstadoVacio, Seccion } from "@/components/ui/varios";
 import { mensajeDeError } from "@/lib/api";
@@ -228,18 +229,26 @@ function FormularioDeEvento({
         <Campo etiqueta="Fecha" error={errors.fecha?.message}>
           {(props) => <Input {...props} type="date" {...register("fecha")} />}
         </Campo>
-        {/* Cerrar o reabrir un evento es de admins. Para el resto el campo no se
-            muestra y el estado viaja sin cambios desde los valores iniciales. */}
-        {esAdmin && (
-          <Campo etiqueta="Estado">
-            {(props) => (
+        {/* Cerrar o reabrir un evento es de admins. Para el resto el campo se ve
+            deshabilitado, con el motivo, y no forma parte del formulario: el
+            estado viaja sin cambios desde los valores iniciales. */}
+        <Campo etiqueta="Estado">
+          {(props) =>
+            esAdmin ? (
               <Select {...props} {...register("estado")}>
                 <option value="abierto">Abierto</option>
                 <option value="cerrado">Cerrado</option>
               </Select>
-            )}
-          </Campo>
-        )}
+            ) : (
+              <AvisoDeDeshabilitado mensaje="Sólo los usuarios con permisos de administrador pueden cambiar el estado de un evento.">
+                <Select {...props} disabled value={evento?.estado ?? "abierto"} onChange={() => undefined}>
+                  <option value="abierto">Abierto</option>
+                  <option value="cerrado">Cerrado</option>
+                </Select>
+              </AvisoDeDeshabilitado>
+            )
+          }
+        </Campo>
       </div>
       <Campo etiqueta="Observación">{(props) => <Input {...props} {...register("observacion")} />}</Campo>
     </DialogoDeFormulario>

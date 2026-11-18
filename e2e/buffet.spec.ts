@@ -68,7 +68,7 @@ test.describe("buffet", () => {
 });
 
 test.describe("buffet sin ser admin", () => {
-  test("un miembro no puede eliminar ni cerrar eventos", async ({ page }) => {
+  test("un miembro no puede eliminar ni cerrar eventos, y ve por qué", async ({ page }) => {
     const evento = `${MARCA} Feria miembro ${marcaUnica()}`;
     // Se crea en todas las organizaciones del miembro: no importa cuál abra la app.
     const { data: orgs } = await adminDb.from("organizaciones").select("id");
@@ -88,6 +88,17 @@ test.describe("buffet sin ser admin", () => {
     await buffet.filaDeEvento(evento).getByRole("button", { name: "Abrir" }).click();
     await page.getByRole("button", { name: "Editar evento" }).click();
     await expect(page.getByRole("dialog").getByLabel("Nombre")).toBeVisible();
-    await expect(page.getByRole("dialog").getByLabel("Estado")).toHaveCount(0);
+    const estado = page.getByRole("dialog").getByLabel("Estado");
+    await expect(estado).toBeDisabled();
+    const aviso = page.getByRole("tooltip");
+    await expect(aviso).toBeHidden();
+    await page
+      .getByRole("dialog")
+      .getByText("Estado", { exact: true })
+      .locator("..")
+      .locator("div")
+      .first()
+      .hover();
+    await expect(aviso).toContainText("Sólo los usuarios con permisos de administrador");
   });
 });
