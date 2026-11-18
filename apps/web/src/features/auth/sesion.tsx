@@ -132,6 +132,12 @@ export function useSesion(): SesionLista {
   return estado;
 }
 
+/** ¿Administra la organización activa? Sólo comodidad: la API lo vuelve a exigir. */
+export function useEsAdminDeLaOrganizacion(): boolean {
+  const { yo, organizacionId } = useSesion();
+  return organizacionId !== null && yo.organizaciones_admin.includes(organizacionId);
+}
+
 /** La organización activa, para las pantallas de datos. */
 export function useOrganizacionId(): string {
   const { organizacionId } = useSesion();

@@ -214,6 +214,12 @@ describe("buffet", () => {
         (await pedir("PATCH", `/api/buffet/events/${eventoId}`, { como, org, body: { estado: "cerrado" } }))
           .body,
       ).toMatchObject({ id: eventoId, estado: "cerrado", nombre: `${MARCA} Feria ${sufijo}` });
+      // Cerrado no se elimina: hay que reabrirlo primero.
+      expect(await pedir("DELETE", `/api/buffet/events/${eventoId}`, { como, org })).toMatchObject({
+        status: 409,
+        body: { error: "Un evento cerrado no se puede eliminar." },
+      });
+      await pedir("PATCH", `/api/buffet/events/${eventoId}`, { como, org, body: { estado: "abierto" } });
       expect((await pedir("DELETE", `/api/buffet/events/${eventoId}`, { como, org })).body).toEqual({
         ok: true,
       });
@@ -221,6 +227,41 @@ describe("buffet", () => {
         (await pedir("PATCH", `/api/buffet/events/${eventoId}`, { como, org, body: { estado: "abierto" } }))
           .status,
       ).toBe(404);
+    });
+
+    it("un miembro sin rol de admin no puede eliminar ni cerrar eventos", async () => {
+      const miembro = USUARIOS.miembro;
+      const crear = (body: unknown) => pedir("POST", "/api/buffet/events", { como: miembro, org: org, body });
+
+      const creado = await crear({ nombre: `${MARCA} Permisos ${sufijo}` });
+      expect(creado.status).toBe(201);
+      const id = creado.body.id;
+      const ruta = `/api/buffet/events/${id}`;
+      const opciones = { como: miembro, org: org };
+
+      // Crear ya cerrado, cerrar y eliminar: todo 403.
+      expect((await crear({ nombre: `${MARCA} Permisos cerrado ${sufijo}`, estado: "cerrado" })).status).toBe(
+        403,
+      );
+      expect((await pedir("PATCH", ruta, { ...opciones, body: { estado: "cerrado" } })).status).toBe(403);
+      expect((await pedir("DELETE", ruta, opciones)).status).toBe(403);
+
+      // Editar otros datos, mandando el mismo estado que ya tiene, sí puede.
+      expect(
+        (
+          await pedir("PATCH", ruta, {
+            ...opciones,
+            body: { nombre: `${MARCA} Permisos ${sufijo} 2`, estado: "abierto" },
+          })
+        ).status,
+      ).toBe(200);
+
+      // El admin sí cierra; el miembro no puede reabrirlo.
+      expect((await pedir("PATCH", ruta, { como, org: org, body: { estado: "cerrado" } })).status).toBe(200);
+      expect((await pedir("PATCH", ruta, { ...opciones, body: { estado: "abierto" } })).status).toBe(403);
+
+      await pedir("PATCH", ruta, { como, org: org, body: { estado: "abierto" } });
+      expect((await pedir("DELETE", ruta, { como, org: org })).status).toBe(200);
     });
   });
 });

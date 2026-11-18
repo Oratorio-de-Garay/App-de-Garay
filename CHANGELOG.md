@@ -25,6 +25,7 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 - **Datos faltantes o mal formados respondían `500`** con el error de Postgres; ahora `400` con un mensaje en español. Un evento de buffet inexistente respondía `500` al editarlo; ahora `404`.
 
 ### Seguridad
+- **Cualquier miembro podía eliminar o cerrar un evento de buffet.** Ahora sólo los admins de la organización pueden eliminar, cerrar o reabrir un evento (`403` para el resto), y un evento cerrado no se puede eliminar (`409`). En la app, el botón *Eliminar* se oculta para quien no es admin y queda inhabilitado en eventos cerrados; el campo *Estado* se ve deshabilitado para quien no es admin, con un aviso (al pasar el mouse, enfocar o tocar) que explica el motivo. Sin migración.
 - **Los errores inesperados ya no devuelven el mensaje interno de la base** al navegador; queda sólo en el log del servidor.
 - **Se quitó `cors()` abierto a cualquier origen:** la app y la API comparten origen.
 

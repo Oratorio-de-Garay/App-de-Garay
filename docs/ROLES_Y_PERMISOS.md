@@ -67,6 +67,8 @@ Cómo se decide quién entra a la app, qué datos ve y quién puede administrar 
 | Ver el historial de notificaciones | — | El de X | Todo |
 | Ver los dispositivos con notificaciones activadas de los usuarios (sin sus claves) | — | Los de X | Todos |
 | Activar o quitar las notificaciones en su propio dispositivo | ✓ | ✓ | ✓ |
+| Crear eventos de buffet y cargar ventas | ✓ | ✓ | ✓ |
+| Cerrar o reabrir un evento de buffet, o eliminarlo (un evento cerrado no se puede eliminar) | — | ✓ | ✓ |
 
 1. Ser superadmin **no** da acceso a los datos de las organizaciones. Para usar Registro o Buffet de una organización tiene que ser miembro, como cualquiera.
 2. El admin sólo ve y modifica las membresías de las organizaciones que administra. Si la persona además pertenece a otra organización, esa membresía no se toca y el admin ni siquiera la ve.
