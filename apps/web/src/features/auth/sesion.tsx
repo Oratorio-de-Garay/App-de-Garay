@@ -1,7 +1,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { guardarOrganizacion, leerOrganizacion } from "@/lib/almacen";
+import { guardarOrganizacion, leerOrganizacion, resolverOrganizacion } from "@/lib/almacen";
 import { api, ErrorDeApi, pedir, usarOrganizacion } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 
@@ -47,14 +47,15 @@ export function ProveedorDeSesion({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   // undefined: todavía no se sabe si hay sesión.
   const [sesion, setSesion] = useState<Session | null | undefined>(undefined);
-  const [organizacionElegida, setOrganizacionElegida] = useState(leerOrganizacion);
+  // Elección hecha en esta sesión de la app; sin ella se usa la recordada.
+  const [eleccion, setEleccion] = useState<{ usuarioId: string; id: string } | null>(null);
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((evento, nueva) => {
       if (evento === "SIGNED_OUT") {
-        // Nada de quien cerró sesión se hereda: ni su organización ni sus datos.
-        guardarOrganizacion(null);
-        setOrganizacionElegida(null);
+        // Sus datos no se heredan. La última organización sí queda recordada
+        // (por usuario) para volver a ella al entrar de nuevo.
+        setEleccion(null);
         usarOrganizacion(null);
         queryClient.clear();
       }
@@ -81,21 +82,25 @@ export function ProveedorDeSesion({ children }: { children: ReactNode }) {
     if (rechazada) void cerrarSesion();
   }, [rechazada]);
 
-  const cambiarOrganizacion = useCallback((id: string) => {
-    guardarOrganizacion(id);
-    setOrganizacionElegida(id);
-  }, []);
+  const cambiarOrganizacion = useCallback(
+    (id: string) => {
+      if (!usuarioId) return;
+      guardarOrganizacion(usuarioId, id);
+      setEleccion({ usuarioId, id });
+    },
+    [usuarioId],
+  );
 
   const estado = useMemo<EstadoDeSesion>(() => {
     if (sesion === undefined) return { tipo: "cargando" };
     if (sesion === null) return { tipo: "sin-sesion" };
     if (consulta.data) {
       const yo = consulta.data;
-      // Si la organización guardada ya no corresponde (le sacaron el acceso, o
-      // quedó de otro usuario del mismo navegador) se usa la que resolvió la API.
-      const organizacionId = yo.organizations.some((org) => org.id === organizacionElegida)
-        ? organizacionElegida
-        : yo.organizacion_id;
+      // Si la recordada ya no corresponde (le sacaron el acceso, o alguien tocó
+      // el localStorage) se usa la que resolvió la API.
+      const recordada =
+        eleccion && eleccion.usuarioId === usuarioId ? eleccion.id : leerOrganizacion(sesion.user.id);
+      const organizacionId = resolverOrganizacion(recordada, yo.organizations, yo.organizacion_id);
       return { tipo: "lista", yo, organizacionId, cambiarOrganizacion };
     }
     if (consulta.error instanceof ErrorDeApi) {
@@ -104,13 +109,14 @@ export function ProveedorDeSesion({ children }: { children: ReactNode }) {
     }
     if (consulta.error) return { tipo: "error", reintentar: () => void consulta.refetch() };
     return { tipo: "cargando" };
-  }, [sesion, consulta, organizacionElegida, cambiarOrganizacion]);
+  }, [sesion, usuarioId, consulta, eleccion, cambiarOrganizacion]);
 
   // Antes de que los hijos pidan datos: toda consulta lleva esta organización.
   if (estado.tipo === "lista") {
     usarOrganizacion(estado.organizacionId);
-    if (estado.organizacionId && estado.organizacionId !== leerOrganizacion()) {
-      guardarOrganizacion(estado.organizacionId);
+    // Ya validada: se deja guardada (y se pisa un valor inválido).
+    if (usuarioId && estado.organizacionId && estado.organizacionId !== leerOrganizacion(usuarioId)) {
+      guardarOrganizacion(usuarioId, estado.organizacionId);
     }
   }
 
