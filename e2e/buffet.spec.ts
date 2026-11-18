@@ -46,6 +46,23 @@ test.describe("buffet", () => {
     await expect(buffet.filaProducto(producto)).toContainText("-3");
   });
 
+  test("se crea un producto desde Nueva venta y queda agregado", async ({ page }) => {
+    const buffet = new Buffet(page);
+    const sufijo = marcaUnica();
+    const producto = `${MARCA} Gaseosa ${sufijo}`;
+    const evento = `${MARCA} Feria ${sufijo}`;
+
+    await buffet.abrir();
+    await buffet.abrirVentas();
+    await buffet.crearEvento(evento);
+    await page.getByRole("button", { name: "Nueva venta" }).click();
+    await buffet.crearProductoDesdeLaVenta(producto, "800");
+    await expect(buffet.totalDeLaVenta()).toContainText("$800");
+    await buffet.confirmarVenta();
+
+    await expect(page.getByRole("row").filter({ hasText: "Venta 1" })).toContainText(`1× ${producto}`);
+  });
+
   test("un producto sin nombre no se guarda", async ({ page }) => {
     const buffet = new Buffet(page);
     await buffet.abrir();

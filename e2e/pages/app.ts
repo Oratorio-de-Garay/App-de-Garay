@@ -132,6 +132,17 @@ export class Buffet {
     }
   }
 
+  /** Desde Nueva venta: crea un producto con el diálogo y queda agregado a la venta. */
+  async crearProductoDesdeLaVenta(nombre: string, precio: string): Promise<void> {
+    await dialogo(this.page).getByLabel("Agregar ítem").selectOption({ label: "+ Nuevo producto" });
+    await dialogo(this.page)
+      .getByLabel(/^Nombre/)
+      .fill(nombre);
+    await dialogo(this.page).getByLabel("Precio de venta").fill(precio);
+    await dialogo(this.page).getByRole("button", { name: "Guardar" }).click();
+    await expect(dialogo(this.page).getByRole("heading", { name: "Nueva venta" })).toBeVisible();
+  }
+
   totalDeLaVenta = (): Locator => dialogo(this.page).getByText("Total", { exact: true }).locator("..");
 
   async confirmarVenta(): Promise<void> {

@@ -22,6 +22,7 @@ import {
   claveDe,
   type ItemDeCarrito,
   opcionesDeLinea,
+  type Vendible,
   opcionesParaAgregar,
   problemaDelCarrito,
   quitar,
@@ -30,6 +31,7 @@ import {
   vendibles,
   vuelto,
 } from "./carrito";
+import { type Creado, FormularioDeCombo, FormularioDeProducto } from "./catalogo";
 import {
   type Evento,
   useBorrarEvento,
@@ -346,6 +348,8 @@ function DetalleDeEvento({ evento, alVolver }: { evento: Evento; alVolver: () =>
   );
 }
 
+const NUEVO_PRODUCTO = "nuevo:producto";
+const NUEVO_COMBO = "nuevo:combo";
 const MEDIOS_DE_PAGO = ["efectivo", "transferencia", "tarjeta", "otro"] as const;
 
 function FormularioDeVenta({
@@ -381,196 +385,227 @@ function FormularioDeVenta({
   const totalVenta = total(carrito);
   const cambio = medio === "efectivo" ? vuelto(totalVenta, Number(pagoCon)) : null;
   const porClave = (clave: string) => todos.find((v) => v.clave === clave);
+  // Alta de producto/combo sin salir de la venta: el diálogo se abre encima.
+  const [creando, setCreando] = useState<"producto" | "combo" | null>(null);
+  const agregarCreado = (creado: Creado, esCombo: boolean) =>
+    setCarrito((actual) =>
+      agregar(actual, vendibles(esCombo ? [] : [creado], esCombo ? [creado] : [])[0] as Vendible),
+    );
 
   return (
-    <DialogoDeFormulario
-      abierto
-      alCerrar={alCerrar}
-      ancho="lg"
-      titulo={venta ? "Editar venta" : "Nueva venta"}
-      descripcion={
-        <>
-          Evento: <strong className="text-foreground">{evento.nombre}</strong> ·{" "}
-          {formatoFechaCorta(evento.fecha)}
-        </>
-      }
-      textoEnviar={venta ? "Guardar cambios" : "Registrar venta"}
-      alEnviar={async () => {
-        const problema = problemaDelCarrito(carrito);
-        if (problema) throw new Error(problema);
-        await guardar.mutateAsync({
-          id: venta?.id,
-          eventoId: evento.id,
-          payment_method: medio,
-          observation: observacion.trim() || null,
-          items: carrito,
-        });
-        toast.success(venta ? "Venta actualizada." : `Venta registrada: ${formatoPesos(totalVenta)}.`);
-      }}
-    >
-      <Campo etiqueta="Agregar ítem">
-        {(props) => (
-          <Select
-            {...props}
-            value=""
-            // Elegir una opción la agrega directo (cantidad 1, precio de
-            // lista); después se ajusta en su propia línea.
-            onChange={(e) => {
-              const elegido = porClave(e.target.value);
-              if (elegido) setCarrito((actual) => agregar(actual, elegido));
-            }}
-          >
-            <option value="">Elegí un producto o combo</option>
-            {opcionesParaAgregar(todos, carrito).map((v) => (
-              <option key={v.clave} value={v.clave}>
-                {v.nombre}
-              </option>
-            ))}
-          </Select>
-        )}
-      </Campo>
-
-      {carrito.length === 0 ? (
-        <p className="rounded-xl border border-dashed py-6 text-center text-sm text-muted-foreground">
-          Todavía no agregaste ítems.
-        </p>
-      ) : (
-        <ul className="grid gap-2">
-          {carrito.map((item, indice) => (
-            <li
-              key={claveDe(item)}
-              className="grid gap-2 rounded-xl border bg-muted/40 p-3 sm:grid-cols-[1fr_8rem_9rem_auto] sm:items-end"
-            >
-              <div className="grid gap-1">
-                <span className="text-xs text-muted-foreground sm:sr-only">Producto</span>
-                <Select
-                  aria-label={`Producto de la línea ${indice + 1}`}
-                  value={claveDe(item)}
-                  // Cambiar el producto trae el precio de lista del nuevo.
-                  onChange={(e) => {
-                    const elegido = porClave(e.target.value);
-                    if (elegido) setCarrito((actual) => cambiarProducto(actual, indice, elegido));
-                  }}
-                >
-                  {opcionesDeLinea(todos, item)
-                    // Lo que ya está en otra línea no se ofrece: se duplicaría.
-                    .filter(
-                      (v) => v.clave === claveDe(item) || !carrito.some((otro) => claveDe(otro) === v.clave),
-                    )
-                    .map((v) => (
-                      <option key={v.clave} value={v.clave}>
-                        {v.nombre}
-                      </option>
-                    ))}
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:contents">
-                <label className="grid gap-1 text-xs text-muted-foreground">
-                  Cantidad
-                  <Stepper
-                    etiqueta="cantidad"
-                    minimo={1}
-                    valor={item.quantity}
-                    alCambiar={(quantity) =>
-                      setCarrito((actual) => cambiarLinea(actual, indice, { quantity }))
-                    }
-                  />
-                </label>
-                <label className="grid gap-1 text-xs text-muted-foreground">
-                  Precio
-                  <Stepper
-                    etiqueta="precio"
-                    paso={50}
-                    valor={item.unit_price}
-                    alCambiar={(unit_price) =>
-                      setCarrito((actual) => cambiarLinea(actual, indice, { unit_price }))
-                    }
-                  />
-                </label>
-              </div>
-              <div className="flex items-center justify-between gap-2 sm:justify-end">
-                <strong className="min-w-20 text-right tabular-nums">
-                  {formatoPesos(totalDeLinea(item))}
-                </strong>
-                <Button
-                  variant="destructive-ghost"
-                  size="icon"
-                  aria-label={`Quitar ${item.description}`}
-                  onClick={() => setCarrito((actual) => quitar(actual, indice))}
-                >
-                  <Trash2 aria-hidden />
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="flex items-baseline justify-between rounded-xl bg-brand-50 px-4 py-3">
-        <span className="font-semibold">Total</span>
-        <strong className="text-2xl tabular-nums text-primary" aria-live="polite">
-          {formatoPesos(totalVenta)}
-        </strong>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Campo etiqueta="Método de pago">
+    <>
+      <DialogoDeFormulario
+        abierto
+        alCerrar={alCerrar}
+        ancho="lg"
+        titulo={venta ? "Editar venta" : "Nueva venta"}
+        descripcion={
+          <>
+            Evento: <strong className="text-foreground">{evento.nombre}</strong> ·{" "}
+            {formatoFechaCorta(evento.fecha)}
+          </>
+        }
+        textoEnviar={venta ? "Guardar cambios" : "Registrar venta"}
+        alEnviar={async () => {
+          const problema = problemaDelCarrito(carrito);
+          if (problema) throw new Error(problema);
+          await guardar.mutateAsync({
+            id: venta?.id,
+            eventoId: evento.id,
+            payment_method: medio,
+            observation: observacion.trim() || null,
+            items: carrito,
+          });
+          toast.success(venta ? "Venta actualizada." : `Venta registrada: ${formatoPesos(totalVenta)}.`);
+        }}
+      >
+        <Campo etiqueta="Agregar ítem">
           {(props) => (
             <Select
               {...props}
-              value={medio}
+              value=""
+              // Elegir una opción la agrega directo (cantidad 1, precio de
+              // lista); después se ajusta en su propia línea.
               onChange={(e) => {
-                setMedio(e.target.value);
-                setPagoCon("");
+                if (e.target.value === NUEVO_PRODUCTO) return setCreando("producto");
+                if (e.target.value === NUEVO_COMBO) return setCreando("combo");
+                const elegido = porClave(e.target.value);
+                if (elegido) setCarrito((actual) => agregar(actual, elegido));
               }}
             >
-              {MEDIOS_DE_PAGO.map((opcion) => (
-                <option key={opcion} value={opcion}>
-                  {capitalizar(opcion)}
+              <option value="">Elegí un producto o combo</option>
+              {opcionesParaAgregar(todos, carrito).map((v) => (
+                <option key={v.clave} value={v.clave}>
+                  {v.nombre}
                 </option>
               ))}
+              <option value={NUEVO_PRODUCTO}>+ Nuevo producto</option>
+              <option value={NUEVO_COMBO}>+ Nuevo combo</option>
             </Select>
           )}
         </Campo>
-        {/* El vuelto sólo tiene sentido cobrando en efectivo. */}
-        {medio === "efectivo" && (
-          <>
-            <Campo etiqueta="Pagó con">
-              {(props) => (
-                <Input
-                  {...props}
-                  type="number"
-                  inputMode="numeric"
-                  step="50"
-                  min="0"
-                  placeholder="$"
-                  value={pagoCon}
-                  onChange={(e) => setPagoCon(e.target.value)}
-                />
-              )}
-            </Campo>
-            <div className="grid gap-1.5">
-              <span className="text-sm font-medium">Vuelto</span>
-              <div
-                className={cn(
-                  "flex h-11 items-center rounded-lg bg-muted px-3 font-semibold tabular-nums md:h-10",
-                  cambio?.falta && "bg-danger-soft text-danger",
-                )}
-              >
-                {!cambio
-                  ? "—"
-                  : cambio.falta
-                    ? `Faltan ${formatoPesos(cambio.monto)}`
-                    : formatoPesos(cambio.monto)}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
 
-      <Campo etiqueta="Observación">
-        {(props) => <Input {...props} value={observacion} onChange={(e) => setObservacion(e.target.value)} />}
-      </Campo>
-    </DialogoDeFormulario>
+        {carrito.length === 0 ? (
+          <p className="rounded-xl border border-dashed py-6 text-center text-sm text-muted-foreground">
+            Todavía no agregaste ítems.
+          </p>
+        ) : (
+          <ul className="grid gap-2">
+            {carrito.map((item, indice) => (
+              <li
+                key={claveDe(item)}
+                className="grid gap-2 rounded-xl border bg-muted/40 p-3 sm:grid-cols-[1fr_8rem_9rem_auto] sm:items-end"
+              >
+                <div className="grid gap-1">
+                  <span className="text-xs text-muted-foreground sm:sr-only">Producto</span>
+                  <Select
+                    aria-label={`Producto de la línea ${indice + 1}`}
+                    value={claveDe(item)}
+                    // Cambiar el producto trae el precio de lista del nuevo.
+                    onChange={(e) => {
+                      const elegido = porClave(e.target.value);
+                      if (elegido) setCarrito((actual) => cambiarProducto(actual, indice, elegido));
+                    }}
+                  >
+                    {opcionesDeLinea(todos, item)
+                      // Lo que ya está en otra línea no se ofrece: se duplicaría.
+                      .filter(
+                        (v) =>
+                          v.clave === claveDe(item) || !carrito.some((otro) => claveDe(otro) === v.clave),
+                      )
+                      .map((v) => (
+                        <option key={v.clave} value={v.clave}>
+                          {v.nombre}
+                        </option>
+                      ))}
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:contents">
+                  <label className="grid gap-1 text-xs text-muted-foreground">
+                    Cantidad
+                    <Stepper
+                      etiqueta="cantidad"
+                      minimo={1}
+                      valor={item.quantity}
+                      alCambiar={(quantity) =>
+                        setCarrito((actual) => cambiarLinea(actual, indice, { quantity }))
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-1 text-xs text-muted-foreground">
+                    Precio
+                    <Stepper
+                      etiqueta="precio"
+                      paso={50}
+                      valor={item.unit_price}
+                      alCambiar={(unit_price) =>
+                        setCarrito((actual) => cambiarLinea(actual, indice, { unit_price }))
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="flex items-center justify-between gap-2 sm:justify-end">
+                  <strong className="min-w-20 text-right tabular-nums">
+                    {formatoPesos(totalDeLinea(item))}
+                  </strong>
+                  <Button
+                    variant="destructive-ghost"
+                    size="icon"
+                    aria-label={`Quitar ${item.description}`}
+                    onClick={() => setCarrito((actual) => quitar(actual, indice))}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex items-baseline justify-between rounded-xl bg-brand-50 px-4 py-3">
+          <span className="font-semibold">Total</span>
+          <strong className="text-2xl tabular-nums text-primary" aria-live="polite">
+            {formatoPesos(totalVenta)}
+          </strong>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Campo etiqueta="Método de pago">
+            {(props) => (
+              <Select
+                {...props}
+                value={medio}
+                onChange={(e) => {
+                  setMedio(e.target.value);
+                  setPagoCon("");
+                }}
+              >
+                {MEDIOS_DE_PAGO.map((opcion) => (
+                  <option key={opcion} value={opcion}>
+                    {capitalizar(opcion)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Campo>
+          {/* El vuelto sólo tiene sentido cobrando en efectivo. */}
+          {medio === "efectivo" && (
+            <>
+              <Campo etiqueta="Pagó con">
+                {(props) => (
+                  <Input
+                    {...props}
+                    type="number"
+                    inputMode="numeric"
+                    step="50"
+                    min="0"
+                    placeholder="$"
+                    value={pagoCon}
+                    onChange={(e) => setPagoCon(e.target.value)}
+                  />
+                )}
+              </Campo>
+              <div className="grid gap-1.5">
+                <span className="text-sm font-medium">Vuelto</span>
+                <div
+                  className={cn(
+                    "flex h-11 items-center rounded-lg bg-muted px-3 font-semibold tabular-nums md:h-10",
+                    cambio?.falta && "bg-danger-soft text-danger",
+                  )}
+                >
+                  {!cambio
+                    ? "—"
+                    : cambio.falta
+                      ? `Faltan ${formatoPesos(cambio.monto)}`
+                      : formatoPesos(cambio.monto)}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <Campo etiqueta="Observación">
+          {(props) => (
+            <Input {...props} value={observacion} onChange={(e) => setObservacion(e.target.value)} />
+          )}
+        </Campo>
+      </DialogoDeFormulario>
+      {/* Hermanos del diálogo de la venta (no hijos): así el envío de uno no
+        burbujea por React al formulario del otro. */}
+      {creando === "producto" && (
+        <FormularioDeProducto
+          producto={null}
+          alCerrar={() => setCreando(null)}
+          alGuardar={(creado) => agregarCreado(creado, false)}
+        />
+      )}
+      {creando === "combo" && (
+        <FormularioDeCombo
+          combo={null}
+          alCerrar={() => setCreando(null)}
+          alGuardar={(creado) => agregarCreado(creado, true)}
+        />
+      )}
+    </>
   );
 }
