@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { esRutaInterna, guardarRetorno, leerOrganizacion, tomarRetorno } from "./almacen";
+import {
+  esRutaInterna,
+  guardarOrganizacion,
+  guardarRetorno,
+  leerOrganizacion,
+  resolverOrganizacion,
+  tomarRetorno,
+} from "./almacen";
 import { ErrorDeApi, mensajeDeError, pedir } from "./api";
 import {
   formatoDia,
@@ -89,10 +96,27 @@ describe("volver al link original después del login", () => {
   });
 });
 
-describe("organización guardada", () => {
-  it("usa la misma clave que la app anterior, para no perder la elección", () => {
-    localStorage.setItem("oratorio.organization_id", "org-1");
-    expect(leerOrganizacion()).toBe("org-1");
+describe("organización recordada", () => {
+  const orgs = [{ id: "org-1" }, { id: "org-2" }];
+
+  it("se guarda por usuario", () => {
+    guardarOrganizacion("u1", "org-2");
+    expect(leerOrganizacion("u1")).toBe("org-2");
+    expect(leerOrganizacion("u2")).toBeNull();
+  });
+
+  it("se usa la recordada si el usuario pertenece a ella", () => {
+    expect(resolverOrganizacion("org-2", orgs, "org-1")).toBe("org-2");
+  });
+
+  it("un valor manipulado o de una organización ajena se ignora", () => {
+    expect(resolverOrganizacion("org-ajena", orgs, "org-1")).toBe("org-1");
+    expect(resolverOrganizacion("' or 1=1 --", orgs, "org-1")).toBe("org-1");
+  });
+
+  it("sin recordada usa la de la API", () => {
+    expect(resolverOrganizacion(null, orgs, "org-1")).toBe("org-1");
+    expect(resolverOrganizacion(null, [], null)).toBeNull();
   });
 });
 

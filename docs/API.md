@@ -149,7 +149,7 @@ Lista completa de pibes presentes en una fecha puntual (drill-down del historial
 
 Todo el módulo de buffet (`/api/buffet/*`) está scopeado por `X-Organization-Id`: cada query filtra por `organizacion_id`. Acá se documentan sólo eventos y ventas; el resto (`/products`, `/combos`, `/budgets`, `/meta`) sigue el mismo patrón CRUD.
 
-**Productos y combos activos.** `POST`/`PATCH` de `/products` y `/combos` aceptan `active` (boolean). `GET` lo devuelve en cada fila. Si no viene en el body, se guarda `true`: un `PATCH` sin `active` **reactiva** el registro, así que el cliente siempre lo manda. La UI de Nueva venta ofrece sólo los activos; el backend **no** rechaza ventas con productos o combos inactivos a propósito, para poder editar ventas viejas cuyo producto se desactivó después. Desactivar un producto no toca los combos que lo contienen.
+**Productos y combos activos.** `POST`/`PATCH` de `/products` y `/combos` aceptan `active` (boolean). `GET` lo devuelve en cada fila. Si no viene en el body, se guarda `true`: un `PATCH` sin `active` **reactiva** el registro, así que el cliente siempre lo manda. La UI de Nueva venta ofrece sólo los activos, y permite crear un producto o combo al vuelo ("+ Nuevo producto" / "+ Nuevo combo" en el selector): usa los mismos `POST /products` y `POST /combos`, que devuelven sólo el `id`, y el cliente arma el ítem con lo que envió; el backend **no** rechaza ventas con productos o combos inactivos a propósito, para poder editar ventas viejas cuyo producto se desactivó después. Desactivar un producto no toca los combos que lo contienen.
 
 Un **evento** ("Feria del Plato 29/08/2026") se crea una vez y después se le cargan las ventas de a una: cada venta es un cobro, con los ítems que sean.
 
@@ -167,11 +167,11 @@ Query params opcionales: `q` (búsqueda parcial por nombre).
 
 ### `PATCH /api/buffet/events/:id`
 
-Permite renombrar y cambiar `fecha`, `estado` y `observacion`. Sólo aplica sobre eventos de la organización del header.
+Permite renombrar y cambiar `fecha`, `estado` y `observacion`. Sólo aplica sobre eventos de la organización del header. **Cerrar o reabrir** (cambiar `estado`) exige ser admin de esa organización (`403` si no); mandar el mismo estado que ya tiene no cuenta como cambio. Lo mismo vale para `POST` con `estado: "cerrado"`.
 
 ### `DELETE /api/buffet/events/:id`
 
-**`400`** si el evento tiene ventas cargadas (borrarlo en cascada se llevaría las ventas sin devolver el stock). Hay que eliminar las ventas primero.
+**`403`** si el usuario no es admin de la organización del header. **`409`** si el evento está cerrado (hay que reabrirlo antes). **`400`** si el evento tiene ventas cargadas (borrarlo en cascada se llevaría las ventas sin devolver el stock). Hay que eliminar las ventas primero.
 
 ### `GET /api/buffet/sales`
 

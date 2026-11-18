@@ -54,8 +54,27 @@ export function tomarRetorno(ahora = Date.now()): string | null {
   }
 }
 
-// Organización activa. El backend la valida contra las membresías del usuario,
-// así que guardar otra acá no da acceso a nada: sólo devuelve 403.
-const CLAVE_ORGANIZACION = "oratorio.organization_id";
-export const leerOrganizacion = () => leer(CLAVE_ORGANIZACION);
-export const guardarOrganizacion = (id: string | null) => guardar(CLAVE_ORGANIZACION, id);
+// Última organización en la que trabajó cada usuario en este dispositivo. Se
+// guarda por usuario (dos personas en el mismo navegador no se pisan) y
+// sobrevive al cierre de sesión: es justamente lo que se quiere recordar.
+// Es sólo una preferencia, nunca una autorización: el valor se valida contra
+// las membresías reales (`resolverOrganizacion`) y la API vuelve a validar el
+// header X-Organization-Id en cada request, así que editarlo a mano no da
+// acceso a nada.
+const claveOrganizacion = (usuarioId: string) => `oratorio.organization_id.${usuarioId}`;
+export const leerOrganizacion = (usuarioId: string) => leer(claveOrganizacion(usuarioId));
+export const guardarOrganizacion = (usuarioId: string, id: string) =>
+  guardar(claveOrganizacion(usuarioId), id);
+
+/**
+ * Organización con la que arrancar: la recordada sólo si el usuario sigue
+ * perteneciendo a ella; si no (valor manipulado, acceso revocado), la que
+ * resolvió la API.
+ */
+export function resolverOrganizacion(
+  recordada: string | null,
+  organizaciones: { id: string }[],
+  porDefecto: string | null,
+): string | null {
+  return recordada !== null && organizaciones.some((org) => org.id === recordada) ? recordada : porDefecto;
+}

@@ -123,6 +123,16 @@ export class Buffet {
     await expect(this.page.getByRole("heading", { name: nombre })).toBeVisible();
   }
 
+  filaDeEvento = (nombre: string): Locator => this.page.getByRole("row").filter({ hasText: nombre });
+
+  /** Con el evento abierto: lo edita y lo pasa a cerrado (sólo lo puede un admin). */
+  async cerrarEvento(): Promise<void> {
+    await this.page.getByRole("button", { name: "Editar evento" }).click();
+    await dialogo(this.page).getByLabel("Estado").selectOption("cerrado");
+    await dialogo(this.page).getByRole("button", { name: "Guardar" }).click();
+    await expect(dialogo(this.page)).toBeHidden();
+  }
+
   /** Carga una venta de un solo producto con la cantidad indicada. */
   async registrarVenta(producto: string, cantidad: number): Promise<void> {
     await this.page.getByRole("button", { name: "Nueva venta" }).click();
@@ -130,6 +140,17 @@ export class Buffet {
     for (let i = 1; i < cantidad; i++) {
       await dialogo(this.page).getByRole("button", { name: "Sumar cantidad" }).click();
     }
+  }
+
+  /** Desde Nueva venta: crea un producto con el diálogo y queda agregado a la venta. */
+  async crearProductoDesdeLaVenta(nombre: string, precio: string): Promise<void> {
+    await dialogo(this.page).getByLabel("Agregar ítem").selectOption({ label: "+ Nuevo producto" });
+    await dialogo(this.page)
+      .getByLabel(/^Nombre/)
+      .fill(nombre);
+    await dialogo(this.page).getByLabel("Precio de venta").fill(precio);
+    await dialogo(this.page).getByRole("button", { name: "Guardar" }).click();
+    await expect(dialogo(this.page).getByRole("heading", { name: "Nueva venta" })).toBeVisible();
   }
 
   totalDeLaVenta = (): Locator => dialogo(this.page).getByText("Total", { exact: true }).locator("..");

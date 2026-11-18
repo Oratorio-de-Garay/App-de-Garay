@@ -1,19 +1,48 @@
-# Calidad de la aplicación: lint, formato, tipos y tests unitarios en cada PR,
-# y tests de integración y de punta a punta contra una base local efímera
-# dentro del runner (no toca producción).
+# Calidad de la aplicación: lint, formato, tipos y tests unitarios en cada PR
+# (contra test o contra main), y tests de integración y de punta a punta contra
+# una base local efímera dentro del runner (no toca producción) sólo en los PR
+# contra main, o sea cuando se mergea test en main.
+#
+# Ninguno de los dos corre si el PR sólo toca documentación (*.md, docs/).
+# Se resuelve con un job `cambios` y no con `paths-ignore` a propósito: un
+# check requerido que el workflow ni siquiera arranca queda "pendiente" para
+# siempre y bloquea el merge, mientras que un job salteado cuenta como aprobado.
 name: Aplicación
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    branches: [main, test]
 
 concurrency:
   group: app-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  cambios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      codigo: ${{ steps.filtro.outputs.codigo }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Hay código si algún archivo modificado no es documentación.
+      - id: filtro
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --name-only "$BASE" "$HEAD" | grep -qvE '(\.md$|^docs/)'; then
+            echo "codigo=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "codigo=false" >> "$GITHUB_OUTPUT"
+          fi
+
   calidad:
+    needs: cambios
+    if: needs.cambios.outputs.codigo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -41,7 +70,9 @@ jobs:
   integracion-y-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    needs: calidad
+    needs: [cambios, calidad]
+    # Sólo al mergear test en main; los PR contra test no lo corren.
+    if: needs.cambios.outputs.codigo == 'true' && github.base_ref == 'main'
     steps:
       - uses: actions/checkout@v4
 

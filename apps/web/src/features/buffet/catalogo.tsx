@@ -147,7 +147,24 @@ export function Productos() {
   );
 }
 
-function FormularioDeProducto({ producto, alCerrar }: { producto: Producto | null; alCerrar: () => void }) {
+/** Lo recién creado, listo para sumarlo a una venta (la API sólo devuelve el id). */
+export interface Creado {
+  id: string;
+  name: string;
+  sale_price: number;
+  active: boolean;
+}
+
+/** Alta/edición de producto. También lo usa Nueva venta para crear uno al vuelo. */
+export function FormularioDeProducto({
+  producto,
+  alCerrar,
+  alGuardar,
+}: {
+  producto: Producto | null;
+  alCerrar: () => void;
+  alGuardar?: (creado: Creado) => void;
+}) {
   const meta = useMeta();
   const guardar = useGuardarProducto();
   const {
@@ -173,7 +190,10 @@ function FormularioDeProducto({ producto, alCerrar }: { producto: Producto | nul
       abierto
       alCerrar={alCerrar}
       titulo={producto ? "Editar producto" : "Nuevo producto"}
-      alEnviar={alEnviarFormulario(handleSubmit, (json) => guardar.mutateAsync({ id: producto?.id, json }))}
+      alEnviar={alEnviarFormulario(handleSubmit, async (json) => {
+        const { id } = await guardar.mutateAsync({ id: producto?.id, json });
+        alGuardar?.({ id, name: json.name, sale_price: json.sale_price, active: json.active });
+      })}
     >
       <Campo etiqueta="Nombre" requerido error={errors.name?.message}>
         {(props) => <Input {...props} autoFocus placeholder="Ej: Empanada de carne" {...register("name")} />}
@@ -294,7 +314,16 @@ export function Combos() {
   );
 }
 
-function FormularioDeCombo({ combo, alCerrar }: { combo: Combo | null; alCerrar: () => void }) {
+/** Alta/edición de combo. También lo usa Nueva venta para crear uno al vuelo. */
+export function FormularioDeCombo({
+  combo,
+  alCerrar,
+  alGuardar,
+}: {
+  combo: Combo | null;
+  alCerrar: () => void;
+  alGuardar?: (creado: Creado) => void;
+}) {
   const guardar = useGuardarCombo();
   const {
     register,
@@ -316,7 +345,10 @@ function FormularioDeCombo({ combo, alCerrar }: { combo: Combo | null; alCerrar:
       alCerrar={alCerrar}
       titulo={combo ? "Editar combo" : "Nuevo combo"}
       ancho="sm"
-      alEnviar={alEnviarFormulario(handleSubmit, (json) => guardar.mutateAsync({ id: combo?.id, json }))}
+      alEnviar={alEnviarFormulario(handleSubmit, async (json) => {
+        const { id } = await guardar.mutateAsync({ id: combo?.id, json });
+        alGuardar?.({ id, name: json.name, sale_price: json.sale_price, active: json.active });
+      })}
     >
       <Campo etiqueta="Nombre" requerido error={errors.name?.message}>
         {(props) => <Input {...props} autoFocus {...register("name")} />}
