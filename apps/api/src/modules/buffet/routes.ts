@@ -13,10 +13,11 @@ import {
 } from "@garay/shared";
 import { Hono } from "hono";
 import { z } from "zod";
-import { noEncontrado, pedidoInvalido } from "../../lib/errores";
+import { ErrorHttp, noEncontrado, pedidoInvalido } from "../../lib/errores";
 import { soloDefinidos } from "../../lib/objetos";
 import { datos, db, rpc } from "../../lib/supabase";
 import { validar } from "../../lib/validar";
+import { exigirAdminDeOrganizacion } from "../../middleware/auth";
 import type { AppEnv } from "../../tipos";
 import { crudDeCatalogo } from "./crud";
 
@@ -24,6 +25,8 @@ import { crudDeCatalogo } from "./crud";
 // BUFFET: catálogo (productos, combos, presupuestos), eventos y ventas.
 // Todas las rutas operan sobre la organización activa (c.var.organizacionId).
 // ========================================================
+
+const ESTADO_CERRADO = "cerrado";
 
 const idParam = validar("param", z.object({ id: uuid }));
 
@@ -166,6 +169,8 @@ export const buffetRoutes = new Hono<AppEnv>()
   })
   .post("/events", validar("json", eventoCrearSchema), async (c) => {
     const { fecha, ...evento } = c.req.valid("json");
+    // Crear un evento ya cerrado equivale a cerrarlo: sólo admins.
+    if (evento.estado === ESTADO_CERRADO) exigirAdminDeOrganizacion(c.var.usuario, c.var.organizacionId);
     const creado = datos(
       await db
         .from("buffet_eventos")
@@ -183,6 +188,22 @@ export const buffetRoutes = new Hono<AppEnv>()
     const cambios = soloDefinidos(c.req.valid("json"));
     const { id } = c.req.valid("param");
     const columnas = "id, nombre, fecha, estado, observacion";
+
+    // Cambiar el estado (cerrar o reabrir) es cosa de admins. El formulario
+    // manda siempre el estado, así que sólo cuenta si difiere del actual.
+    if (cambios.estado !== undefined) {
+      const actual = datos(
+        await db
+          .from("buffet_eventos")
+          .select("estado")
+          .eq("id", id)
+          .eq("organizacion_id", c.var.organizacionId)
+          .maybeSingle(),
+      );
+      if (!actual) throw noEncontrado("Evento no encontrado");
+      if (actual.estado !== cambios.estado) exigirAdminDeOrganizacion(c.var.usuario, c.var.organizacionId);
+    }
+
     const tabla = db.from("buffet_eventos");
     // Sin cambios no hay nada que actualizar: se devuelve el evento como está.
     const evento = datos(
@@ -197,6 +218,14 @@ export const buffetRoutes = new Hono<AppEnv>()
   .delete("/events/:id", idParam, async (c) => {
     const org = c.var.organizacionId;
     const { id } = c.req.valid("param");
+    exigirAdminDeOrganizacion(c.var.usuario, org);
+
+    // Un evento cerrado es un registro histórico: no se elimina.
+    const evento = datos(
+      await db.from("buffet_eventos").select("estado").eq("id", id).eq("organizacion_id", org).maybeSingle(),
+    );
+    if (!evento) throw noEncontrado("Evento no encontrado");
+    if (evento.estado === ESTADO_CERRADO) throw new ErrorHttp(409, "Un evento cerrado no se puede eliminar.");
 
     // El borrado en cascada se llevaría las ventas sin devolver el stock, así
     // que se pide vaciar el evento primero.
