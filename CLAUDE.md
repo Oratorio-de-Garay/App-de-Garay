@@ -62,6 +62,7 @@ Todo desde la raíz del repo. Requiere Node 22.12+ y Docker (guía completa en `
 - Los pendientes están en `docs/ARCHITECTURE.md` ("Pendientes y cosas a tener en cuenta").
 
 ## Reglas para agentes
+- **Ramas:** los PR van contra `test`, no contra `main`. `test` se mergea en `main` cada tanto; ahí corre `integracion-y-e2e`. `calidad` corre en ambos, y ninguno corre si sólo cambió documentación (ver `docs/TESTING.md`).
 - Antes de tocar cualquier cosa, correr `Get-Location` y `git status`. Confirmar que estás en la raíz del repo (donde está el `.git`), NO en la carpeta padre `IT/`.
 - Antes de modificar un archivo, mostrar el diff propuesto. Aplicar solo después de aprobación explícita del usuario.
 - No usar scripts de reemplazo masivo (`String.replace`, `sed`) sin revisar cada match. Preferir ediciones puntuales.
