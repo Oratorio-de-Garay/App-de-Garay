@@ -8,8 +8,10 @@ import type { z } from "zod";
 import { Consulta } from "@/components/consulta";
 import { alEnviarFormulario, DialogoDeFormulario, useConfirmar } from "@/components/dialogos";
 import { Listado } from "@/components/listado";
+import { useEsAdminDeLaOrganizacion } from "@/features/auth/sesion";
 import { Stepper } from "@/components/stepper";
 import { Button } from "@/components/ui/button";
+import { AvisoDeDeshabilitado } from "@/components/ui/aviso";
 import { Campo, Input, Select } from "@/components/ui/campos";
 import { Badge, Card, EstadoVacio, Seccion } from "@/components/ui/varios";
 import { mensajeDeError } from "@/lib/api";
@@ -92,6 +94,7 @@ function ListaDeEventos({ eventos, alAbrir }: { eventos: Evento[]; alAbrir: (id:
   const [creando, setCreando] = useState(false);
   const borrar = useBorrarEvento();
   const eliminar = useEliminar(borrar.mutateAsync, "¿Eliminar este evento?");
+  const esAdmin = useEsAdminDeLaOrganizacion();
   const visibles = useMemo(() => {
     const buscado = normalizarBusqueda(filtro);
     return buscado
@@ -162,10 +165,18 @@ function ListaDeEventos({ eventos, alAbrir }: { eventos: Evento[]; alAbrir: (id:
                 <Button variant="outline" size="sm" onClick={() => alAbrir(evento.id)}>
                   Abrir
                 </Button>
-                <Button variant="destructive-ghost" size="sm" onClick={() => void eliminar(evento.id)}>
-                  <Trash2 aria-hidden />
-                  Eliminar
-                </Button>
+                {esAdmin && (
+                  <Button
+                    variant="destructive-ghost"
+                    size="sm"
+                    disabled={evento.estado === "cerrado"}
+                    title={evento.estado === "cerrado" ? "Un evento cerrado no se puede eliminar" : undefined}
+                    onClick={() => void eliminar(evento.id)}
+                  >
+                    <Trash2 aria-hidden />
+                    Eliminar
+                  </Button>
+                )}
               </>
             ),
           },
@@ -186,6 +197,7 @@ function FormularioDeEvento({
   alCrear?: (id: string) => void;
 }) {
   const guardar = useGuardarEvento();
+  const esAdmin = useEsAdminDeLaOrganizacion();
   const {
     register,
     handleSubmit,
@@ -219,13 +231,25 @@ function FormularioDeEvento({
         <Campo etiqueta="Fecha" error={errors.fecha?.message}>
           {(props) => <Input {...props} type="date" {...register("fecha")} />}
         </Campo>
+        {/* Cerrar o reabrir un evento es de admins. Para el resto el campo se ve
+            deshabilitado, con el motivo, y no forma parte del formulario: el
+            estado viaja sin cambios desde los valores iniciales. */}
         <Campo etiqueta="Estado">
-          {(props) => (
-            <Select {...props} {...register("estado")}>
-              <option value="abierto">Abierto</option>
-              <option value="cerrado">Cerrado</option>
-            </Select>
-          )}
+          {(props) =>
+            esAdmin ? (
+              <Select {...props} {...register("estado")}>
+                <option value="abierto">Abierto</option>
+                <option value="cerrado">Cerrado</option>
+              </Select>
+            ) : (
+              <AvisoDeDeshabilitado mensaje="Sólo los usuarios con permisos de administrador pueden cambiar el estado de un evento.">
+                <Select {...props} disabled value={evento?.estado ?? "abierto"} onChange={() => undefined}>
+                  <option value="abierto">Abierto</option>
+                  <option value="cerrado">Cerrado</option>
+                </Select>
+              </AvisoDeDeshabilitado>
+            )
+          }
         </Campo>
       </div>
       <Campo etiqueta="Observación">{(props) => <Input {...props} {...register("observacion")} />}</Campo>

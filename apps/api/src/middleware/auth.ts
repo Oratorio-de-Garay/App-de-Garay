@@ -128,6 +128,18 @@ export function puedeAdministrar(usuario: Usuario | undefined): boolean {
   return Boolean(usuario?.esSuperadmin || usuario?.organizacionesAdministradas.length);
 }
 
+/** Admin de esa organización puntual (no basta con serlo de otra). */
+export function esAdminDeOrganizacion(usuario: Usuario | undefined, organizacionId: string): boolean {
+  return Boolean(usuario?.organizacionesAdministradas.includes(organizacionId));
+}
+
+/** Corta con 403 si el usuario no administra la organización activa del request. */
+export function exigirAdminDeOrganizacion(usuario: Usuario, organizacionId: string): void {
+  if (!esAdminDeOrganizacion(usuario, organizacionId)) {
+    throw new ErrorHttp(403, "Sólo un administrador de la organización puede hacer esto");
+  }
+}
+
 /**
  * Exige una sesión válida de Supabase (Google o código por mail), sin exigir
  * que el email esté registrado. Deja `sesion` en el contexto. Sola la usan las

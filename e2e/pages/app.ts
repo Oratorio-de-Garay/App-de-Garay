@@ -123,6 +123,16 @@ export class Buffet {
     await expect(this.page.getByRole("heading", { name: nombre })).toBeVisible();
   }
 
+  filaDeEvento = (nombre: string): Locator => this.page.getByRole("row").filter({ hasText: nombre });
+
+  /** Con el evento abierto: lo edita y lo pasa a cerrado (sólo lo puede un admin). */
+  async cerrarEvento(): Promise<void> {
+    await this.page.getByRole("button", { name: "Editar evento" }).click();
+    await dialogo(this.page).getByLabel("Estado").selectOption("cerrado");
+    await dialogo(this.page).getByRole("button", { name: "Guardar" }).click();
+    await expect(dialogo(this.page)).toBeHidden();
+  }
+
   /** Carga una venta de un solo producto con la cantidad indicada. */
   async registrarVenta(producto: string, cantidad: number): Promise<void> {
     await this.page.getByRole("button", { name: "Nueva venta" }).click();

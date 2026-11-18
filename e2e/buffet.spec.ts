@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { Buffet } from "./pages/app";
 import { MARCA, marcaUnica, USUARIOS } from "./support/entorno";
-import { iniciarSesion } from "./support/sesion";
+import { adminDb, iniciarSesion } from "./support/sesion";
 
 test.describe("buffet", () => {
   test.beforeEach(async ({ page }) => {
@@ -68,5 +68,54 @@ test.describe("buffet", () => {
     await buffet.abrir();
     await buffet.crearProducto("", "100");
     await expect(page.getByText("El nombre es obligatorio.")).toBeVisible();
+  });
+
+  test("un evento cerrado no se puede eliminar", async ({ page }) => {
+    const buffet = new Buffet(page);
+    const evento = `${MARCA} Feria cerrada ${marcaUnica()}`;
+
+    await buffet.abrir();
+    await buffet.abrirVentas();
+    await buffet.crearEvento(evento);
+    await buffet.cerrarEvento();
+    await page.getByRole("button", { name: "Volver" }).click();
+
+    await expect(buffet.filaDeEvento(evento).getByRole("button", { name: "Eliminar" })).toBeDisabled();
+  });
+});
+
+test.describe("buffet sin ser admin", () => {
+  test("un miembro no puede eliminar ni cerrar eventos, y ve por qué", async ({ page }) => {
+    const evento = `${MARCA} Feria miembro ${marcaUnica()}`;
+    // Se crea en todas las organizaciones del miembro: no importa cuál abra la app.
+    const { data: orgs } = await adminDb.from("organizaciones").select("id");
+    await adminDb
+      .from("buffet_eventos")
+      .insert((orgs ?? []).map((o) => ({ nombre: evento, organizacion_id: o.id })));
+
+    await iniciarSesion(page, USUARIOS.miembro);
+    const buffet = new Buffet(page);
+    await buffet.abrir();
+    await buffet.abrirVentas();
+
+    await expect(buffet.filaDeEvento(evento)).toBeVisible();
+    await expect(buffet.filaDeEvento(evento).getByRole("button", { name: "Eliminar" })).toHaveCount(0);
+
+    // Puede editarlo, pero no cambiarle el estado.
+    await buffet.filaDeEvento(evento).getByRole("button", { name: "Abrir" }).click();
+    await page.getByRole("button", { name: "Editar evento" }).click();
+    await expect(page.getByRole("dialog").getByLabel("Nombre")).toBeVisible();
+    const estado = page.getByRole("dialog").getByLabel("Estado");
+    await expect(estado).toBeDisabled();
+    const aviso = page.getByRole("tooltip");
+    await expect(aviso).toBeHidden();
+    await page
+      .getByRole("dialog")
+      .getByText("Estado", { exact: true })
+      .locator("..")
+      .locator("div")
+      .first()
+      .hover();
+    await expect(aviso).toContainText("Sólo los usuarios con permisos de administrador");
   });
 });

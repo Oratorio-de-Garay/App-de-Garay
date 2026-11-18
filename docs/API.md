@@ -167,11 +167,11 @@ Query params opcionales: `q` (búsqueda parcial por nombre).
 
 ### `PATCH /api/buffet/events/:id`
 
-Permite renombrar y cambiar `fecha`, `estado` y `observacion`. Sólo aplica sobre eventos de la organización del header.
+Permite renombrar y cambiar `fecha`, `estado` y `observacion`. Sólo aplica sobre eventos de la organización del header. **Cerrar o reabrir** (cambiar `estado`) exige ser admin de esa organización (`403` si no); mandar el mismo estado que ya tiene no cuenta como cambio. Lo mismo vale para `POST` con `estado: "cerrado"`.
 
 ### `DELETE /api/buffet/events/:id`
 
-**`400`** si el evento tiene ventas cargadas (borrarlo en cascada se llevaría las ventas sin devolver el stock). Hay que eliminar las ventas primero.
+**`403`** si el usuario no es admin de la organización del header. **`409`** si el evento está cerrado (hay que reabrirlo antes). **`400`** si el evento tiene ventas cargadas (borrarlo en cascada se llevaría las ventas sin devolver el stock). Hay que eliminar las ventas primero.
 
 ### `GET /api/buffet/sales`
 

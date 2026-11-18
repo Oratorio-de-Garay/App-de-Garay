@@ -80,11 +80,21 @@ paso lo que pasó, con capturas. En CI el reporte queda como artefacto del job.
 
 ## Integración continua
 
-`.github/workflows/app.yml` corre en cada PR:
+Los cambios van primero en un PR contra la rama `test`; cada tanto `test` se
+mergea en `main` con otro PR. `.github/workflows/app.yml` corre así:
 
-1. **calidad:** lint, formato, tipos y unitarios.
+1. **calidad:** lint, formato, tipos y unitarios. En todo PR (contra `test` o
+   contra `main`).
 2. **integracion-y-e2e:** levanta Supabase dentro del runner, aplica
-   migraciones y seed, y corre los tests de integración y Playwright.
+   migraciones y seed, y corre los tests de integración y Playwright. Sólo en
+   los PR contra `main` (el merge de `test` en `main`); en los PR contra `test`
+   se saltea, porque es lento y no tiene sentido repetirlo con cada cambio.
 
-`.github/workflows/base-de-datos.yml` (pgTAP) sigue corriendo cuando cambia
-`supabase/**`.
+Ninguno de los dos corre si el PR sólo cambia documentación (`*.md` o `docs/`):
+el job `cambios` mira los archivos modificados y, si no hay código, los saltea.
+Un job salteado cuenta como aprobado, así que no traba el merge aunque el check
+sea requerido. Antes de pedir el merge a `test`, correr `npm run check` (y
+`npm run e2e` si tocaste algo que se ve en pantalla) en tu máquina.
+
+`.github/workflows/base-de-datos.yml` (pgTAP) sigue corriendo, en PR contra
+cualquier rama, cuando cambia `supabase/**`.
