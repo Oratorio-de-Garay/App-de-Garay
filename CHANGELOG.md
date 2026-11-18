@@ -13,6 +13,9 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 - **Migración, fase 3: frontend en React + Vite + TypeScript** (`apps/web/`), con Tailwind CSS v4 y componentes al estilo shadcn/ui. Una sola aplicación con direcciones limpias (`/`, `/buffet`, `/admin`; las `*.html` anteriores redirigen), navegación sin recargar, datos en caché con TanStack Query y un diseño nuevo pensado primero para el celular. Formularios validados con los mismos esquemas que la API. 73 tests unitarios de frontend y 16 e2e; `npm run capturas` saca una imagen de cada pantalla. Detalle y decisiones en `docs/MIGRACION.md`.
 - **Migración, fase 4: despliegue y limpieza.** Se borraron `backend/` y `frontend/`. El build de Vercel pasa a `npm run vercel-build` (`scripts/vercel-build.mjs`, Build Output API): la app desde el CDN y toda la API empaquetada en una sola función en `gru1`. `npm run vercel-build:probar` lo ejercita en una PC. **Requirió un cambio manual en Vercel:** *Root Directory* de `backend` a la raíz y Node.js 22.x (hecho el 16/11/2026, con la publicación). No requiere variables nuevas ni migración de base.
 
+### Cambiado (CI)
+- **Flujo de ramas con `test`:** los cambios van en PR contra la rama `test`, y `test` se mergea en `main` cada tanto. El check `integracion-y-e2e` sólo corre en los PR contra `main`; `calidad` corre en los PR contra `test` y `main`. Ninguno corre si el PR sólo toca documentación (`*.md`, `docs/`). Ya no hay corrida en `push` a `main` (el merge de `test` ya pasó por los checks). Detalle en `docs/TESTING.md`.
+
 ### Corregido
 - **XSS en la pantalla de registro:** el nombre de un chico y los mensajes de error se insertaban como HTML sin escapar (`mostrarMensaje`). La interfaz nueva no arma HTML a mano.
 - **"Editar datos" de un chico abría vacío** y, al guardar, borraba la observación que tenía. Ahora abre con los datos actuales.
