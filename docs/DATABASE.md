@@ -278,6 +278,7 @@ Los SQLSTATE que levantan (y cómo se traducen a HTTP) están en [ROLES_Y_PERMIS
 Definida en `20261114300000_buscar_pibes_resumen.sql`. `GET /api/students/search` llama a `supabase.rpc("buscar_pibes_resumen", { p_org, p_termino, p_fecha, p_limite })`.
 
 - **Qué busca:** cada palabra del término debe aparecer en `nombre || ' ' || apellido`, sin distinguir mayúsculas ni tildes, en cualquier orden. Usa `normalizar_busqueda()` (envoltorio `IMMUTABLE` de `unaccent` + `lower`) y el índice GIN trigram `idx_pibes_busqueda_trgm`.
+- **Orden:** primero los que "empiezan con" lo buscado (todas las palabras del término empiezan alguna palabra del nombre o del apellido: `ju` → Juan, o `pe` → Juan Pérez), después los que sólo lo "contienen" (`uan` → Juan). Dentro de cada grupo, por nombre y apellido. El orden se aplica antes del límite. Desde `20261121000000_buscar_pibes_empieza_con_primero.sql`.
 - **Devuelve** por pibe: datos de la ficha, grado, edad, `visitas`, `ultima_asistencia` y `marcado_hoy` (si `p_fecha` está informada). Máximo `p_limite` (tope 100).
 - **Organización:** filtra por `p_org` adentro.
 - **Permisos:** `EXECUTE` sólo para `service_role` (la usa el backend).
