@@ -15,6 +15,7 @@ import {
   formatoPesos,
   formatoUltimaAsistencia,
   iniciales,
+  empiezaConLoBuscado,
   normalizarBusqueda,
   plural,
   tonoDe,
@@ -60,6 +61,15 @@ describe("formato", () => {
     expect(normalizarBusqueda("  PÉREZ ")).toBe("perez");
     expect(normalizarBusqueda("Ñandú")).toBe("nandu");
     expect(normalizarBusqueda(null)).toBe("");
+  });
+
+  it("distingue a los que empiezan con lo buscado de los que sólo lo contienen", () => {
+    expect(empiezaConLoBuscado("ju", "Juan Pérez")).toBe(true);
+    expect(empiezaConLoBuscado("pe", "Juan Pérez")).toBe(true);
+    expect(empiezaConLoBuscado("PEREZ juan", "Juan Pérez")).toBe(true);
+    expect(empiezaConLoBuscado("uan", "Juan Pérez")).toBe(false);
+    expect(empiezaConLoBuscado("juan pe", "Juan Mejuan")).toBe(false);
+    expect(empiezaConLoBuscado("  ", "Juan Pérez")).toBe(false);
   });
 
   it("plurales", () => {
