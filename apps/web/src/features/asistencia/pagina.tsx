@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/campos";
 import { Alerta, Card } from "@/components/ui/varios";
 import { mensajeDeError } from "@/lib/api";
+import { empiezaConLoBuscado } from "@/lib/formato";
 import {
   buscarPibes,
   LIMITE_DE_BUSQUEDA,
@@ -188,6 +189,15 @@ function Resultados({ texto, alElegir }: { texto: string; alElegir: (id: string)
     { titulo: "Presente", acciones: true, celda: (pibe) => <PresenteRapido pibe={pibe} /> },
   ];
 
+  // La base ya los trae ordenados: primero los que empiezan con lo buscado.
+  // La línea va en el primero que sólo lo contiene, y sólo si arriba hay otros.
+  const primeroQueContiene = pibes.find(
+    (pibe, i) =>
+      i > 0 &&
+      !empiezaConLoBuscado(termino, pibe.nombreCompleto) &&
+      empiezaConLoBuscado(termino, pibes[i - 1]?.nombreCompleto ?? ""),
+  )?.id;
+
   return (
     <div className="grid gap-3">
       <p className="text-sm text-muted-foreground" aria-live="polite">
@@ -201,6 +211,14 @@ function Resultados({ texto, alElegir }: { texto: string; alElegir: (id: string)
         idDe={(pibe) => pibe.id}
         alTocarFila={(pibe) => alElegir(pibe.id)}
         columnas={columnas}
+        // Línea sutil entre "empieza con" y "contiene", sin etiquetas.
+        claseDeFila={(pibe) =>
+          pibe.id === primeroQueContiene
+            ? // Celular: cada fila es una tarjeta, así que la línea va en el hueco entre
+              // dos tarjetas. Escritorio: borde superior de la fila.
+              "relative mt-4 before:absolute before:inset-x-2 before:-top-3 before:h-px before:bg-muted-foreground/25 md:mt-0 md:border-t-2 md:border-t-muted-foreground/12 md:before:hidden"
+            : undefined
+        }
       />
     </div>
   );

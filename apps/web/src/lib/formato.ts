@@ -88,6 +88,18 @@ export function normalizarBusqueda(texto: string | null | undefined): string {
     .trim();
 }
 
+/**
+ * ¿Todas las palabras de lo buscado empiezan alguna palabra del nombre? Es el
+ * mismo criterio con el que la base (`buscar_pibes_resumen`) pone primero a los
+ * que "empiezan con" lo buscado y después a los que sólo lo "contienen".
+ */
+export function empiezaConLoBuscado(termino: string, nombreCompleto: string): boolean {
+  const buscadas = normalizarBusqueda(termino).split(/\s+/).filter(Boolean);
+  if (!buscadas.length) return false;
+  const palabras = normalizarBusqueda(nombreCompleto).split(/\s+/);
+  return buscadas.every((buscada) => palabras.some((palabra) => palabra.startsWith(buscada)));
+}
+
 export function plural(cantidad: number, uno: string, varios: string): string {
   return `${cantidad} ${cantidad === 1 ? uno : varios}`;
 }
