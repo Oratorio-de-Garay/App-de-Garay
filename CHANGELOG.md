@@ -6,6 +6,9 @@ Al hacer un cambio relevante, sumalo en **Sin publicar**. Si toca la base, inclu
 
 ## Sin publicar
 
+### Corregido (desarrollo local)
+- **`npm run dev` no levantaba la API.** Bajo `concurrently`, `tsx watch` no arrancaba ni mostraba errores, y la app fallaba al verificar el acceso (el proxy de Vite recibía `ECONNREFUSED`). Los scripts `dev` y `dev:prod` de `apps/api` pasan a `node --watch --import tsx`, que recarga igual al guardar.
+
 ### Cambiado
 - **Búsqueda de pibes: "empieza con" antes que "contiene".** Los resultados se ordenan primero por los pibes cuyo nombre o apellido empieza con lo buscado y después por los que sólo lo contienen (antes iban todos por nombre). Migración `20261121000000_buscar_pibes_empieza_con_primero.sql` (misma firma de `buscar_pibes_resumen`; no cambia la forma de la respuesta).
 
