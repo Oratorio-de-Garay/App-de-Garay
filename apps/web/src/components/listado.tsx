@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { guardar, leer } from "@/lib/almacen";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,11 @@ interface ListadoProps<T> {
   /** Se muestra en lugar de la tabla cuando no hay items. */
   vacio?: ReactNode;
   claseDeFila?: (item: T) => string | undefined;
+  /**
+   * En la tabla (pantallas grandes), deja un corte antes de este item, como si
+   * a partir de ahí empezara otra tabla. No se dibuja si es el primero de la página.
+   */
+  cortarAntesDe?: (item: T) => boolean;
   /** Nombre accesible de la tabla. */
   titulo?: string;
 }
@@ -63,6 +68,7 @@ export function Listado<T>({
   alTocarFila,
   vacio,
   claseDeFila,
+  cortarAntesDe,
   titulo,
 }: ListadoProps<T>) {
   const [tamano, setTamano] = useState(() => leerTamano(clave));
@@ -141,13 +147,45 @@ export function Listado<T>({
     </div>
   );
 
+  // Índice del primer item de la página que arranca "otra tabla" (nunca el 0).
+  const corte = cortarAntesDe ? visibles.findIndex((item, i) => i > 0 && cortarAntesDe(item)) : -1;
+  // Con corte, el borde y las esquinas redondeadas los dibujan las celdas (no el
+  // contenedor), así el hueco no deja bordes laterales que unan las dos partes.
+  const partida = corte > 0;
+  const ultima = columnas.length - 1;
+
+  /** Bordes y esquinas de una celda de la tabla cuando está partida. */
+  const bordesDeCelda = (fila: number, columna: number) =>
+    partida &&
+    cn(
+      "md:border-b md:bg-card",
+      columna === 0 && "md:border-l",
+      columna === ultima && "md:border-r",
+      fila === corte && "md:border-t",
+      fila === corte && columna === 0 && "md:rounded-tl-xl",
+      fila === corte && columna === ultima && "md:rounded-tr-xl",
+      (fila === corte - 1 || fila === visibles.length - 1) && columna === 0 && "md:rounded-bl-xl",
+      (fila === corte - 1 || fila === visibles.length - 1) && columna === ultima && "md:rounded-br-xl",
+      alTocarFila && "md:group-hover/fila:bg-brand-50",
+    );
+
   return (
     <div className="grid gap-3">
       {barra("arriba")}
-      <div className="md:overflow-x-auto md:rounded-xl md:border md:bg-card md:shadow-card">
-        <table className="block w-full text-sm md:table" aria-label={titulo}>
+      <div
+        className={cn("md:overflow-x-auto", !partida && "md:rounded-xl md:border md:bg-card md:shadow-card")}
+      >
+        <table
+          className={cn("block w-full text-sm md:table", partida && "md:border-separate md:border-spacing-0")}
+          aria-label={titulo}
+        >
           <thead className="sr-only md:not-sr-only md:table-header-group">
-            <tr className="border-b bg-muted/60 text-left text-xs tracking-wide text-muted-foreground uppercase">
+            <tr
+              className={cn(
+                "border-b bg-muted/60 text-left text-xs tracking-wide text-muted-foreground uppercase",
+                partida && "md:bg-transparent",
+              )}
+            >
               {columnas.map((columna, i) => (
                 <th
                   key={i}
@@ -155,6 +193,11 @@ export function Listado<T>({
                   className={cn(
                     "px-4 py-2.5 font-semibold",
                     columna.numerica && "text-right",
+                    partida && [
+                      "md:border-y md:bg-muted/60",
+                      i === 0 && "md:rounded-tl-xl md:border-l",
+                      i === ultima && "md:rounded-tr-xl md:border-r",
+                    ],
                     columna.className,
                   )}
                 >
@@ -165,60 +208,69 @@ export function Listado<T>({
           </thead>
           <tbody className="grid gap-2 md:table-row-group">
             {visibles.map((item, i) => (
-              <tr
-                key={idDe(item)}
-                onClick={
-                  alTocarFila
-                    ? (e) => {
-                        // Los botones y links de la fila no cuentan como "tocar la fila".
-                        if ((e.target as HTMLElement).closest("button, a, input, select, label")) return;
-                        alTocarFila(item);
-                      }
-                    : undefined
-                }
-                className={cn(
-                  "block rounded-xl border bg-card p-3.5 shadow-card",
-                  "md:table-row md:rounded-none md:border-0 md:border-b md:p-0 md:shadow-none md:last:border-b-0",
-                  alTocarFila && "cursor-pointer transition-colors hover:bg-brand-50/70",
-                  claseDeFila?.(item),
+              <Fragment key={idDe(item)}>
+                {i === corte && (
+                  // Sólo en la tabla: el hueco muestra el fondo de la página, y la
+                  // tabla sigue siendo una sola (mismas columnas y paginación).
+                  <tr aria-hidden className="hidden md:table-row">
+                    <td colSpan={columnas.length} className="h-3 p-0" />
+                  </tr>
                 )}
-              >
-                {columnas.map((columna, j) => (
-                  <td
-                    key={j}
-                    className={cn(
-                      "flex items-start justify-between gap-3 py-1 md:table-cell md:px-4 md:py-3 md:align-middle",
-                      columna.numerica && "md:text-right md:tabular-nums",
-                      columna.acciones &&
-                        "mt-2 justify-end border-t pt-3 md:mt-0 md:border-0 md:pt-3 md:text-right",
-                      // La primera columna es el "título" de la tarjeta.
-                      j === 0 && "mb-1 justify-start",
-                      columna.className,
-                    )}
-                  >
-                    {j > 0 && !columna.acciones && columna.titulo && (
-                      <span className="shrink-0 text-[13px] text-muted-foreground md:hidden">
-                        {columna.titulo}
-                      </span>
-                    )}
-                    <div
+                <tr
+                  onClick={
+                    alTocarFila
+                      ? (e) => {
+                          // Los botones y links de la fila no cuentan como "tocar la fila".
+                          if ((e.target as HTMLElement).closest("button, a, input, select, label")) return;
+                          alTocarFila(item);
+                        }
+                      : undefined
+                  }
+                  className={cn(
+                    "group/fila block rounded-xl border bg-card p-3.5 shadow-card",
+                    "md:table-row md:rounded-none md:border-0 md:border-b md:p-0 md:shadow-none md:last:border-b-0",
+                    alTocarFila && "cursor-pointer transition-colors hover:bg-brand-50/70",
+                    claseDeFila?.(item),
+                  )}
+                >
+                  {columnas.map((columna, j) => (
+                    <td
+                      key={j}
                       className={cn(
-                        "min-w-0",
-                        j > 0 && !columna.acciones && "text-right",
-                        j > 0 && !columna.acciones && !columna.numerica && "md:text-left",
+                        "flex items-start justify-between gap-3 py-1 md:table-cell md:px-4 md:py-3 md:align-middle",
+                        columna.numerica && "md:text-right md:tabular-nums",
+                        columna.acciones &&
+                          "mt-2 justify-end border-t pt-3 md:mt-0 md:border-0 md:pt-3 md:text-right",
+                        // La primera columna es el "título" de la tarjeta.
+                        j === 0 && "mb-1 justify-start",
+                        bordesDeCelda(i, j),
+                        columna.className,
                       )}
                     >
-                      {columna.acciones ? (
-                        <div className="flex flex-wrap justify-end gap-2">
-                          {columna.celda(item, desde + i)}
-                        </div>
-                      ) : (
-                        columna.celda(item, desde + i)
+                      {j > 0 && !columna.acciones && columna.titulo && (
+                        <span className="shrink-0 text-[13px] text-muted-foreground md:hidden">
+                          {columna.titulo}
+                        </span>
                       )}
-                    </div>
-                  </td>
-                ))}
-              </tr>
+                      <div
+                        className={cn(
+                          "min-w-0",
+                          j > 0 && !columna.acciones && "text-right",
+                          j > 0 && !columna.acciones && !columna.numerica && "md:text-left",
+                        )}
+                      >
+                        {columna.acciones ? (
+                          <div className="flex flex-wrap justify-end gap-2">
+                            {columna.celda(item, desde + i)}
+                          </div>
+                        ) : (
+                          columna.celda(item, desde + i)
+                        )}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>

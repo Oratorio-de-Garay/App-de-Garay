@@ -211,12 +211,12 @@ function Resultados({ texto, alElegir }: { texto: string; alElegir: (id: string)
         idDe={(pibe) => pibe.id}
         alTocarFila={(pibe) => alElegir(pibe.id)}
         columnas={columnas}
-        // Línea sutil entre "empieza con" y "contiene", sin etiquetas.
+        // Separación entre "empieza con" y "contiene", sin etiquetas. Tabla: la
+        // tabla se corta con un hueco. Celular: línea en el hueco entre tarjetas.
+        cortarAntesDe={(pibe) => pibe.id === primeroQueContiene}
         claseDeFila={(pibe) =>
           pibe.id === primeroQueContiene
-            ? // Celular: cada fila es una tarjeta, así que la línea va en el hueco entre
-              // dos tarjetas. Escritorio: borde superior de la fila.
-              "relative mt-4 before:absolute before:inset-x-2 before:-top-3 before:h-px before:bg-muted-foreground/25 md:mt-0 md:border-t-2 md:border-t-muted-foreground/12 md:before:hidden"
+            ? "relative mt-4 before:absolute before:inset-x-2 before:-top-3 before:h-px before:bg-muted-foreground/25 md:mt-0 md:before:hidden"
             : undefined
         }
       />
