@@ -4,7 +4,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(9);
+select plan(11);
 
 select public.superadmin_guardar_organizacion('oratoriogarayy@gmail.com', null, 'ZZ Busq A');
 select public.superadmin_guardar_organizacion('oratoriogarayy@gmail.com', null, 'ZZ Busq B');
@@ -49,6 +49,25 @@ select is((select visitas::int from public.buscar_pibes_resumen((select a from o
   2, 'cuenta las visitas');
 select is((select marcado_hoy from public.buscar_pibes_resumen((select a from org), 'perez', '2026-11-08')),
   true, 'marcado_hoy es true si hay asistencia en la fecha');
+
+-- Orden: primero los que empiezan con lo buscado, después los que lo contienen.
+insert into public.pibes (nombre, apellido, grado_id, entrego_ficha, edad_id, organizacion_id)
+values
+  ('Aaron', 'Mejuan', (select max(id) from public.grados_pibes),
+   true, (select id from public.edades where nombre = 'ZZ Edad A'), (select a from org)),
+  ('Zoe', 'Juanes', (select max(id) from public.grados_pibes),
+   true, (select id from public.edades where nombre = 'ZZ Edad A'), (select a from org));
+
+select is((select array_agg(nombre || ' ' || apellido order by ord) from
+    (select nombre, apellido, row_number() over () as ord
+       from public.buscar_pibes_resumen((select a from org), 'juan')) t),
+  array['Juan Pérez', 'Juana Gómez', 'Zoe Juanes', 'Aaron Mejuan'],
+  'los que empiezan con lo buscado (nombre o apellido) van antes que los que lo contienen');
+select is((select array_agg(nombre::text order by ord) from
+    (select nombre, row_number() over () as ord
+       from public.buscar_pibes_resumen((select a from org), 'juan pe')) t),
+  array['Juan'],
+  'con varias palabras, todas deben empezar una palabra para ir primero');
 
 set local role authenticated;
 select throws_ok($$ select * from public.buscar_pibes_resumen(gen_random_uuid(), 'juan') $$,
